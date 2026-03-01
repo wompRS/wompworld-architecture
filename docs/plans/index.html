@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wompworld - Architecture Comparison</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f5f7;--surface:#ffffff;--card:#f8f9fb;--raised:#eef0f4;
+  --line:#e2e5ea;--line2:#cbd0d8;--arrow:#1e3a5f;
+  --t1:#0f172a;--t2:#334155;--t3:#64748b;
+  --blue:#2563eb;--purple:#7c3aed;--amber:#b45309;--green:#047857;--red:#b91c1c;--cyan:#0e7490;--orange:#c2410c;--pink:#be185d;
+  --sans:'Outfit',sans-serif;--mono:'Space Mono',monospace;
+}
+html{font-size:16px;scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--t2);line-height:1.6;overflow-x:hidden}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#cbd0d8;border-radius:3px}
+
+/* NAV */
+nav{position:sticky;top:0;z-index:100;background:rgba(244,245,247,0.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--line);padding:0 2rem;display:flex;align-items:center;gap:0.25rem;height:52px;overflow-x:auto}
+nav a{font-size:0.8rem;font-weight:600;color:var(--t3);text-decoration:none;padding:0.5rem 1rem;border-radius:6px;white-space:nowrap;transition:all 0.15s}
+nav a:hover{color:var(--t2);background:rgba(0,0,0,0.04)}
+nav a.on{color:var(--t1);background:rgba(0,0,0,0.06)}
+nav .spacer{flex:1}
+nav .tag{font-family:var(--mono);font-size:0.6rem;color:var(--t3);opacity:0.5}
+
+/* SECTIONS */
+section{display:none;max-width:1100px;margin:0 auto;padding:3rem 2rem 5rem}
+section.on{display:block;animation:fadeUp .25s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+h1{font-size:2.2rem;font-weight:800;color:var(--t1);letter-spacing:-0.03em;margin-bottom:0.3rem}
+.lead{font-size:1rem;color:var(--t3);margin-bottom:3rem;max-width:600px}
+
+h2{font-size:1.4rem;font-weight:700;color:var(--t1);margin:3rem 0 0.3rem;letter-spacing:-0.02em}
+h3{font-size:1.1rem;font-weight:700;margin:2rem 0 0.5rem}
+p.info{font-size:0.9rem;color:var(--t3);margin-bottom:1.5rem;max-width:660px;line-height:1.7}
+
+/* DIAGRAM SYSTEM */
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:2rem;margin-bottom:1.5rem;overflow-x:auto;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.diagram-title{display:flex;align-items:center;gap:0.75rem;margin-bottom:0.25rem}
+.diagram-title h3{margin:0;font-size:1rem}
+.diagram-title .badge{font-family:var(--mono);font-size:0.6rem;padding:0.2rem 0.5rem;border-radius:3px;font-weight:700}
+.diagram-sub{font-size:0.78rem;color:var(--t3);margin-bottom:1.75rem}
+
+/* SVG DIAGRAM STYLES */
+.dia-svg{width:100%;overflow:visible}
+.dia-svg text{font-family:var(--sans);fill:var(--t2)}
+.dia-svg .box{rx:8;ry:8;stroke-width:1.5}
+.dia-svg .box-label{font-size:11px;font-weight:600;fill:var(--t1)}
+.dia-svg .box-sub{font-size:9px;fill:var(--t3)}
+.dia-svg .arrow{stroke-width:2;fill:none;stroke:var(--arrow);marker-end:url(#ah)}
+.dia-svg .arrow-label{font-size:9px;fill:var(--t3);font-family:var(--mono);paint-order:stroke;stroke:var(--surface);stroke-width:6px;stroke-linejoin:round}
+.dia-svg .group-label{font-size:9px;font-weight:700;fill:var(--t1);letter-spacing:0.1em;text-transform:uppercase;paint-order:stroke;stroke:var(--surface);stroke-width:8px;stroke-linejoin:round}
+
+/* STAT ROW BELOW DIAGRAMS */
+.stats{display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--line)}
+.stat{display:flex;flex-direction:column;gap:0.1rem}
+.stat-label{font-size:0.65rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;font-weight:600}
+.stat-val{font-family:var(--mono);font-size:0.8rem;color:var(--t1);font-weight:700}
+
+/* GAME GRID */
+.game-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:900px){.game-grid{grid-template-columns:1fr}}
+
+/* STACK TABS */
+.tabs{display:flex;gap:0.4rem;margin-bottom:2.5rem}
+.tab{font-family:var(--sans);font-size:0.85rem;font-weight:600;padding:0.6rem 1.4rem;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--t3);cursor:pointer;transition:all 0.15s}
+.tab:hover{border-color:var(--line2);color:var(--t2)}
+.tab.on[data-c="blue"]{background:rgba(37,99,235,0.08);border-color:var(--blue);color:var(--blue)}
+.tab.on[data-c="purple"]{background:rgba(124,58,237,0.08);border-color:var(--purple);color:var(--purple)}
+.tab.on[data-c="amber"]{background:rgba(180,83,9,0.08);border-color:var(--amber);color:var(--amber)}
+.stack-view{display:none}.stack-view.on{display:block}
+
+/* COMPARISON TABLE */
+table.comp{width:100%;border-collapse:collapse;font-size:0.85rem;margin-bottom:2rem}
+table.comp th{text-align:left;padding:0.75rem 1rem;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--t3);border-bottom:2px solid var(--line2)}
+table.comp th.c-blue{color:var(--blue)}table.comp th.c-purple{color:var(--purple)}table.comp th.c-amber{color:var(--amber)}
+table.comp td{padding:0.75rem 1rem;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.5}
+table.comp td:first-child{font-weight:600;color:var(--t3);width:170px}
+table.comp tr:hover td{background:rgba(0,0,0,0.02)}
+
+/* COST / TIMELINE / VERDICT CARDS */
+.cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:2rem}
+@media(max-width:900px){.cards3{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.card h4{font-size:0.85rem;font-weight:700;margin-bottom:1rem}
+.card.c-blue h4{color:var(--blue)}.card.c-purple h4{color:var(--purple)}.card.c-amber h4{color:var(--amber)}
+.row{display:flex;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid var(--line);font-size:0.82rem}
+.row:last-of-type{border-bottom:none}
+.row .v{font-family:var(--mono);font-weight:700;color:var(--t1);font-size:0.8rem}
+.row .v.free{color:var(--green)}.row .v.warn{color:var(--amber)}.row .v.bad{color:var(--red)}
+.total{margin-top:0.75rem;padding-top:0.75rem;border-top:2px solid var(--line2);display:flex;justify-content:space-between;font-weight:700;font-size:1rem}
+.total .v{font-family:var(--mono);font-size:1rem}
+.note{font-size:0.75rem;color:var(--t3);margin-top:0.75rem;padding:0.6rem 0.8rem;background:rgba(0,0,0,0.03);border-radius:6px;line-height:1.6}
+
+/* BAR CHART */
+.bar-row{display:grid;grid-template-columns:160px 1fr 70px;align-items:center;gap:1rem;margin-bottom:0.5rem}
+.bar-label{font-size:0.85rem;color:var(--t2)}
+.bar-outer{height:28px;background:rgba(0,0,0,0.04);border-radius:5px;overflow:hidden}
+.bar-fill{height:100%;border-radius:5px;display:flex;align-items:center;padding-left:0.75rem;font-size:0.7rem;font-weight:600;color:#fff}
+.bar-fill.bf-blue{background:var(--blue)}.bar-fill.bf-purple{background:var(--purple)}.bar-fill.bf-amber{background:var(--amber)}
+.bar-val{font-family:var(--mono);font-size:0.78rem;color:var(--t3);text-align:right}
+
+/* RISK ITEMS */
+.risk{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:1.25rem 1.5rem;margin-bottom:0.75rem;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.risk-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem}
+.risk-name{font-size:0.9rem;font-weight:600;color:var(--t1)}
+.rbadge{font-family:var(--mono);font-size:0.6rem;font-weight:700;padding:0.2rem 0.6rem;border-radius:100px;text-transform:uppercase}
+.rb-low{background:rgba(4,120,87,0.1);color:var(--green)}.rb-mid{background:rgba(180,83,9,0.1);color:var(--amber)}.rb-high{background:rgba(185,28,28,0.1);color:var(--red)}
+.risk p{font-size:0.82rem;color:var(--t3);line-height:1.6}
+
+/* VERDICT */
+.verdict-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:2rem;margin-bottom:1.25rem;position:relative;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.verdict-card.pick{border-color:var(--blue);background:linear-gradient(135deg,rgba(37,99,235,0.05),var(--surface) 50%)}
+.verdict-card.pick::before{content:'RECOMMENDED';position:absolute;top:-10px;left:1.5rem;font-family:var(--mono);font-size:0.6rem;font-weight:700;color:var(--blue);background:var(--bg);padding:0.15rem 0.6rem;border:1px solid var(--blue);border-radius:3px;letter-spacing:0.08em}
+.verdict-card h3{font-size:1.15rem;margin:0 0 0.5rem;color:var(--t1)}
+.verdict-card.c-blue h3{color:var(--blue)}.verdict-card.c-purple h3{color:var(--purple)}.verdict-card.c-amber h3{color:var(--amber)}
+.verdict-card p{font-size:0.92rem;line-height:1.75;color:var(--t2)}
+.verdict-card strong{color:var(--t1)}
+.choose{font-size:0.85rem;color:var(--t3);margin-top:0.75rem;padding:0.6rem 1rem;background:rgba(0,0,0,0.03);border-radius:6px;line-height:1.6}
+.choose strong{color:var(--t1)}
+
+.final-box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:2rem;margin-top:2rem;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.final-box h3{font-size:1.15rem;color:var(--t1);margin-bottom:0.75rem}
+.final-box p{font-size:0.95rem;color:var(--t2);line-height:1.85;margin-bottom:0.75rem}
+.final-box strong{color:var(--t1)}
+</style>
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+  <marker id="ah-b" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--blue)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav id="nav">
+  <a href="#" class="on" data-s="real">Real Games</a>
+  <a href="#" data-s="wompworld">Wompworld Options</a>
+  <a href="#" data-s="compare">Comparison</a>
+  <a href="#" data-s="money">Costs</a>
+  <a href="#" data-s="time">Timeline</a>
+  <a href="#" data-s="risks">Risks</a>
+  <a href="#" data-s="verdict">Verdict</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // PRE-PROD</span>
+</nav>
+
+<!-- ============================================================ -->
+<!-- REAL GAMES                                                    -->
+<!-- ============================================================ -->
+<section class="on" id="s-real">
+<h1>How Real MMOs Work</h1>
+<p class="lead">Six shipped games, six different architectures. These are the proven approaches.</p>
+
+<div class="game-grid">
+
+<!-- WOW -->
+<div class="diagram">
+  <div class="diagram-title"><h3>World of Warcraft</h3><span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Sharded Realms</span></div>
+  <div class="diagram-sub">Separate realms with dynamic sharding. 20 years of incremental evolution.</div>
+  <svg class="dia-svg" viewBox="0 0 440 310">
+    <!-- Player -->
+    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
+    <!-- Auth -->
+    <rect class="box" x="170" y="65" width="100" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="85" text-anchor="middle">Battle.net Auth</text>
+    <!-- Realm List -->
+    <rect class="box" x="170" y="120" width="100" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="140" text-anchor="middle">Realm List</text>
+    <!-- World Servers -->
+    <rect class="box" x="30" y="180" width="90" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="75" y="197" text-anchor="middle">Zone Server</text>
+    <text class="box-sub" x="75" y="210" text-anchor="middle">Continent A</text>
+    <rect class="box" x="140" y="180" width="90" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="185" y="197" text-anchor="middle">Zone Server</text>
+    <text class="box-sub" x="185" y="210" text-anchor="middle">Continent B</text>
+    <rect class="box" x="250" y="180" width="90" height="40" fill="var(--card)" stroke="var(--purple)"/>
+    <text class="box-label" x="295" y="197" text-anchor="middle">Instance Srv</text>
+    <text class="box-sub" x="295" y="210" text-anchor="middle">Dungeons/Raids</text>
+    <rect class="box" x="355" y="180" width="75" height="40" fill="var(--card)" stroke="var(--green)"/>
+    <text class="box-label" x="392" y="197" text-anchor="middle">Sharding</text>
+    <text class="box-sub" x="392" y="210" text-anchor="middle">Dynamic split</text>
+    <!-- JAM Router -->
+    <rect class="box" x="130" y="245" width="120" height="28" fill="var(--raised)" stroke="var(--line2)"/>
+    <text class="box-sub" x="190" y="263" text-anchor="middle" style="fill:var(--t3)">JAM Routing Layer</text>
+    <!-- DB -->
+    <rect class="box" x="115" y="280" width="60" height="25" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-sub" x="145" y="296" text-anchor="middle">Auth DB</text>
+    <rect class="box" x="185" y="280" width="60" height="25" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-sub" x="215" y="296" text-anchor="middle">Char DB</text>
+    <rect class="box" x="255" y="280" width="60" height="25" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-sub" x="285" y="296" text-anchor="middle">World DB</text>
+    <!-- Arrows -->
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="37" x2="220" y2="65"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="97" x2="220" y2="120"/>
+    <line class="arrow" stroke="var(--arrow)" x1="185" y1="152" x2="75" y2="180"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="152" x2="185" y2="180"/>
+    <line class="arrow" stroke="var(--arrow)" x1="240" y1="152" x2="295" y2="180"/>
+    <line class="arrow" stroke="var(--arrow)" x1="185" y1="220" x2="190" y2="245"/>
+    <line class="arrow" stroke="var(--arrow)" x1="190" y1="273" x2="190" y2="280"/>
+  </svg>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">C++ (proprietary)</span></div>
+    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val">~2.5 Hz (vanilla) to 100+ Hz (modern)</span></div>
+    <div class="stat"><span class="stat-label">Per Realm</span><span class="stat-val">3-5K CCU (est.)</span></div>
+    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">3-way split (Oracle)</span></div>
+    <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2004</span></div>
+  </div>
+</div>
+
+<!-- EVE -->
+<div class="diagram">
+  <div class="diagram-title"><h3>EVE Online</h3><span class="badge" style="background:rgba(180,83,9,0.1);color:var(--amber)">True Single Shard</span></div>
+  <div class="diagram-sub">One server, one universe. 1 Hz tick. Slows down instead of splitting up.</div>
+  <svg class="dia-svg" viewBox="0 0 440 290">
+    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="25" text-anchor="middle">All Players</text>
+    <rect class="box" x="170" y="60" width="100" height="32" fill="var(--card)" stroke="var(--green)"/>
+    <text class="box-label" x="220" y="80" text-anchor="middle">Proxy Nodes</text>
+    <!-- SOL nodes -->
+    <rect class="box" x="20" y="125" width="80" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="60" y="142" text-anchor="middle">SOL Node</text>
+    <text class="box-sub" x="60" y="155" text-anchor="middle">~100 systems</text>
+    <rect class="box" x="115" y="125" width="80" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="155" y="142" text-anchor="middle">SOL Node</text>
+    <text class="box-sub" x="155" y="155" text-anchor="middle">~100 systems</text>
+    <rect class="box" x="210" y="125" width="80" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="250" y="142" text-anchor="middle">SOL Node</text>
+    <text class="box-sub" x="250" y="155" text-anchor="middle">~100 systems</text>
+    <rect class="box" x="305" y="125" width="60" height="40" fill="var(--raised)" stroke="var(--amber)"/>
+    <text class="box-label" x="335" y="142" text-anchor="middle" style="font-size:9px;fill:var(--amber)">JITA</text>
+    <text class="box-sub" x="335" y="155" text-anchor="middle">Dedicated</text>
+    <text class="box-sub" x="407" y="150" text-anchor="middle" style="fill:var(--t3);font-size:14px;letter-spacing:2px">...</text>
+    <!-- Machonet -->
+    <rect class="box" x="130" y="190" width="160" height="28" fill="var(--raised)" stroke="var(--line2)"/>
+    <text class="box-sub" x="210" y="208" text-anchor="middle" style="fill:var(--t3)">Machonet (RPC / IPC)</text>
+    <!-- DB -->
+    <rect class="box" x="110" y="240" width="200" height="40" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="210" y="257" text-anchor="middle">SQL Server 2019</text>
+    <text class="box-sub" x="210" y="270" text-anchor="middle">32 cores, 4TB RAM, active/standby pair</text>
+    <!-- Arrows -->
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="37" x2="220" y2="60"/>
+    <line class="arrow" stroke="var(--arrow)" x1="200" y1="92" x2="60" y2="125"/>
+    <line class="arrow" stroke="var(--arrow)" x1="210" y1="92" x2="155" y2="125"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="92" x2="250" y2="125"/>
+    <line class="arrow" stroke="var(--arrow)" x1="240" y1="92" x2="335" y2="125"/>
+    <line class="arrow" stroke="var(--arrow)" x1="210" y1="165" x2="210" y2="190"/>
+    <line class="arrow" stroke="var(--arrow)" x1="210" y1="218" x2="210" y2="240"/>
+    <!-- Labels (after arrows for render order) -->
+    <rect x="108" y="103" width="224" height="16" fill="var(--surface)"/>
+    <text class="group-label" x="220" y="115" text-anchor="middle">SOL NODES (170 PROCESSES)</text>
+  </svg>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Stackless Python + C++</span></div>
+    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val" style="color:var(--amber)">1 Hz (!)</span></div>
+    <div class="stat"><span class="stat-label">Peak CCU</span><span class="stat-val">65K (2013), ~23K avg recent</span></div>
+    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">MS SQL Server</span></div>
+    <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2003</span></div>
+  </div>
+</div>
+
+<!-- ALBION -->
+<div class="diagram">
+  <div class="diagram-title"><h3>Albion Online</h3><span class="badge" style="background:rgba(4,120,87,0.1);color:var(--green)">Single Shard + Photon</span></div>
+  <div class="diagram-sub">Widely studied indie MMO architecture. Unity + Photon + Cassandra.</div>
+  <svg class="dia-svg" viewBox="0 0 440 280">
+    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
+    <text class="box-sub" x="220" y="2" text-anchor="middle">Unity client (Win/Mac/Linux/iOS/Android)</text>
+    <rect class="box" x="170" y="60" width="100" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="80" text-anchor="middle">Login Server</text>
+    <rect class="box" x="310" y="60" width="100" height="32" fill="var(--card)" stroke="var(--green)"/>
+    <text class="box-label" x="360" y="80" text-anchor="middle">World Server</text>
+    <!-- Zone servers -->
+    <rect class="box" x="20" y="125" width="85" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="62" y="142" text-anchor="middle">Zone Srv</text>
+    <text class="box-sub" x="62" y="155" text-anchor="middle">Cluster 1-5</text>
+    <rect class="box" x="115" y="125" width="85" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="157" y="142" text-anchor="middle">Zone Srv</text>
+    <text class="box-sub" x="157" y="155" text-anchor="middle">Cluster 6-10</text>
+    <rect class="box" x="210" y="125" width="85" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="252" y="142" text-anchor="middle">Zone Srv</text>
+    <text class="box-sub" x="252" y="155" text-anchor="middle">Cluster 11-15</text>
+    <text class="box-sub" x="325" y="150" text-anchor="middle" style="fill:var(--t3);font-size:14px;letter-spacing:2px">...</text>
+    <!-- Services -->
+    <rect class="box" x="360" y="125" width="75" height="40" fill="var(--card)" stroke="var(--purple)"/>
+    <text class="box-sub" x="397" y="142" text-anchor="middle">Chat / Market</text>
+    <text class="box-sub" x="397" y="155" text-anchor="middle">BackOffice</text>
+    <!-- DB -->
+    <rect class="box" x="70" y="200" width="140" height="35" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="140" y="215" text-anchor="middle">Apache Cassandra</text>
+    <text class="box-sub" x="140" y="228" text-anchor="middle">Game state (fast writes)</text>
+    <rect class="box" x="230" y="200" width="140" height="35" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="300" y="215" text-anchor="middle">PostgreSQL</text>
+    <text class="box-sub" x="300" y="228" text-anchor="middle">Accounts, marketplace</text>
+    <!-- Note -->
+    <text class="box-sub" x="220" y="260" text-anchor="middle">Zone handoff goes THROUGH database (clean regardless of server)</text>
+    <!-- Arrows -->
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="37" x2="220" y2="60"/>
+    <line class="arrow" stroke="var(--arrow)" x1="200" y1="92" x2="62" y2="125"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="92" x2="157" y2="125"/>
+    <line class="arrow" stroke="var(--arrow)" x1="240" y1="92" x2="252" y2="125"/>
+    <line class="arrow" stroke="var(--arrow)" x1="157" y1="165" x2="140" y2="200"/>
+    <line class="arrow" stroke="var(--arrow)" x1="252" y1="165" x2="300" y2="200"/>
+    <!-- Labels (after arrows for render order) -->
+    <rect x="44" y="103" width="232" height="16" fill="var(--surface)"/>
+    <text class="group-label" x="160" y="115" text-anchor="middle">ZONE SERVERS (PHOTON + C#)</text>
+  </svg>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Unity + Photon (C#)</span></div>
+    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val">Timer-based (async)</span></div>
+    <div class="stat"><span class="stat-label">Peak DAU</span><span class="stat-val" style="color:var(--green)">350K+ (not CCU)</span></div>
+    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Cassandra + PostgreSQL</span></div>
+    <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2017</span></div>
+  </div>
+</div>
+
+<!-- NEW WORLD -->
+<div class="diagram">
+  <div class="diagram-title"><h3>New World</h3><span class="badge" style="background:rgba(185,28,28,0.1);color:var(--red)">Capped Worlds</span></div>
+  <div class="diagram-sub">Cloud-native on AWS. 30 Hz simulation but capped at 2,500 players per world.</div>
+  <svg class="dia-svg" viewBox="0 0 440 260">
+    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
+    <text class="box-sub" x="220" y="2" text-anchor="middle">Azoth Engine client (Lumberyard fork)</text>
+    <!-- REPs -->
+    <rect class="box" x="80" y="65" width="70" height="30" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-sub" x="115" y="83" text-anchor="middle">REP 1</text>
+    <rect class="box" x="155" y="65" width="70" height="30" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-sub" x="190" y="83" text-anchor="middle">REP 2</text>
+    <rect class="box" x="230" y="65" width="70" height="30" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-sub" x="265" y="83" text-anchor="middle">REP 3</text>
+    <rect class="box" x="305" y="65" width="70" height="30" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-sub" x="340" y="83" text-anchor="middle">REP 4</text>
+    <!-- Hubs -->
+    <rect class="box" x="40" y="126" width="55" height="35" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-sub" x="67" y="147" text-anchor="middle">Hub 1</text>
+    <rect class="box" x="100" y="126" width="55" height="35" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-sub" x="127" y="147" text-anchor="middle">Hub 2</text>
+    <rect class="box" x="160" y="126" width="55" height="35" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-sub" x="187" y="147" text-anchor="middle">Hub 3</text>
+    <rect class="box" x="220" y="126" width="55" height="35" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-sub" x="247" y="147" text-anchor="middle">Hub 4</text>
+    <rect class="box" x="280" y="126" width="55" height="35" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-sub" x="307" y="147" text-anchor="middle">Hub 5-7</text>
+    <rect class="box" x="350" y="126" width="70" height="35" fill="var(--card)" stroke="var(--purple)"/>
+    <text class="box-sub" x="385" y="140" text-anchor="middle">Lambda</text>
+    <text class="box-sub" x="385" y="153" text-anchor="middle">(microsvcs)</text>
+    <!-- DB -->
+    <rect class="box" x="100" y="195" width="120" height="32" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="160" y="215" text-anchor="middle">DynamoDB</text>
+    <rect class="box" x="240" y="195" width="90" height="32" fill="var(--card)" stroke="var(--green)"/>
+    <text class="box-label" x="285" y="210" text-anchor="middle">Kinesis</text>
+    <text class="box-sub" x="285" y="222" text-anchor="middle">23M evt/min</text>
+    <!-- Arrows -->
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="37" x2="220" y2="58"/>
+    <line class="arrow" stroke="var(--arrow)" x1="190" y1="95" x2="127" y2="126"/>
+    <line class="arrow" stroke="var(--arrow)" x1="265" y1="95" x2="247" y2="126"/>
+    <line class="arrow" stroke="var(--arrow)" x1="187" y1="161" x2="160" y2="195"/>
+    <line class="arrow" stroke="var(--arrow)" x1="307" y1="161" x2="285" y2="195"/>
+    <!-- Labels (after arrows for render order) -->
+    <rect x="120" y="46" width="200" height="16" fill="var(--surface)"/>
+    <text class="group-label" x="220" y="58" text-anchor="middle">4x REPS (ENTRY POINTS)</text>
+    <rect x="76" y="106" width="288" height="16" fill="var(--surface)"/>
+    <text class="group-label" x="220" y="118" text-anchor="middle">7x HUBS (WORLD SIMULATION, 30 HZ)</text>
+  </svg>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Azoth Engine (C++)</span></div>
+    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val" style="color:var(--green)">30 Hz</span></div>
+    <div class="stat"><span class="stat-label">Cap</span><span class="stat-val" style="color:var(--red)">2,500/world</span></div>
+    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">DynamoDB</span></div>
+    <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2021</span></div>
+  </div>
+</div>
+
+<!-- ARCHEAGE -->
+<div class="diagram">
+  <div class="diagram-title"><h3>ArcheAge</h3><span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Traditional Shards</span></div>
+  <div class="diagram-sub">Standard shard model. Unique for persistent open-world housing.</div>
+  <svg class="dia-svg" viewBox="0 0 440 220">
+    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
+    <text class="box-sub" x="220" y="2" text-anchor="middle">CryEngine client</text>
+    <rect class="box" x="170" y="55" width="100" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="75" text-anchor="middle">Login / Auth</text>
+    <!-- Shards -->
+    <rect class="box" x="50" y="115" width="100" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="100" y="132" text-anchor="middle">Kyrios</text>
+    <text class="box-sub" x="100" y="145" text-anchor="middle">Zones + Housing</text>
+    <rect class="box" x="170" y="115" width="100" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="220" y="132" text-anchor="middle">Tahyang</text>
+    <text class="box-sub" x="220" y="145" text-anchor="middle">Zones + Housing</text>
+    <rect class="box" x="290" y="115" width="100" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="340" y="132" text-anchor="middle">Kraken</text>
+    <text class="box-sub" x="340" y="145" text-anchor="middle">Zones + Housing</text>
+    <!-- DB -->
+    <rect class="box" x="140" y="180" width="160" height="30" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="220" y="199" text-anchor="middle">Database (per shard)</text>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="37" x2="220" y2="55"/>
+    <line class="arrow" stroke="var(--arrow)" x1="200" y1="87" x2="100" y2="115"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="87" x2="220" y2="115"/>
+    <line class="arrow" stroke="var(--arrow)" x1="240" y1="87" x2="340" y2="115"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="155" x2="220" y2="180"/>
+    <!-- Labels (after arrows for render order) -->
+    <rect x="68" y="96" width="304" height="16" fill="var(--surface)"/>
+    <text class="group-label" x="220" y="108" text-anchor="middle">SEPARATE SHARDS (EACH A FULL WORLD)</text>
+  </svg>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">CryEngine (modified)</span></div>
+    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val">Unknown</span></div>
+    <div class="stat"><span class="stat-label">Model</span><span class="stat-val">Isolated shards</span></div>
+    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Unknown (MySQL in emu)</span></div>
+    <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2013 (KR) / 2014 (West)</span></div>
+  </div>
+</div>
+
+<!-- ASHES -->
+<div class="diagram">
+  <div class="diagram-title"><h3>Ashes of Creation</h3><span class="badge" style="background:rgba(185,28,28,0.1);color:var(--red)">Defunct (Jan 2026)</span></div>
+  <div class="diagram-sub">Custom IntrepidNET with server meshing. Studio collapsed Jan 2026 before dynamic gridding shipped.</div>
+  <svg class="dia-svg" viewBox="0 0 440 260">
+    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
+    <text class="box-sub" x="220" y="2" text-anchor="middle">UE5 client</text>
+    <rect class="box" x="150" y="55" width="140" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="75" text-anchor="middle">Connection Gateway</text>
+    <!-- Workers -->
+    <rect class="box" x="20" y="118" width="90" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="65" y="136" text-anchor="middle">Worker A</text>
+    <text class="box-sub" x="65" y="150" text-anchor="middle">5000 x 10000m</text>
+    <rect class="box" x="120" y="118" width="90" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="165" y="136" text-anchor="middle">Worker B</text>
+    <text class="box-sub" x="165" y="150" text-anchor="middle">2500 x 5000m</text>
+    <rect class="box" x="220" y="118" width="70" height="44" fill="var(--raised)" stroke="var(--amber)"/>
+    <text class="box-label" x="255" y="136" text-anchor="middle" style="font-size:9px;fill:var(--amber)">Worker C</text>
+    <text class="box-sub" x="255" y="150" text-anchor="middle" style="fill:var(--amber)">500 x 500m</text>
+    <rect class="box" x="300" y="118" width="70" height="44" fill="var(--raised)" stroke="var(--amber)"/>
+    <text class="box-label" x="335" y="136" text-anchor="middle" style="font-size:9px;fill:var(--amber)">Worker D</text>
+    <text class="box-sub" x="335" y="150" text-anchor="middle" style="fill:var(--amber)">500 x 500m</text>
+    <text class="box-sub" x="407" y="145" text-anchor="middle" style="fill:var(--t3);font-size:14px;letter-spacing:2px">...</text>
+    <!-- Replication -->
+    <rect class="box" x="100" y="185" width="240" height="28" fill="var(--raised)" stroke="var(--line2)"/>
+    <text class="box-sub" x="220" y="203" text-anchor="middle" style="fill:var(--t3)">Inter-Server Replication (seamless boundaries)</text>
+    <!-- Note -->
+    <text class="box-sub" x="220" y="240" text-anchor="middle">Dynamic gridding (split/merge) was planned but never deployed</text>
+    <text class="box-sub" x="220" y="254" text-anchor="middle" style="fill:var(--red)">Reached 8.1K CCU (stress test). Studio closed Jan 2026</text>
+    <!-- Arrows -->
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="37" x2="220" y2="55"/>
+    <line class="arrow" stroke="var(--arrow)" x1="180" y1="87" x2="65" y2="118"/>
+    <line class="arrow" stroke="var(--arrow)" x1="200" y1="87" x2="165" y2="118"/>
+    <line class="arrow" stroke="var(--arrow)" x1="240" y1="87" x2="255" y2="118"/>
+    <line class="arrow" stroke="var(--arrow)" x1="260" y1="87" x2="335" y2="118"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="162" x2="220" y2="185"/>
+    <!-- Labels (after arrows for render order) -->
+    <rect x="20" y="98" width="400" height="16" fill="var(--surface)"/>
+    <text class="group-label" x="220" y="110" text-anchor="middle">SERVER WORKERS (STATIC IN PROD; DYNAMIC GRIDDING PLANNED)</text>
+  </svg>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">UE5 + IntrepidNET</span></div>
+    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val" style="color:var(--green)">~30 Hz</span></div>
+    <div class="stat"><span class="stat-label">Alpha CCU</span><span class="stat-val">8,100 (2025)</span></div>
+    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Undisclosed</span></div>
+    <div class="stat"><span class="stat-label">Status</span><span class="stat-val" style="color:var(--red)">Defunct (Jan 2026)</span></div>
+  </div>
+</div>
+
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- WOMPWORLD OPTIONS                                             -->
+<!-- ============================================================ -->
+<section id="s-wompworld">
+<h1>Wompworld Options</h1>
+<p class="lead">Three viable stacks for a single-shard ocean-world MMO. Pick a tab to see the full architecture.</p>
+
+<div class="tabs">
+  <button class="tab on" data-c="blue" onclick="showStack('unity')">Unity + Photon</button>
+  <button class="tab" data-c="purple" onclick="showStack('godot')">Godot + Custom C#</button>
+  <button class="tab" data-c="amber" onclick="showStack('spacetime')">SpacetimeDB</button>
+</div>
+
+<!-- UNITY STACK -->
+<div class="stack-view on" id="sv-unity">
+<div class="diagram" style="border-color:rgba(37,99,235,0.25)">
+  <div class="diagram-title"><h3 style="color:var(--blue)">Unity + Photon Server</h3><span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Albion Playbook</span></div>
+  <div class="diagram-sub">Follow what Albion proved works. Photon handles networking, you write game logic in C#.</div>
+  <svg class="dia-svg" viewBox="0 0 500 420">
+    <!-- Player -->
+    <rect class="box" x="190" y="5" width="120" height="36" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="250" y="27" text-anchor="middle">Unity 6 Client</text>
+    <text class="box-sub" x="250" y="2" text-anchor="middle">C# / URP / UI Toolkit</text>
+    <!-- Photon SDK -->
+    <rect class="box" x="175" y="62" width="150" height="32" fill="var(--card)" stroke="var(--green)"/>
+    <text class="box-label" x="250" y="82" text-anchor="middle">Photon Client SDK</text>
+    <!-- Photon Server -->
+    <rect class="box" x="175" y="120" width="150" height="36" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="250" y="138" text-anchor="middle">Photon Server v5</text>
+    <text class="box-sub" x="250" y="150" text-anchor="middle">C++ core, connection routing</text>
+    <!-- Zone Servers -->
+    <rect class="box" x="20" y="190" width="100" height="48" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="70" y="210" text-anchor="middle">Zone Process</text>
+    <text class="box-sub" x="70" y="225" text-anchor="middle">Ocean Region A</text>
+    <rect class="box" x="135" y="190" width="100" height="48" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="185" y="210" text-anchor="middle">Zone Process</text>
+    <text class="box-sub" x="185" y="225" text-anchor="middle">Ocean Region B</text>
+    <rect class="box" x="250" y="190" width="100" height="48" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="300" y="210" text-anchor="middle">Zone Process</text>
+    <text class="box-sub" x="300" y="225" text-anchor="middle">Ocean Region C</text>
+    <rect class="box" x="365" y="190" width="100" height="48" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="415" y="206" text-anchor="middle" style="font-size:9px">Ships, Combat,</text>
+    <text class="box-label" x="415" y="218" text-anchor="middle" style="font-size:9px">Economy, NPCs</text>
+    <text class="box-sub" x="415" y="231" text-anchor="middle">10-20 Hz tick</text>
+    <!-- Data layer -->
+    <rect class="box" x="65" y="275" width="130" height="36" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="130" y="291" text-anchor="middle">Redis 7 (BSD)</text>
+    <text class="box-sub" x="130" y="304" text-anchor="middle">Sessions, cache, market</text>
+    <rect class="box" x="220" y="275" width="130" height="36" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="285" y="291" text-anchor="middle">PostgreSQL 18</text>
+    <text class="box-sub" x="285" y="304" text-anchor="middle">Accounts, items, economy</text>
+    <!-- Services -->
+    <rect class="box" x="375" y="275" width="95" height="36" fill="var(--card)" stroke="var(--purple)"/>
+    <text class="box-sub" x="422" y="290" text-anchor="middle">Auth, Chat</text>
+    <text class="box-sub" x="422" y="303" text-anchor="middle">Market, Analytics</text>
+    <!-- Infra -->
+    <rect class="box" x="80" y="345" width="340" height="42" fill="var(--raised)" stroke="var(--line2)"/>
+    <text class="box-sub" x="250" y="362" text-anchor="middle" style="fill:var(--t3)">Windows Server (Photon req.) + Linux Docker for services</text>
+    <text class="box-sub" x="250" y="376" text-anchor="middle" style="fill:var(--t3)">Hetzner / OVH bare metal</text>
+    <!-- Arrows -->
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="41" x2="250" y2="62"/>
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="94" x2="250" y2="120"/>
+    <line class="arrow" stroke="var(--arrow)" x1="210" y1="156" x2="70" y2="190"/>
+    <line class="arrow" stroke="var(--arrow)" x1="230" y1="156" x2="185" y2="190"/>
+    <line class="arrow" stroke="var(--arrow)" x1="270" y1="156" x2="300" y2="190"/>
+    <line class="arrow" stroke="var(--arrow)" x1="185" y1="238" x2="130" y2="275"/>
+    <line class="arrow" stroke="var(--arrow)" x1="300" y1="238" x2="285" y2="275"/>
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="311" x2="250" y2="345"/>
+    <!-- Labels (after arrows so they render on top) -->
+    <text class="arrow-label" x="270" y="53" text-anchor="start">Reliable UDP + TCP</text>
+    <text class="arrow-label" x="270" y="108" text-anchor="start">Internet</text>
+    <rect x="90" y="168" width="320" height="16" fill="var(--surface)"/>
+    <text class="group-label" x="250" y="180" text-anchor="middle">ZONE SERVERS (YOUR C# CODE ON PHOTON)</text>
+    <text class="arrow-label" x="105" y="258" text-anchor="middle">batch writes 30-60s</text>
+    <text class="arrow-label" x="370" y="258" text-anchor="middle">persist on logout</text>
+  </svg>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">You Write</span><span class="stat-val">Game logic + Client</span></div>
+    <div class="stat"><span class="stat-label">Photon Handles</span><span class="stat-val">Networking + Routing</span></div>
+    <div class="stat"><span class="stat-label">Infra Code</span><span class="stat-val">~5-10K lines</span></div>
+    <div class="stat"><span class="stat-label">Server OS</span><span class="stat-val" style="color:var(--amber)">Windows (required)</span></div>
+  </div>
+</div>
+</div>
+
+<!-- GODOT STACK -->
+<div class="stack-view" id="sv-godot">
+<div class="diagram" style="border-color:rgba(124,58,237,0.25)">
+  <div class="diagram-title"><h3 style="color:var(--purple)">Godot + Custom C# Server</h3><span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Full Ownership</span></div>
+  <div class="diagram-sub">You build everything. No middleware fees. No vendor risk. MIT licensed forever.</div>
+  <svg class="dia-svg" viewBox="0 0 500 420">
+    <rect class="box" x="190" y="5" width="120" height="36" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="250" y="27" text-anchor="middle">Godot 4.x Client</text>
+    <text class="box-sub" x="250" y="2" text-anchor="middle">C# / Vulkan / Custom shaders</text>
+    <!-- Networking -->
+    <rect class="box" x="165" y="62" width="170" height="32" fill="var(--card)" stroke="var(--green)"/>
+    <text class="box-label" x="250" y="82" text-anchor="middle">Custom Net (LiteNetLib)</text>
+    <!-- Gateway -->
+    <rect class="box" x="175" y="120" width="150" height="36" fill="var(--card)" stroke="var(--purple)"/>
+    <text class="box-label" x="250" y="138" text-anchor="middle">Custom C# Gateway</text>
+    <text class="box-sub" x="250" y="150" text-anchor="middle">.NET 10 + nginx (YOU BUILD THIS)</text>
+    <!-- Zone Servers -->
+    <rect class="box" x="20" y="190" width="100" height="48" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="70" y="210" text-anchor="middle">Zone Process</text>
+    <text class="box-sub" x="70" y="225" text-anchor="middle">Ocean Region A</text>
+    <rect class="box" x="135" y="190" width="100" height="48" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="185" y="210" text-anchor="middle">Zone Process</text>
+    <text class="box-sub" x="185" y="225" text-anchor="middle">Ocean Region B</text>
+    <rect class="box" x="250" y="190" width="100" height="48" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="300" y="210" text-anchor="middle">Zone Process</text>
+    <text class="box-sub" x="300" y="225" text-anchor="middle">Ocean Region C</text>
+    <rect class="box" x="365" y="190" width="100" height="48" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="415" y="206" text-anchor="middle" style="font-size:9px">ALL custom:</text>
+    <text class="box-label" x="415" y="218" text-anchor="middle" style="font-size:9px">IPC, prediction,</text>
+    <text class="box-sub" x="415" y="231" text-anchor="middle">interest mgmt</text>
+    <!-- Data -->
+    <rect class="box" x="65" y="275" width="130" height="36" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="130" y="291" text-anchor="middle">Redis 7 (BSD)</text>
+    <text class="box-sub" x="130" y="304" text-anchor="middle">+ Pub/Sub for zone IPC</text>
+    <rect class="box" x="220" y="275" width="130" height="36" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="285" y="291" text-anchor="middle">PostgreSQL 18</text>
+    <text class="box-sub" x="285" y="304" text-anchor="middle">Accounts, items, economy</text>
+    <rect class="box" x="375" y="275" width="95" height="36" fill="var(--card)" stroke="var(--purple)"/>
+    <text class="box-sub" x="422" y="290" text-anchor="middle">Auth, Chat</text>
+    <text class="box-sub" x="422" y="303" text-anchor="middle">Market, Analytics</text>
+    <!-- Infra -->
+    <rect class="box" x="80" y="345" width="340" height="42" fill="var(--raised)" stroke="var(--line2)"/>
+    <text class="box-sub" x="250" y="362" text-anchor="middle" style="fill:var(--t3)">Linux everywhere | Docker Compose/Swarm</text>
+    <text class="box-sub" x="250" y="376" text-anchor="middle" style="fill:var(--t3)">Hetzner bare metal | $0 licensing</text>
+    <!-- Arrows -->
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="41" x2="250" y2="62"/>
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="94" x2="250" y2="120"/>
+    <line class="arrow" stroke="var(--arrow)" x1="210" y1="156" x2="70" y2="190"/>
+    <line class="arrow" stroke="var(--arrow)" x1="230" y1="156" x2="185" y2="190"/>
+    <line class="arrow" stroke="var(--arrow)" x1="270" y1="156" x2="300" y2="190"/>
+    <line class="arrow" stroke="var(--arrow)" x1="185" y1="238" x2="130" y2="275"/>
+    <line class="arrow" stroke="var(--arrow)" x1="300" y1="238" x2="285" y2="275"/>
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="311" x2="250" y2="345"/>
+    <!-- Labels (after arrows so they render on top) -->
+    <text class="arrow-label" x="270" y="53" text-anchor="start">Reliable UDP + MessagePack</text>
+    <text class="arrow-label" x="270" y="108" text-anchor="start">Internet</text>
+    <rect x="82" y="168" width="336" height="16" fill="var(--surface)"/>
+    <text class="group-label" x="250" y="180" text-anchor="middle">ZONE SERVERS (YOUR C# CODE, STANDALONE)</text>
+  </svg>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">You Write</span><span class="stat-val" style="color:var(--red)">EVERYTHING</span></div>
+    <div class="stat"><span class="stat-label">Middleware</span><span class="stat-val" style="color:var(--green)">None ($0)</span></div>
+    <div class="stat"><span class="stat-label">Infra Code</span><span class="stat-val" style="color:var(--red)">~15-25K lines</span></div>
+    <div class="stat"><span class="stat-label">Server OS</span><span class="stat-val" style="color:var(--green)">Linux</span></div>
+  </div>
+</div>
+</div>
+
+<!-- SPACETIMEDB STACK -->
+<div class="stack-view" id="sv-spacetime">
+<div class="diagram" style="border-color:rgba(180,83,9,0.25)">
+  <div class="diagram-title"><h3 style="color:var(--amber)">SpacetimeDB Stack</h3><span class="badge" style="background:rgba(180,83,9,0.1);color:var(--amber)">DB = Server</span></div>
+  <div class="diagram-sub">The database IS the game server. No networking code. No persistence code. Modules in Rust, C#, C++, or TS.</div>
+  <svg class="dia-svg" viewBox="0 0 500 360">
+    <rect class="box" x="175" y="5" width="150" height="36" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="250" y="27" text-anchor="middle">Unity or Godot Client</text>
+    <text class="box-sub" x="250" y="2" text-anchor="middle">SpacetimeDB SDK handles all networking</text>
+    <!-- SDK -->
+    <rect class="box" x="165" y="62" width="170" height="32" fill="var(--card)" stroke="var(--green)"/>
+    <text class="box-label" x="250" y="82" text-anchor="middle">SQL Subscriptions</text>
+    <!-- THE BIG ONE -->
+    <rect class="box" x="60" y="120" width="380" height="110" fill="rgba(180,83,9,0.06)" stroke="var(--amber)" stroke-width="2"/>
+    <text x="250" y="140" text-anchor="middle" style="font-size:13px;font-weight:700;fill:var(--amber);font-family:var(--sans)">SpacetimeDB Instance</text>
+    <text x="250" y="158" text-anchor="middle" style="font-size:10px;fill:var(--t3);font-family:var(--sans)">Database + Game Server + Persistence in ONE process</text>
+    <!-- Inner boxes -->
+    <rect class="box" x="80" y="170" width="100" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="130" y="187" text-anchor="middle">WASM Modules</text>
+    <text class="box-sub" x="130" y="200" text-anchor="middle">Rust/C#/C++/TS</text>
+    <rect class="box" x="200" y="170" width="100" height="40" fill="var(--card)" stroke="var(--pink)"/>
+    <text class="box-label" x="250" y="187" text-anchor="middle">SQL Tables</text>
+    <text class="box-sub" x="250" y="200" text-anchor="middle">State = rows</text>
+    <rect class="box" x="320" y="170" width="100" height="40" fill="var(--card)" stroke="var(--green)"/>
+    <text class="box-label" x="370" y="187" text-anchor="middle">Commitlog</text>
+    <text class="box-sub" x="370" y="200" text-anchor="middle">Auto-persist</text>
+    <!-- Multi-instance -->
+    <rect class="box" x="70" y="260" width="100" height="30" fill="var(--card)" stroke="var(--amber)"/>
+    <text class="box-sub" x="120" y="279" text-anchor="middle">Instance: North</text>
+    <rect class="box" x="185" y="260" width="100" height="30" fill="var(--card)" stroke="var(--amber)"/>
+    <text class="box-sub" x="235" y="279" text-anchor="middle">Instance: Central</text>
+    <rect class="box" x="300" y="260" width="100" height="30" fill="var(--card)" stroke="var(--amber)"/>
+    <text class="box-sub" x="350" y="279" text-anchor="middle">Instance: South</text>
+    <!-- Infra -->
+    <rect class="box" x="80" y="315" width="340" height="42" fill="var(--raised)" stroke="var(--line2)"/>
+    <text class="box-sub" x="250" y="332" text-anchor="middle" style="fill:var(--t3)">Maincloud (managed, $25/mo) or self-hosted Linux</text>
+    <text class="box-sub" x="250" y="346" text-anchor="middle" style="fill:var(--t3)">(RAM scales with data size)</text>
+    <!-- Arrows -->
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="41" x2="250" y2="62"/>
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="94" x2="250" y2="120"/>
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="230" x2="250" y2="252"/>
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="290" x2="250" y2="315"/>
+    <!-- Labels (after arrows so they render on top) -->
+    <text class="arrow-label" x="270" y="53" text-anchor="start">WebSocket (BSATN) -- auto-managed</text>
+    <rect x="40" y="240" width="420" height="16" fill="var(--surface)"/>
+    <text class="group-label" x="250" y="252" text-anchor="middle">FOR MMO SCALE: MULTIPLE INSTANCES (1 PER OCEAN REGION)</text>
+  </svg>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">You Write</span><span class="stat-val">Game logic (Rust/C#/C++/TS) + Client</span></div>
+    <div class="stat"><span class="stat-label">Net Code</span><span class="stat-val" style="color:var(--green)">Zero (auto)</span></div>
+    <div class="stat"><span class="stat-label">Infra Code</span><span class="stat-val" style="color:var(--green)">~500-2K lines (est.)</span></div>
+    <div class="stat"><span class="stat-label">Catch</span><span class="stat-val" style="color:var(--amber)">Young platform (1.0 Mar 2025)</span></div>
+  </div>
+</div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- COMPARISON                                                    -->
+<!-- ============================================================ -->
+<section id="s-compare">
+<h1>Side-by-Side</h1>
+<p class="lead">Every dimension that matters, in one table.</p>
+<table class="comp">
+<thead><tr><th></th><th class="c-blue">Unity + Photon</th><th class="c-purple">Godot + Custom</th><th class="c-amber">SpacetimeDB</th></tr></thead>
+<tbody>
+<tr><td>Server Language</td><td>C# (.NET 10)</td><td>C# (.NET 10)</td><td>Rust/C#/C++/TS (WASM)</td></tr>
+<tr><td>Client Language</td><td>C# (Unity)</td><td>C# or GDScript</td><td>C# / Rust / TS / C++</td></tr>
+<tr><td>Networking</td><td>Photon handles it</td><td>You build it all</td><td>Automatic (zero code)</td></tr>
+<tr><td>Persistence</td><td>Manual (Redis + PG)</td><td>Manual (Redis + PG)</td><td>Automatic (commitlog)</td></tr>
+<tr><td>Server OS</td><td style="color:var(--amber)">Windows (required)</td><td style="color:var(--green)">Linux</td><td style="color:var(--green)">Linux</td></tr>
+<tr><td>Infra Code</td><td>~5-10K lines</td><td style="color:var(--red)">~15-25K lines</td><td style="color:var(--green)">~500-2K lines</td></tr>
+<tr><td>Proven at Scale</td><td style="color:var(--green)">Yes (Albion, 350K+ DAU)</td><td style="color:var(--red)">No shipped MMO</td><td style="color:var(--amber)">BitCraft + others</td></tr>
+<tr><td>Vendor Lock-In</td><td style="color:var(--red)">High (Unity + Photon)</td><td style="color:var(--green)">Zero (MIT everything)</td><td style="color:var(--amber)">Medium (BSL 1.1 -> AGPL v3)</td></tr>
+<tr><td>Learning Curve</td><td>Moderate</td><td style="color:var(--red)">Steep (custom netcode)</td><td style="color:var(--amber)">Moderate (C#) to Steep (Rust)</td></tr>
+<tr><td>Hiring Pool</td><td style="color:var(--green)">Huge</td><td style="color:var(--red)">Small</td><td style="color:var(--red)">Tiny</td></tr>
+<tr><td>Mobile</td><td style="color:var(--green)">Excellent</td><td>Possible, extra work</td><td>Depends on engine</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ============================================================ -->
+<!-- COSTS                                                         -->
+<!-- ============================================================ -->
+<section id="s-money">
+<h1>Costs</h1>
+<p class="lead">Real monthly costs at three stages. Hosting on Hetzner/OVH bare metal.</p>
+
+<h2>Development (team of 4, under $200K revenue)</h2>
+<div class="cards3">
+  <div class="card c-blue"><h4>Unity + Photon</h4><div class="row"><span>Unity Personal</span><span class="v free">$0</span></div><div class="row"><span>Photon Free (100 CCU, dev only)</span><span class="v free">$0</span></div><div class="row"><span>Dev server (Hetzner)</span><span class="v">~$50</span></div><div class="total"><span>Monthly</span><span class="v" style="color:var(--green)">~$50</span></div></div>
+  <div class="card c-purple"><h4>Godot + Custom</h4><div class="row"><span>Godot + all OSS</span><span class="v free">$0</span></div><div class="row"><span>Dev server (Hetzner)</span><span class="v">~$50</span></div><div class="total"><span>Monthly</span><span class="v" style="color:var(--green)">~$50</span></div></div>
+  <div class="card c-amber"><h4>SpacetimeDB</h4><div class="row"><span>Maincloud Free</span><span class="v free">$0</span></div><div class="row"><span>No servers needed</span><span class="v free">$0</span></div><div class="total"><span>Monthly</span><span class="v" style="color:var(--green)">$0</span></div></div>
+</div>
+
+<h2>Soft Launch (500 CCU)</h2>
+<div class="cards3">
+  <div class="card c-blue"><h4>Unity + Photon</h4><div class="row"><span>Unity Pro (4 seats, annual)</span><span class="v">$770</span></div><div class="row"><span>Photon Cloud 500 CCU</span><span class="v">$125</span></div><div class="row"><span>Game + DB servers</span><span class="v">$270</span></div><div class="total"><span>Monthly</span><span class="v" style="color:var(--amber)">~$1,165</span></div><div class="note">Unity Pro only if over $200K revenue. Could stay on Personal during beta. Photon self-hosted pricing differs.</div></div>
+  <div class="card c-purple"><h4>Godot + Custom</h4><div class="row"><span>All software</span><span class="v free">$0</span></div><div class="row"><span>Game + DB servers</span><span class="v">$220</span></div><div class="total"><span>Monthly</span><span class="v" style="color:var(--green)">~$220</span></div></div>
+  <div class="card c-amber"><h4>SpacetimeDB</h4><div class="row"><span>Maincloud Pro</span><span class="v">$25</span></div><div class="row"><span>Usage overage</span><span class="v">$50-200</span></div><div class="row"><span>Analytics VPS</span><span class="v">$20</span></div><div class="total"><span>Monthly</span><span class="v" style="color:var(--green)">~$95-245</span></div></div>
+</div>
+
+<h2>Production (5,000 CCU)</h2>
+<div class="cards3">
+  <div class="card c-blue"><h4>Unity + Photon</h4><div class="row"><span>Unity Pro (4 seats, annual)</span><span class="v">$770</span></div><div class="row"><span>Photon Industries Cloud 5K</span><span class="v">$1,500</span></div><div class="row"><span>Servers + DB</span><span class="v">$800</span></div><div class="total"><span>Monthly</span><span class="v" style="color:var(--red)">~$3,070</span></div><div class="note">DDoS protection is free at Hetzner. Photon Industries is cloud-hosted by Exit Games.</div></div>
+  <div class="card c-purple"><h4>Godot + Custom</h4><div class="row"><span>All software</span><span class="v free">$0</span></div><div class="row"><span>Servers + DB</span><span class="v">$720</span></div><div class="total"><span>Monthly</span><span class="v" style="color:var(--green)">~$720</span></div><div class="note">DDoS protection is free at Hetzner.</div></div>
+  <div class="card c-amber"><h4>SpacetimeDB</h4><div class="row"><span>Self-hosted (3x high-RAM)</span><span class="v">$450-900</span></div><div class="row"><span>Analytics + monitoring</span><span class="v">$60</span></div><div class="total"><span>Monthly</span><span class="v" style="color:var(--amber)">~$510-960</span></div><div class="note">RAM scales with data size. Min 4GB, 8GB recommended per instance. Enterprise pricing not public.</div></div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- TIMELINE                                                      -->
+<!-- ============================================================ -->
+<section id="s-time">
+<h1>Timeline</h1>
+<p class="lead">Time to playable alpha. Team of 3-4, tech background, no game dev experience.</p>
+
+<h3 style="color:var(--blue)">Unity + Photon &mdash; <span style="font-family:var(--mono)">14-23 months</span></h3>
+<div style="margin-bottom:2.5rem">
+  <div class="bar-row"><span class="bar-label">Learn Unity + Photon</span><div class="bar-outer"><div class="bar-fill bf-blue" style="width:30%"></div></div><span class="bar-val">2-3 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Prototype</span><div class="bar-outer"><div class="bar-fill bf-blue" style="width:20%"></div></div><span class="bar-val">1-2 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Core systems</span><div class="bar-outer"><div class="bar-fill bf-blue" style="width:60%"></div></div><span class="bar-val">4-6 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Server + persistence</span><div class="bar-outer"><div class="bar-fill bf-blue" style="width:30%"></div></div><span class="bar-val">2-3 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Content + polish</span><div class="bar-outer"><div class="bar-fill bf-blue" style="width:55%"></div></div><span class="bar-val">3-6 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Alpha testing</span><div class="bar-outer"><div class="bar-fill bf-blue" style="width:30%"></div></div><span class="bar-val">2-3 mo</span></div>
+</div>
+
+<h3 style="color:var(--purple)">Godot + Custom C# &mdash; <span style="font-family:var(--mono)">18-30 months</span></h3>
+<div style="margin-bottom:2.5rem">
+  <div class="bar-row"><span class="bar-label">Learn Godot + networking</span><div class="bar-outer"><div class="bar-fill bf-purple" style="width:40%"></div></div><span class="bar-val">3-4 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Prototype</span><div class="bar-outer"><div class="bar-fill bf-purple" style="width:30%"></div></div><span class="bar-val">2-3 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Core systems</span><div class="bar-outer"><div class="bar-fill bf-purple" style="width:80%"></div></div><span class="bar-val">5-8 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Server + persistence</span><div class="bar-outer"><div class="bar-fill bf-purple" style="width:50%"></div></div><span class="bar-val">3-5 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Content + polish</span><div class="bar-outer"><div class="bar-fill bf-purple" style="width:55%"></div></div><span class="bar-val">3-6 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Alpha testing</span><div class="bar-outer"><div class="bar-fill bf-purple" style="width:40%"></div></div><span class="bar-val">2-4 mo</span></div>
+</div>
+
+<h3 style="color:var(--amber)">SpacetimeDB &mdash; <span style="font-family:var(--mono)">12-23 months</span></h3>
+<div>
+  <div class="bar-row"><span class="bar-label">Learn Rust + STDB</span><div class="bar-outer"><div class="bar-fill bf-amber" style="width:50%"></div></div><span class="bar-val">3-5 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Prototype</span><div class="bar-outer"><div class="bar-fill bf-amber" style="width:15%"></div></div><span class="bar-val">1-2 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Core systems</span><div class="bar-outer"><div class="bar-fill bf-amber" style="width:50%"></div></div><span class="bar-val">3-5 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Server + persistence</span><div class="bar-outer"><div class="bar-fill bf-amber" style="width:8%"></div></div><span class="bar-val">0-1 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Content + polish</span><div class="bar-outer"><div class="bar-fill bf-amber" style="width:55%"></div></div><span class="bar-val">3-6 mo</span></div>
+  <div class="bar-row"><span class="bar-label">Alpha + scale test</span><div class="bar-outer"><div class="bar-fill bf-amber" style="width:40%"></div></div><span class="bar-val">2-4 mo</span></div>
+</div>
+<div class="note" style="margin-top:1.5rem">SpacetimeDB is fastest AFTER the learning curve because you never write networking or persistence code. Using C# modules cuts the language learning time significantly vs Rust, but Rust has better STDB docs and community examples currently.</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- RISKS                                                         -->
+<!-- ============================================================ -->
+<section id="s-risks">
+<h1>Risks</h1>
+<p class="lead">What can go wrong with each stack.</p>
+
+<h2 style="color:var(--blue)">Unity + Photon</h2>
+<div class="risk"><div class="risk-top"><span class="risk-name">Unity changes pricing again</span><span class="rbadge rb-mid">Medium</span></div><p>They've done it 3 times in 3 years. Mitigation: build so the client can be swapped out.</p></div>
+<div class="risk"><div class="risk-top"><span class="risk-name">Photon requires Windows Server</span><span class="rbadge rb-mid">Medium</span></div><p>Limits hosting options and adds ~$20-40/mo per machine in OS licensing.</p></div>
+<div class="risk"><div class="risk-top"><span class="risk-name">Scaling past Photon</span><span class="rbadge rb-low">Low</span></div><p>Albion handles 350K+ DAU on Photon. You'd need to be extremely successful to hit this ceiling.</p></div>
+
+<h2 style="color:var(--purple);margin-top:2.5rem">Godot + Custom C#</h2>
+<div class="risk"><div class="risk-top"><span class="risk-name">No reference architecture exists</span><span class="rbadge rb-high">High</span></div><p>No shipped MMO on this stack. Every networking problem is a novel problem.</p></div>
+<div class="risk"><div class="risk-top"><span class="risk-name">Building netcode from scratch</span><span class="rbadge rb-high">High</span></div><p>Reliable UDP, client prediction, interest management, zone handoff. Months of work before you have a playable game.</p></div>
+<div class="risk"><div class="risk-top"><span class="risk-name">Team burnout</span><span class="rbadge rb-high">High</span></div><p>Networking infrastructure is unglamorous grind. Demoralizing before you see a boat on water.</p></div>
+<div class="risk"><div class="risk-top"><span class="risk-name">Vendor risk</span><span class="rbadge rb-low">Low</span></div><p>MIT license is irrevocable. Safest business decision of the three.</p></div>
+
+<h2 style="color:var(--amber);margin-top:2.5rem">SpacetimeDB</h2>
+<div class="risk"><div class="risk-top"><span class="risk-name">Technology is brand new</span><span class="rbadge rb-high">High</span></div><p>Hit 1.0 in March 2025. Expect breaking changes, sparse docs, and rough edges.</p></div>
+<div class="risk"><div class="risk-top"><span class="risk-name">Rust is hard to learn</span><span class="rbadge rb-mid">Medium</span></div><p>The borrow checker will slow you down for months if choosing Rust. C# modules are now supported, which drops this barrier significantly. But Rust modules have the best docs and community support so far.</p></div>
+<div class="risk"><div class="risk-top"><span class="risk-name">All state must fit in RAM</span><span class="rbadge rb-mid">Medium</span></div><p>RAM scales with world state size. A complex MMO could need significant RAM per instance; multi-instance sharding adds its own complexity.</p></div>
+<div class="risk"><div class="risk-top"><span class="risk-name">Clockwork Labs could fail</span><span class="rbadge rb-mid">Medium</span></div><p>VC-backed ($26M from a16z/Supercell), but still a startup. Source-available under BSL 1.1, converts to AGPL v3 in 2031. AGPL is copyleft, which may affect proprietary server code.</p></div>
+</section>
+
+<!-- ============================================================ -->
+<!-- VERDICT                                                       -->
+<!-- ============================================================ -->
+<section id="s-verdict">
+<h1>Verdict</h1>
+<p class="lead">What each stack actually means for the Wompworld team.</p>
+
+<div class="verdict-cards">
+  <div class="verdict-card c-blue pick">
+    <h3>Unity + Photon Server</h3>
+    <p><strong>The safe bet.</strong> Albion Online is proof this works for exactly your type of game. The documentation exists, the reference architecture exists, the hiring pool exists. You pay more in licensing and accept vendor risk. But you trade money for certainty, and for a team learning game dev as they go, certainty is worth paying for.</p>
+    <div class="choose"><strong>Choose this if:</strong> Shipping matters more than owning every line of code.</div>
+  </div>
+  <div class="verdict-card c-purple">
+    <h3>Godot + Custom C# Server</h3>
+    <p><strong>Maximum freedom, maximum work.</strong> Zero vendor risk, zero licensing costs, you own everything. But you're building networking infrastructure that Photon gives you for free, with no reference MMO to guide you. The 6-12 extra months could be the difference between shipping and not shipping.</p>
+    <div class="choose"><strong>Choose this if:</strong> Someone on the team has multiplayer networking experience, or you refuse to depend on Unity/Photon on principle.</div>
+  </div>
+  <div class="verdict-card c-amber">
+    <h3>SpacetimeDB</h3>
+    <p><strong>The wildcard.</strong> If it works, it eliminates entire categories of bugs and months of infrastructure code. C# module support lowers the entry barrier vs pure Rust. But the tech is young (1.0 Mar 2025), the license is copyleft (AGPL v3), and nobody has proven this at Wompworld's target scale. High ceiling, uncertain floor.</p>
+    <div class="choose"><strong>Choose this if:</strong> You're comfortable being an early adopter on a platform that's well-funded but still maturing.</div>
+  </div>
+</div>
+
+<div class="final-box">
+  <h3>The Pragmatic Recommendation</h3>
+  <p>Start with <strong>Unity + Photon</strong>, following the Albion playbook. Build the server as a standalone C# app that talks to the client over a clean protocol. If Unity does something unacceptable, port the client to Godot without touching server code. If SpacetimeDB matures in 12-18 months, evaluate migrating the server layer.</p>
+  <p>The question isn't which stack is "best" in the abstract. It's which one gives you the highest probability of having a playable game in 18 months. That's Unity + Photon, by a meaningful margin.</p>
+</div>
+</section>
+
+</div><!-- /main -->
+
+<script>
+// Nav
+document.querySelectorAll('nav a').forEach(a=>{
+  a.addEventListener('click',e=>{
+    e.preventDefault();
+    document.querySelectorAll('section').forEach(s=>s.classList.remove('on'));
+    document.getElementById('s-'+a.dataset.s).classList.add('on');
+    document.querySelectorAll('nav a').forEach(l=>l.classList.remove('on'));
+    a.classList.add('on');
+    window.scrollTo({top:0});
+  });
+});
+// Stack tabs
+function showStack(id){
+  document.querySelectorAll('.stack-view').forEach(v=>v.classList.remove('on'));
+  document.getElementById('sv-'+id).classList.add('on');
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.querySelector(`.tab[data-c="${{unity:'blue',godot:'purple',spacetime:'amber'}[id]}"]`).classList.add('on');
+}
+</script>
+</body>
+</html>
