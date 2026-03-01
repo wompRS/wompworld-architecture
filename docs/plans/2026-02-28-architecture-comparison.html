@@ -1771,12 +1771,12 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
 
 <script>
 // Nav
-document.querySelectorAll('nav a').forEach(a=>{
+document.querySelectorAll('nav a[data-s]').forEach(a=>{
   a.addEventListener('click',e=>{
     e.preventDefault();
     document.querySelectorAll('section').forEach(s=>s.classList.remove('on'));
     document.getElementById('s-'+a.dataset.s).classList.add('on');
-    document.querySelectorAll('nav a').forEach(l=>l.classList.remove('on'));
+    document.querySelectorAll('nav a[data-s]').forEach(l=>l.classList.remove('on'));
     a.classList.add('on');
     window.scrollTo({top:0});
   });
