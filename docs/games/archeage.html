@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArcheAge - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / ArcheAge</div>
+  <h1>ArcheAge</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Modified CryEngine</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Sandbox MMO</span>
+  </div>
+  <p class="lead">A heavily modified CryEngine 3 MMO with non-instanced open-world housing, multi-continental seamless zones, a player-driven trade economy with physical cargo transport, and a zone-based PvP cycle that transitions between peace, conflict, and war states server-side.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">XL Games</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2013 (KR) / 2014 (NA/EU)</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~50,000 (est.)</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">CryEngine 3 (modified)</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">~20 Hz (est.)</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Zone-Channeled Monolith</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <h2 id="overview">Overview</h2>
+  <p>ArcheAge is a sandbox MMORPG designed by Jake Song, the creator of Lineage, and built by XL Games in South Korea. Development started in 2006, and the game launched in Korea in January 2013 before reaching Western markets through Trion Worlds in September 2014. What makes ArcheAge architecturally relevant is how it pushed CryEngine 3 far beyond its intended purpose.</p>
+  <p>CryEngine was built for first-person shooters with tight player counts and relatively small maps. XL Games adapted it into an engine capable of running a persistent MMO with two full continents, a shared ocean, non-instanced player housing, physics-based naval combat, a real-time trade economy with physical cargo hauling, and zone-based PvP state cycling. The modifications were extensive enough that the engine's original optimization characteristics broke down in several areas, particularly around large-scale PvP and client rendering of player-dense areas.</p>
+  <p>The game's server architecture follows a traditional monolithic MMO design where a single logical server manages all zones across both continents and the ocean. Zones cycle independently between peace, conflict, and war states based on PvP activity. The housing system persists player-placed structures in the open world without instancing, creating a finite land economy where ownership is contested, taxed, and sometimes demolished by enemy factions.</p>
+  <p>ArcheAge went through three Western publishers (Trion Worlds, Gamigo, Kakao Games), launched the buy-to-play "Unchained" variant, ran multiple fresh-start servers, and ultimately shut down Western service in June 2024. Through all of these transitions, the core server architecture remained largely the same modified CryEngine 3 stack that XL Games built in the late 2000s.</p>
+
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 800 650">
+      <!-- PLAYERS -->
+      <rect x="320" y="10" width="160" height="36" rx="16" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="400" y="33" text-anchor="middle" class="box-label">Players (~3,000/server)</text>
+
+      <!-- LOGIN / AUTH -->
+      <rect x="320" y="80" width="160" height="40" rx="8" fill="none" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="400" y="98" text-anchor="middle" class="box-label">Login / Auth Server</text>
+      <text x="400" y="112" text-anchor="middle" class="box-sub">Publisher-side (Trion/Kakao)</text>
+
+      <!-- WORLD SERVER -->
+      <rect x="200" y="160" width="400" height="55" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="400" y="182" text-anchor="middle" class="box-label">World Server (Monolithic Process)</text>
+      <text x="400" y="198" text-anchor="middle" class="box-sub">Zone management, entity simulation, physics, AI</text>
+
+      <!-- ZONE PROCESSES -->
+      <rect x="30" y="260" width="740" height="130" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="50" y="277" class="group-label">ZONE SIMULATION THREADS</text>
+
+      <rect x="50" y="290" width="100" height="50" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="100" y="310" text-anchor="middle" class="box-label">Nuia West</text>
+      <text x="100" y="324" text-anchor="middle" class="box-sub">Safe + PvP zones</text>
+
+      <rect x="165" y="290" width="100" height="50" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="215" y="310" text-anchor="middle" class="box-label">Haranya East</text>
+      <text x="215" y="324" text-anchor="middle" class="box-sub">Safe + PvP zones</text>
+
+      <rect x="280" y="290" width="100" height="50" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="330" y="310" text-anchor="middle" class="box-label">Auroria</text>
+      <text x="330" y="324" text-anchor="middle" class="box-sub">Full PvP / Castles</text>
+
+      <rect x="395" y="290" width="100" height="50" rx="8" fill="none" stroke="var(--amber)" stroke-width="2"/>
+      <text x="445" y="310" text-anchor="middle" class="box-label">Ocean</text>
+      <text x="445" y="324" text-anchor="middle" class="box-sub">Permanent war</text>
+
+      <rect x="510" y="290" width="120" height="50" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="570" y="310" text-anchor="middle" class="box-label">Housing Zones</text>
+      <text x="570" y="324" text-anchor="middle" class="box-sub">Per-continent areas</text>
+
+      <rect x="645" y="290" width="110" height="50" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="700" y="310" text-anchor="middle" class="box-label">Instances</text>
+      <text x="700" y="324" text-anchor="middle" class="box-sub">Dungeons / Arenas</text>
+
+      <text x="400" y="378" text-anchor="middle" class="box-sub">Each zone tracks PvP state cycle independently: Peace > Conflict (1-5) > War (6) > Peace</text>
+
+      <!-- SERVICES ROW -->
+      <rect x="30" y="420" width="150" height="50" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="105" y="442" text-anchor="middle" class="box-label">Trade System</text>
+      <text x="105" y="456" text-anchor="middle" class="box-sub">Pack pricing / routes</text>
+
+      <rect x="200" y="420" width="130" height="50" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="265" y="442" text-anchor="middle" class="box-label">Labor System</text>
+      <text x="265" y="456" text-anchor="middle" class="box-sub">Account-wide LP</text>
+
+      <rect x="350" y="420" width="130" height="50" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="415" y="442" text-anchor="middle" class="box-label">Justice System</text>
+      <text x="415" y="456" text-anchor="middle" class="box-sub">Crime / Jury / Prison</text>
+
+      <rect x="500" y="420" width="130" height="50" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="565" y="442" text-anchor="middle" class="box-label">Housing Manager</text>
+      <text x="565" y="456" text-anchor="middle" class="box-sub">Tax / Placement / Demo</text>
+
+      <rect x="650" y="420" width="120" height="50" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="710" y="442" text-anchor="middle" class="box-label">Siege Scheduler</text>
+      <text x="710" y="456" text-anchor="middle" class="box-sub">Castle wars / bids</text>
+
+      <!-- CryNetwork Layer -->
+      <rect x="200" y="510" width="400" height="40" rx="8" fill="none" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="400" y="535" text-anchor="middle" class="box-label">CryNetwork Module (UDP, Aspect-Based Replication)</text>
+
+      <!-- DATABASE -->
+      <rect x="100" y="580" width="600" height="55" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="120" y="597" class="group-label">PERSISTENCE</text>
+      <ellipse cx="210" cy="605" rx="50" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M160,605 L160,622 Q160,635 210,635 Q260,635 260,622 L260,605" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="210" y="623" text-anchor="middle" class="box-label">Game DB</text>
+      <ellipse cx="400" cy="605" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M345,605 L345,622 Q345,635 400,635 Q455,635 455,622 L455,605" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="400" y="623" text-anchor="middle" class="box-label">Housing DB</text>
+      <ellipse cx="580" cy="605" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M525,605 L525,622 Q525,635 580,635 Q635,635 635,622 L635,605" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="580" y="623" text-anchor="middle" class="box-label">Account DB</text>
+
+      <!-- ARROWS -->
+      <line x1="400" y1="46" x2="400" y2="80" class="arrow"/>
+      <rect x="374" y="56" width="52" height="14" fill="var(--surface)"/><text x="400" y="66" text-anchor="middle" class="arrow-label">TCP</text>
+
+      <line x1="400" y1="120" x2="400" y2="160" class="arrow"/>
+      <rect x="378" y="132" width="44" height="14" fill="var(--surface)"/><text x="400" y="142" text-anchor="middle" class="arrow-label">Auth</text>
+
+      <line x1="400" y1="215" x2="400" y2="260" class="arrow"/>
+      <rect x="370" y="230" width="60" height="14" fill="var(--surface)"/><text x="400" y="240" text-anchor="middle" class="arrow-label">Internal</text>
+
+      <line x1="400" y1="390" x2="400" y2="420" class="arrow"/>
+      <line x1="105" y1="390" x2="105" y2="420" class="arrow"/>
+      <line x1="710" y1="390" x2="710" y2="420" class="arrow"/>
+
+      <line x1="400" y1="470" x2="400" y2="510" class="arrow"/>
+      <rect x="378" y="484" width="44" height="14" fill="var(--surface)"/><text x="400" y="494" text-anchor="middle" class="arrow-label">UDP</text>
+
+      <line x1="400" y1="550" x2="400" y2="580" class="arrow"/>
+      <rect x="370" y="556" width="60" height="14" fill="var(--surface)"/><text x="400" y="566" text-anchor="middle" class="arrow-label">SQL/IO</text>
+    </svg>
+    <div class="diagram-caption">ArcheAge server architecture: monolithic world server managing multi-continental zones with CryNetwork UDP replication</div>
+  </div>
+
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>ArcheAge follows the traditional Korean MMO server model: a single monolithic server process manages the entire game world for each logical server (called a "world" or "server" by players). This process handles entity simulation, physics, AI, zone state transitions, and player networking. Unlike New World's distributed hub system, everything runs within one process boundary.</p>
+
+  <h3>CryEngine 3 Modifications</h3>
+  <p>XL Games licensed CryEngine in the CryEngine 2 era and began adapting it for MMO use. During development they incorporated elements from CryEngine 3, particularly the physics engine and animation system, while keeping much of the rendering pipeline on the CryEngine 2 / DX9 path. The result is a hybrid engine that offers both DirectX 9 and DirectX 11 rendering, though the DX9 path was generally considered more stable and performant because the engine was originally coded against it.</p>
+  <p>The modifications for MMO use were substantial. CryEngine's networking layer (CryNetwork) was designed for small-player-count FPS games, not thousands of simultaneous connections. XL Games had to rework the networking stack, add persistent world state management, build a housing system with physical placement and collision, implement a multi-zone world with seamless transitions, and add the ocean and naval systems. These modifications came at a cost: "the meaning of optimization faded a lot," as community analyses of the engine have noted.</p>
+
+  <h3>Publisher-Side Infrastructure</h3>
+  <p>A distinctive feature of ArcheAge's architecture is the split between the developer (XL Games) and the publisher. XL Games provides the game server binaries and patch content. The publisher operates the actual server hardware, login servers, payment systems, and customer support infrastructure. This meant the game ran on different hosting setups depending on region:</p>
+  <ul>
+    <li><strong>Korea:</strong> XL Games operated directly, using Korean data centers</li>
+    <li><strong>Russia:</strong> Mail.ru Games hosted with a conservative server count that kept populations dense</li>
+    <li><strong>NA/EU (2014-2019):</strong> Trion Worlds operated on their own data center infrastructure</li>
+    <li><strong>NA/EU (2019-2021):</strong> Gamigo (who acquired Trion) continued on the same infrastructure</li>
+    <li><strong>NA/EU (2021-2024):</strong> Kakao Games took over publishing, migrating to their own hosting</li>
+  </ul>
+  <p>Each publisher transition involved migrating player databases and account systems while keeping the XL Games server binaries essentially the same. The game logic did not change between publishers, but server performance, anti-cheat enforcement, and update cadence varied significantly.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-orange">
+      <h4>Server Hardware</h4>
+      <ul>
+        <li>Single monolithic process per world server</li>
+        <li>Bare-metal or dedicated VM hosting (publisher-dependent)</li>
+        <li>Estimated 3,000-6,000 concurrent players per server</li>
+        <li>100 visible player limit per client (configurable)</li>
+      </ul>
+    </div>
+    <div class="info-card c-blue">
+      <h4>Zone Architecture</h4>
+      <ul>
+        <li>Two main continents (Nuia, Haranya) with safe + PvP zones</li>
+        <li>Auroria: endgame PvP continent, no safe zones</li>
+        <li>Shared ocean: permanent war state, no peace cycle</li>
+        <li>Instanced content: dungeons, arenas, siege maps</li>
+      </ul>
+    </div>
+    <div class="info-card c-green">
+      <h4>Networking</h4>
+      <ul>
+        <li>CryNetwork module: UDP-based transport</li>
+        <li>Aspect-based entity replication (up to 32 aspects per entity)</li>
+        <li>Compression policies for bandwidth management</li>
+        <li>Single global lock with queue-based thread safety</li>
+      </ul>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Publisher History</h4>
+      <ul>
+        <li>XL Games (KR): 2013-present</li>
+        <li>Trion Worlds (NA/EU): 2014-2018</li>
+        <li>Gamigo (NA/EU): 2018-2021</li>
+        <li>Kakao Games (NA/EU): 2021-2024 (shutdown June 2024)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>ArcheAge's networking is built on CryNetwork, the networking module that ships with CryEngine. CryNetwork uses UDP as its primary transport protocol for game data, with a custom reliability layer built on top for ordered and reliable delivery of critical events.</p>
+
+  <h3>Aspect-Based Replication</h3>
+  <p>CryNetwork uses an "aspect" system for entity replication. Each networked entity (player characters, NPCs, ships, trade packs, housing objects) can have up to 32 independent aspects. Each aspect represents a group of related data fields, like position/rotation, health/mana, equipment, or buff states. When a particular aspect is marked "dirty" by game code, only that aspect gets serialized and sent to relevant clients. This avoids retransmitting the entire entity state on every change.</p>
+  <p>The recommendation from Crytek's documentation is to group variables by rate of change. Position and rotation data, which change every frame for moving entities, go in one aspect. Equipment data, which changes rarely, goes in another. This ensures that frequent updates (like movement) do not carry the overhead of infrequent data (like what hat you are wearing).</p>
+
+  <h3>Channel Architecture</h3>
+  <p>Each connected player has a "channel" to the server. The server maintains one channel per client. All communication flows through these channels. CryNetwork runs its network I/O on a separate thread from the game simulation, using a global lock to synchronize access. To minimize lock contention, most cross-thread calls are queued: game-to-network calls go into a FROM_GAME queue, and network-to-game calls go into a TO_GAME queue.</p>
+
+  <h3>Player Collision</h3>
+  <p>Unlike most MMOs, ArcheAge uses player collision. Your character can be physically blocked by other players and NPCs. This has significant networking implications because collision detection must be server-authoritative to prevent desync, and it creates unique gameplay situations like physically blocking trade routes or doorways. The physics overhead of simulating thousands of player-to-player collision checks was one factor limiting server capacity.</p>
+
+  <table class="proto">
+    <tr><th>Connection</th><th>Protocol</th><th>Notes</th></tr>
+    <tr><td>Client to Login</td><td><code>TCP</code></td><td>Authentication handled by publisher infrastructure</td></tr>
+    <tr><td>Client to World</td><td><code>UDP</code></td><td>CryNetwork primary transport with custom reliability</td></tr>
+    <tr><td>Entity Replication</td><td><code>UDP</code></td><td>Aspect-based dirty tracking, up to 32 aspects per entity</td></tr>
+    <tr><td>Server to DB</td><td><code>TCP/SQL</code></td><td>Persistent state: characters, housing, economy, crime points</td></tr>
+    <tr><td>Cross-Thread</td><td><code>Queue</code></td><td>FROM_GAME and TO_GAME message queues with global lock</td></tr>
+  </table>
+
+  <div class="callout c-amber">
+    <div class="callout-title">Physics as a Feature and a Bottleneck</div>
+    <p>ArcheAge's physics engine was inherited from CryEngine and became both a signature feature and a performance constraint. Ships rock on ocean waves. Trade packs have physical presence. Player collision blocks movement. Siege weapons follow ballistic trajectories. All of this requires continuous physics simulation on the server, which consumes CPU cycles that other MMOs do not spend. When hundreds of players gathered for castle sieges or trade route ambushes, the physics overhead combined with entity replication created severe server-side lag.</p>
+  </div>
+
+  <h2 id="data">Data &amp; Persistence</h2>
+
+  <h3>Housing Persistence</h3>
+  <p>ArcheAge's housing system is one of the most complex persistence challenges in any MMO. Houses and farms are not instanced. They exist in the open world, visible to every player, occupying real space on the map. The server must track the position, rotation, type, ownership, tax status, furniture placement, storage contents, and permission settings of every single player structure.</p>
+  <p>Housing zones are designated areas throughout both continents with restrictions on structure size and type. Some zones allow only small farms. Others are designated "luxury housing" areas for larger buildings. The finite nature of these zones creates genuine scarcity: when all plots are claimed, new players simply cannot place a house until someone else loses theirs.</p>
+
+  <h3>Tax and Demolition System</h3>
+  <p>Housing persistence is tied to a weekly tax system. Players must deposit Tax Certificates (crafted or purchased) to maintain their property. Missing one week incurs a penalty but the house stays. Missing two consecutive weeks triggers demolition: the house disappears and the plot opens for anyone to claim. This system acts as a garbage collector for abandoned properties, preventing permanently occupied land from dead accounts.</p>
+  <p>When a plot opens, the server runs a claim lottery. A 20-second timer starts, during which any player who attempts to claim the land is added to a participant list. After 20 seconds, a random roll selects a winner, who then has 60 seconds of exclusive placement rights. Players can only participate in one land claim every 10 minutes. All of these restrictions are tracked per account, not per character.</p>
+  <p>On Auroria, the endgame PvP continent, castle owners can demolish all player houses within a 100-meter radius of their castle center. Demolished houses are returned to the owner via in-game mail as a packaged item that can be replanted elsewhere, so the structure data persists even when the physical placement is destroyed.</p>
+
+  <h3>Trade Economy Data</h3>
+  <p>The trade system tracks supply and demand per route in real time. Each trade pack has a base value, and the percentage of that value you receive at the destination varies from 130% down to 70% based on recent delivery volume. This price recharges at 5% per hour when no deliveries are made. The server must track delivery counts per route, per time window, and calculate the current percentage for every trade NPC in the world.</p>
+  <p>Trade packs are physical objects. When a player crafts one, it appears on their back, reduces their movement speed, and can be stolen by other players who kill them. If a pack is dropped (by death or by being placed on a ship that sinks), the pack persists in the world as a lootable object with a decay timer. The server must track the position and ownership state of every trade pack in existence.</p>
+
+  <h3>Labor Points</h3>
+  <p>Labor Points are an account-wide resource that regenerates over time. Patrons regenerate 10 LP every 5 minutes (both online and offline), up to a cap of 5,000. Free players regenerate 5 LP every 5 minutes, only while online, up to 2,000. Nearly every economic action in the game consumes LP: crafting, gathering, opening loot, turning in trade packs, filing crime reports. The server tracks LP balances and regeneration timers per account, across all characters.</p>
+
+  <div class="callout c-purple">
+    <div class="callout-title">Server Merges and the Land Problem</div>
+    <p>Server merges in ArcheAge were uniquely painful because of the housing system. Even on low-population servers, most land was still occupied because existing players owned multiple plots. Merging two servers means merging two full sets of housing data into one world with the same finite land supply. XL Games and the publishers never found a clean solution to this. Players on merged servers often lost their homes, and the resulting land rush on the merged server was chaotic and controversial every time it happened.</p>
+  </div>
+
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+
+  <h3>Zone State Cycling</h3>
+  <p>Each PvP zone on the two main continents cycles independently through states: Peace, then Conflict (levels 1 through 5), then War (level 6), then back to Peace. The cycle is driven by PvP activity. When players kill each other in a zone that is in Conflict state, the zone accumulates points toward the next conflict level. At level 6, the zone enters War state for a fixed duration, during which honor (PvP currency) is awarded for kills and special events trigger in certain zones.</p>
+  <p>The ocean and Auroria (the northern PvP continent) never enter Peace state. They are permanently in War, meaning open PvP is always active. This design means the server must track per-zone PvP counters, state transition timers, and special event triggers independently for every zone in the game.</p>
+
+  <h3>Castle Sieges (100v100)</h3>
+  <p>Castle sieges were restructured in the 2.5 update to a 100v100 format. The defending guild fields 60 players initially, with 40 reinforcements arriving after 40 minutes. The attacking guild brings 100 players from the start. Sieges happen weekly on Saturdays for each castle, with guilds bidding gold for the right to attack.</p>
+  <p>Castles exist only on Auroria and are modular structures that guilds build piece by piece. The siege system tracks the health of every castle structure, the position of siege weapons, the guild membership of every participant, and the bid amounts from all guilds that wanted to attack. This is the highest-stress event in the game from a server perspective: 200 players in a single zone, all using abilities, deploying siege weapons, and destroying structures simultaneously.</p>
+
+  <h3>Naval Combat and Ocean Systems</h3>
+  <p>The ocean is a shared zone connecting both continents. Ships are player-crafted vehicles with physics simulation: they rock on waves, take damage from cannons, and can be boarded by enemy players. Naval combat involves tracking ship hull health, cannon trajectories (ballistic physics), crew positions on the ship, and cargo (trade packs) stored in the hold.</p>
+  <p>When a ship sinks, its cargo drops into the water as salvageable objects. Players can dive to recover sunken trade packs. The server must maintain underwater entity positions and physics for these dropped objects alongside the surface-level ship simulation.</p>
+
+  <h3>Fresh Start Server Architecture</h3>
+  <p>Fresh start servers were a recurring strategy to address population decline and economy inflation. These servers used the same server binary and architecture as existing servers, but started with a clean database: no existing characters, no claimed land, no accumulated wealth. Players could not transfer characters from existing servers to fresh start servers.</p>
+  <p>The appeal was the "land rush" experience of a new server where everyone competes for housing plots from scratch. Kakao Games launched multiple rounds of fresh start servers (September 2022, February 2023) with temporary XP and drop rate boosts. After a fixed period (typically 3 months), fresh start servers would open character transfers to existing live servers, at which point they typically died as players migrated to the larger population.</p>
+
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>Justice System Infrastructure</h3>
+  <p>ArcheAge has a player-run court system. When a player accumulates 50 or more Crime Points (earned by killing same-faction players or stealing crops), they are sent to trial upon their next PvP death. The server must track Crime Points per character, manage a jury queue of eligible players (level 30+, no infamy points), and orchestrate the trial process.</p>
+  <p>Jury selection pulls 5 players from the queue, ordered by login time. The defendant can plead guilty for an automatic (reduced) sentence or stand trial. During a trial (up to 10 minutes), the defendant presents their case, the jury deliberates, and each juror votes on a sentence. The sentence range (from 2 minutes to several days of in-game prison time) is calculated from current and lifetime criminal points, weighted by the jury's votes.</p>
+  <p>Prison is a separate instanced zone with a debuff that disables all combat and mobility skills. Prisoners can work off their sentence through labor activities (which consume Labor Points). The server tracks sentence timers per imprisoned character and reduces the timer based on completed prison activities.</p>
+
+  <h3>Trade Route Server-Side Tracking</h3>
+  <p>The trade system is one of ArcheAge's most server-intensive features. Each trade pack is a physical entity with position, ownership, and cargo type. The server tracks:</p>
+  <ul>
+    <li><strong>Pack crafting:</strong> 60 LP cost to create, materials consumed from inventory</li>
+    <li><strong>Pack transport:</strong> Entity position updates as the carrier moves, speed reduction applied</li>
+    <li><strong>Pack theft:</strong> Ownership transfer on carrier death, physical drop to world</li>
+    <li><strong>Ship cargo:</strong> Packs stored in ship hold, linked to ship entity</li>
+    <li><strong>Route pricing:</strong> Delivery count per route per time window, 130%-70% price scaling, 5%/hr recharge</li>
+    <li><strong>Turn-in:</strong> 60 LP cost, gold/gilda stars awarded based on current route percentage</li>
+  </ul>
+  <p>A single player running trade packs generates a continuous stream of position updates (the pack entity moves with them), plus LP consumption events, plus economic state queries (checking route percentages), plus potential PvP interactions. Multiply this by hundreds of players running packs simultaneously, and the trade system becomes one of the most demanding subsystems on the server.</p>
+
+  <h3>Unchained vs. Legacy Architecture</h3>
+  <p>ArcheAge: Unchained launched in October 2019 as a buy-to-play version without the free-to-play game's subscription model or cash shop power items. Despite the different business model, Unchained ran on identical server architecture. The difference was entirely in the game database configuration: which items were available in the cash shop, how Labor Points regenerated (all players treated as Patrons), and what restrictions applied to free accounts (there were none, since everyone bought the game).</p>
+  <p>Kakao Games eventually merged Unchained servers into the Legacy ArcheAge servers in August 2023, citing population decline. The merge involved migrating Unchained player databases into the Legacy server databases and reconciling differences in item availability and progression between the two versions.</p>
+
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <span class="year">2006</span>
+      <span class="desc"><strong>Development begins at XL Games.</strong> Jake Song (Lineage creator) starts building ArcheAge on CryEngine 2, planning a sandbox MMO with naval combat and open-world housing.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2010</span>
+      <span class="desc"><strong>Engine partially migrated to CryEngine 3.</strong> Physics engine and animation system updated to CryEngine 3, while rendering remains on the CryEngine 2 DX9 pipeline.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2013</span>
+      <span class="desc"><strong>Korean launch (January 15).</strong> XL Games opens servers in Korea. Initial server count is conservative. Most servers remain in a crowded state months after launch.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2014</span>
+      <span class="desc"><strong>Western launch via Trion Worlds (September 16).</strong> Massive demand, severe queue times. Founder packs available since April. The land rush creates immediate housing scarcity on every server.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2015</span>
+      <span class="desc"><strong>XL Games announces XLE (XL Engine).</strong> An open-source (MIT license) game engine under development, suggesting XL Games was already looking beyond CryEngine for future projects.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2016</span>
+      <span class="desc"><strong>Auroria expansion and castle siege rework.</strong> 100v100 castle siege format introduced in version 2.5. Endgame PvP continent fully opened with guild castle construction.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2018</span>
+      <span class="desc"><strong>Gamigo acquires Trion Worlds (October).</strong> Trion Worlds is disbanded. Publishing of ArcheAge NA/EU transitions to Gamigo.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2019</span>
+      <span class="desc"><strong>ArcheAge: Unchained launches (October).</strong> Buy-to-play version on same server architecture, published by Gamigo.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2021</span>
+      <span class="desc"><strong>Kakao Games takes over NA/EU publishing (December 2).</strong> Four fresh start servers launched simultaneously. Tens of thousands of bot accounts banned. Over 200 billion in-game currency removed.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2023</span>
+      <span class="desc"><strong>Unchained merged into Legacy servers (November/December).</strong> Announced in August, the actual merge completed November 30. Population too low to sustain separate server versions. One NA server and one EU server remain.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2024</span>
+      <span class="desc"><strong>Western servers shut down (June 27).</strong> Kakao Games announces closure of all NA/EU ArcheAge servers. ArcheAge Chronicles (sequel on UE5) announced at PlayStation State of Play.</span>
+    </div>
+  </div>
+
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://en.wikipedia.org/wiki/ArcheAge">ArcheAge - Wikipedia</a>
+        <div class="source-desc">Overview of development history, engine details, publisher transitions, and server timeline.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://docs.cryengine.com/display/CEPROG/Networking">CryEngine Networking Documentation</a>
+        <div class="source-desc">Official CryEngine documentation covering CryNetwork module, aspect-based replication, channel architecture, and UDP transport.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://docs.cryengine.com/display/SDKDOC4/CryNetwork">CryNetwork Technical Documentation</a>
+        <div class="source-desc">Detailed CryNetwork architecture: Nub communication, NetContext object management, memory management, and threading model.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://archeage.fandom.com/wiki/Housing">ArcheAge Housing System - Fandom Wiki</a>
+        <div class="source-desc">Comprehensive documentation of housing zones, tax mechanics, demolition, and land claim lottery system.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://archeage.fandom.com/wiki/Justice_System">ArcheAge Justice System - Fandom Wiki</a>
+        <div class="source-desc">Crime points, jury selection, trial process, sentencing, and prison mechanics.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.cryengine.com/showcase/view/archeage">CRYENGINE Showcase: ArcheAge</a>
+        <div class="source-desc">Crytek's official showcase page for ArcheAge, covering engine usage and graphical features.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://archeage.fandom.com/wiki/Trade_Routes">ArcheAge Trade Routes - Fandom Wiki</a>
+        <div class="source-desc">Trade pack creation, route pricing mechanics, supply/demand tracking, and intercontinental trade.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://massivelyop.com/2023/08/24/kakao-is-effectively-sunsetting-archeage-unchained-merging-it-into-two-remaining-western-archeage-servers/">Kakao Sunsets ArcheAge Unchained</a>
+        <div class="source-desc">Massively Overpowered coverage of the Unchained/Legacy server merge and declining population.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info">
+        <a href="https://na.archerage.to/forums/threads/how-xl-games-started-creating-a-real-archeage-and-what-we-can-learn-from-that.5731/">How XL Games Started Creating a Real ArcheAge</a>
+        <div class="source-desc">ArcheRage community analysis of XL Games' development decisions and engine modifications.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://mmoculture.com/2015/12/xl-engine-archeage-dev-is-working-on-new-cross-platform-game-engine/">XL Engine: ArcheAge Dev Working on New Engine</a>
+        <div class="source-desc">MMO Culture report on XL Games' XLE open-source engine initiative, signaling their move beyond CryEngine.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="game-nav">
+    <a href="new-world.html"><span class="dir">Previous</span><span class="name">New World</span></a>
+    <a class="next" href="ashes.html"><span class="dir">Next</span><span class="name">Ashes of Creation</span></a>
+  </div>
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

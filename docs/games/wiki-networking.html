@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Networking Technologies - Wiki | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <a href="wiki-engines.html">Engines</a>
+  <a href="wiki-languages.html">Languages</a>
+  <a href="wiki-databases.html">Databases</a>
+  <a href="wiki-networking.html" style="color:var(--t1);font-weight:700">Networking</a>
+  <a href="wiki-middleware.html">Middleware</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // WIKI</span>
+</nav>
+
+<!-- TOC -->
+<div class="toc">
+  <a href="#intro">Introduction</a>
+  <a href="#comparison-table">Comparison Table</a>
+  <a href="#tcp">TCP</a>
+  <a href="#udp">UDP</a>
+  <a href="#websocket">WebSocket</a>
+  <a href="#webrtc">WebRTC</a>
+  <a href="#quic">QUIC</a>
+  <a href="#grpc">gRPC</a>
+  <a href="#raknet">RakNet</a>
+  <a href="#enet">ENet</a>
+  <a href="#steamnet">SteamNetworkingSockets</a>
+  <a href="#auth-server">Authoritative Server</a>
+  <a href="#client-auth">Client-Authoritative</a>
+  <a href="#p2p">Peer-to-Peer</a>
+  <a href="#hybrid">Hybrid P2P/Server</a>
+  <a href="#server-meshing">Server Meshing</a>
+  <a href="#tick-rate">Tick Rate</a>
+  <a href="#netcode">Netcode</a>
+  <a href="#state-sync">State Synchronization</a>
+  <a href="#nat-traversal">NAT Traversal</a>
+  <a href="#anti-cheat">Anti-Cheat (Network)</a>
+  <a href="#sources">Sources</a>
+</div>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Wiki / Networking</div>
+  <h1>Networking Technologies for Multiplayer Games</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">WIKI</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">19 TOPICS</span>
+    <span class="badge" style="background:rgba(4,120,87,0.1);color:var(--green)">COMPARISON GUIDE</span>
+  </div>
+  <p class="lead">Networking is the single hardest problem in multiplayer game development. Every millisecond of latency, every dropped packet, every cheater exploiting a trust boundary comes back to how the game moves data between machines. This page covers the transport protocols, application-layer libraries, architecture patterns, and key concepts that define multiplayer networking, from the 1 Hz tick of EVE Online's space battles to the 128 Hz precision of Valorant's gunfights.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Topics Covered</span><span class="value">19</span></div>
+    <div class="key-stat"><span class="label">Categories</span><span class="value">Transport, Application, Architecture, Concepts</span></div>
+    <div class="key-stat"><span class="label">Games Referenced</span><span class="value">18</span></div>
+    <div class="key-stat"><span class="label">Key Decision</span><span class="value">Latency vs. Reliability</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- ========== INTRODUCTION ========== -->
+  <h2 id="intro">Introduction</h2>
+  <p>Multiplayer networking sits at the intersection of systems programming, distributed systems, and game design. The core tension is always the same: the speed of light is too slow, packets get lost, and players cheat. Every networking technology in this guide represents a different set of tradeoffs for dealing with those three realities.</p>
+  <p>There is no universal "best" protocol or architecture. World of Warcraft runs on TCP and has served millions of players since 2004. Counter-Strike runs on UDP and its netcode is studied like scripture by competitive FPS developers. EVE Online updates the entire universe once per second. Valorant updates 128 times per second. Both are correct for what they do.</p>
+  <p>This guide covers five transport protocols, four application-layer networking libraries, five architecture patterns, and five key concepts. For each topic we explain what it is, how it works under the hood, which of our 18 surveyed games use it, and when you should consider it for your own project.</p>
+
+  <div class="callout">
+    <div class="callout-title">The Fundamental Tradeoff</div>
+    <p>Every networking decision comes down to one question: do you need this data to arrive reliably and in order, or do you need it to arrive fast? TCP guarantees delivery. UDP guarantees speed. Everything else is a variation on that theme. Most production games need both, which is why they build custom reliability layers on top of UDP or use libraries like ENet and RakNet that do it for them.</p>
+  </div>
+
+  <!-- ========== COMPARISON TABLE ========== -->
+  <h2 id="comparison-table">Protocol Comparison Table</h2>
+  <p>All protocols and libraries, side by side. This covers the major decision factors for game networking. Scroll right on mobile.</p>
+
+  <div class="diagram-full" style="overflow-x:auto">
+    <table class="proto" style="min-width:1200px">
+      <thead>
+        <tr>
+          <th>Protocol / Library</th>
+          <th>Layer</th>
+          <th>Reliability</th>
+          <th>Ordering</th>
+          <th>Latency</th>
+          <th>Use Case</th>
+          <th>Games Using It</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>TCP</td>
+          <td>Transport</td>
+          <td>Guaranteed</td>
+          <td>Strict ordering</td>
+          <td>Higher (retransmit waits)</td>
+          <td>MMOs, chat, login, inventory</td>
+          <td>WoW, FFXIV, RuneScape, GW2</td>
+        </tr>
+        <tr>
+          <td>UDP</td>
+          <td>Transport</td>
+          <td>None</td>
+          <td>None</td>
+          <td>Lowest possible</td>
+          <td>FPS, racing, real-time action</td>
+          <td>Fortnite, Destiny 2, PlanetSide 2, CS2</td>
+        </tr>
+        <tr>
+          <td>WebSocket</td>
+          <td>Application (over TCP)</td>
+          <td>Guaranteed (TCP)</td>
+          <td>Strict ordering (TCP)</td>
+          <td>Similar to TCP + framing overhead</td>
+          <td>Browser games, lobby systems</td>
+          <td>Browser-based titles, Godot web exports</td>
+        </tr>
+        <tr>
+          <td>WebRTC</td>
+          <td>Application (over UDP)</td>
+          <td>Configurable per channel</td>
+          <td>Configurable per channel</td>
+          <td>Low (P2P direct)</td>
+          <td>Browser P2P, small-scale multiplayer</td>
+          <td>Browser-based P2P games</td>
+        </tr>
+        <tr>
+          <td>QUIC</td>
+          <td>Transport (over UDP)</td>
+          <td>Per-stream reliable + unreliable datagrams</td>
+          <td>Per-stream ordered</td>
+          <td>Low (no cross-stream HOL blocking)</td>
+          <td>Next-gen game transport, mixed traffic</td>
+          <td>Experimental; MsQuic for Xbox GDK titles</td>
+        </tr>
+        <tr>
+          <td>gRPC</td>
+          <td>Application (RPC)</td>
+          <td>Guaranteed (HTTP/2 over TCP)</td>
+          <td>Per-stream ordered</td>
+          <td>Low for services, not real-time gameplay</td>
+          <td>Backend services, matchmaking, APIs</td>
+          <td>EVE Online (Quasar)</td>
+        </tr>
+        <tr>
+          <td>RakNet</td>
+          <td>Application (over UDP)</td>
+          <td>Configurable (reliable/unreliable)</td>
+          <td>Configurable (sequenced/ordered/none)</td>
+          <td>Low</td>
+          <td>General game networking, classic choice</td>
+          <td>Minecraft Bedrock, Roblox</td>
+        </tr>
+        <tr>
+          <td>ENet</td>
+          <td>Application (over UDP)</td>
+          <td>Configurable (reliable/unreliable)</td>
+          <td>Configurable (sequenced/ordered/none)</td>
+          <td>Low</td>
+          <td>Lightweight games, Godot default</td>
+          <td>Godot-based titles</td>
+        </tr>
+        <tr>
+          <td>SteamNetworkingSockets</td>
+          <td>Application (over UDP)</td>
+          <td>Configurable (reliable/unreliable)</td>
+          <td>Configurable</td>
+          <td>Low (relay-optimized)</td>
+          <td>Steam games, DDoS-protected P2P</td>
+          <td>All Steam-integrated multiplayer titles</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+
+  <!-- ================================================================== -->
+  <!-- TRANSPORT PROTOCOLS -->
+  <!-- ================================================================== -->
+
+  <h2 id="tcp">TCP (Transmission Control Protocol)</h2>
+
+  <h3>What It Is</h3>
+  <p>TCP is the reliable, ordered delivery protocol that powers most of the internet. When you load a web page, send an email, or download a file, TCP handles the data transfer. It guarantees that every byte you send arrives at the destination, in the exact order you sent it, with no duplicates and no corruption. If a packet gets lost along the way, TCP detects the loss and retransmits it automatically.</p>
+
+  <h3>How It Works</h3>
+  <p>TCP connections start with a <strong>three-way handshake</strong>: the client sends a SYN packet, the server responds with SYN-ACK, and the client confirms with ACK. This establishes a bidirectional stream. From that point forward, every byte sent gets a sequence number, and the receiver sends acknowledgments (ACKs) back to confirm receipt. If the sender does not receive an ACK within a timeout window, it retransmits the data.</p>
+  <p><strong>Flow control</strong> prevents a fast sender from overwhelming a slow receiver. The receiver advertises a "window size" indicating how much data it can buffer, and the sender limits itself to that amount. <strong>Congestion control</strong> prevents the sender from overwhelming the network itself, using algorithms like slow start and congestion avoidance to probe for available bandwidth and back off when packet loss is detected.</p>
+
+  <h3>Head-of-Line Blocking</h3>
+  <p>TCP's reliability guarantee creates a problem for real-time games called <strong>head-of-line (HOL) blocking</strong>. Because TCP delivers data in strict order, if packet #47 gets lost, packets #48, #49, and #50 all sit in a buffer waiting for #47 to be retransmitted and arrive. The game cannot process any of those later packets until the gap is filled. On a connection with 125ms ping, this stall can last 200-300ms or more. In a fast-paced game running at 60 FPS, that is 12-18 frozen frames.</p>
+  <p>Worse, when TCP detects packet loss, its congestion control algorithm assumes the network is overloaded and <strong>backs off</strong>, reducing the send rate. This is exactly the wrong response for a game that needs to keep pushing updates at a constant rate regardless of occasional drops.</p>
+
+  <h3>Nagle's Algorithm and TCP_NODELAY</h3>
+  <p>Nagle's algorithm, defined in RFC 896 (1984), batches small outgoing messages together to reduce the number of tiny packets on the network. If there is already a sent packet waiting for an ACK, Nagle's algorithm holds new data in a buffer until either enough data accumulates to fill a full packet or the ACK arrives. This is great for efficiency but terrible for games, where you want every input packet sent immediately regardless of size.</p>
+  <p>The interaction between Nagle's algorithm and <strong>delayed ACKs</strong> (a separate TCP optimization from the same era) is particularly painful. Delayed ACKs hold acknowledgments for up to 200-500ms hoping to piggyback them on a response packet. Combined with Nagle, this creates a worst case where small game packets sit buffered for hundreds of milliseconds before being sent. John Nagle himself has commented that the combination of his algorithm with Berkeley's delayed ACKs is problematic.</p>
+  <p>The fix is <strong>TCP_NODELAY</strong>, a socket option that disables Nagle's algorithm and tells TCP to transmit every write immediately. Every game that uses TCP should enable this. However, TCP_NODELAY only fixes the batching problem. It does not fix head-of-line blocking, congestion backoff, or retransmission delays. Those are fundamental to how TCP works.</p>
+
+  <h3>When to Use It</h3>
+  <p>TCP is the right choice when reliable delivery matters more than latency. Login authentication, chat messages, inventory transactions, quest progress, marketplace orders, and guild management all need every message to arrive. A lost chat message or a missing inventory update is a bug. A 50ms delay on those operations is invisible to the player.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>World of Warcraft</strong> runs entirely on TCP and has done so since 2004. The game's pace is fast enough to feel action-oriented but slow enough that TCP's latency characteristics are acceptable. <strong>FFXIV</strong> uses TCP for its core game protocol, with Oodle compression added in patch 6.3 to reduce bandwidth. <strong>RuneScape</strong> uses a custom TCP binary protocol on port 43594 with ISAAC encryption for packet opcodes. Its 600ms server tick makes TCP a natural fit. <strong>Guild Wars 2</strong> uses a proprietary TCP networking stack that ArenaNet's Pat Wyatt built from scratch, comprising roughly 50,000 lines of code.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Reliability</td><td>Guaranteed delivery with automatic retransmission</td></tr>
+    <tr><td>Ordering</td><td>Strict byte-order delivery via sequence numbers</td></tr>
+    <tr><td>Latency Impact</td><td>HOL blocking adds 1-3x RTT on packet loss; congestion backoff compounds it</td></tr>
+    <tr><td>Bandwidth</td><td>20-byte header + ACK overhead (roughly 15-30% more than UDP)</td></tr>
+    <tr><td>Best For</td><td>MMOs, turn-based games, chat, login, inventory, marketplaces</td></tr>
+    <tr><td>Avoid For</td><td>Twitch shooters, racing games, physics-heavy real-time action</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="udp">UDP (User Datagram Protocol)</h2>
+
+  <h3>What It Is</h3>
+  <p>UDP is the minimal, connectionless transport protocol. It sends packets (called datagrams) from one machine to another with no guarantees of delivery, ordering, or duplicate detection. If a packet gets lost, UDP does not notice and does not care. If packets arrive out of order, the application gets them out of order. There is no handshake, no connection state, and no congestion control. You send a datagram and hope for the best.</p>
+
+  <h3>How It Works</h3>
+  <p>A UDP datagram has an 8-byte header (compared to TCP's 20-byte minimum) containing source port, destination port, length, and a checksum. That is it. No sequence numbers, no acknowledgments, no window sizes. The application calls <code>sendto()</code> and the datagram goes out immediately. On the receiving end, <code>recvfrom()</code> gives you whatever arrived, whenever it arrived.</p>
+  <p>This simplicity is exactly why games use it. In a fast-paced shooter sending 60 position updates per second, a lost packet from 16ms ago is already stale. The next packet contains a newer position that supersedes the lost one. Retransmitting the old position (like TCP would) wastes bandwidth and time on data that no longer matters.</p>
+
+  <h3>Building Reliability on Top of UDP</h3>
+  <p>Raw UDP is rarely used directly in games. Instead, games build custom reliability layers that give them fine-grained control over which messages are reliable and which are fire-and-forget. A typical "reliable UDP" implementation includes sequence numbers for ordering, selective acknowledgments for tracking which packets arrived, retransmission of specific packets that were lost (not the whole stream), and configurable reliability modes per message type (position updates are unreliable, inventory changes are reliable).</p>
+  <p>Libraries like ENet, RakNet, and SteamNetworkingSockets provide these reliability layers out of the box so developers do not have to write them from scratch. Glenn Fiedler's "Gaffer on Games" articles on building reliable UDP protocols are widely considered the definitive reference for doing it yourself.</p>
+
+  <h3>Packet Loss Handling</h3>
+  <p>On the public internet, packet loss rates of 1-5% are common, and spikes can go higher. Games handle this through redundancy (sending the same data multiple times), prediction (guessing what the lost data was based on previous state), and interpolation (smoothly blending between known states so the player does not see jitter). For critical data like "player fired a weapon" or "item was picked up," the game marks those messages as reliable and retransmits them selectively without blocking the rest of the stream.</p>
+
+  <h3>When to Use It</h3>
+  <p>UDP (with a custom or library reliability layer) is the standard choice for any game where players need to react in real-time to what other players are doing. First-person shooters, third-person action games, racing games, fighting games, real-time strategy, and physics-based multiplayer all benefit from UDP's lower latency and lack of HOL blocking.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>Fortnite</strong> uses Unreal Engine's UDP-based networking with custom reliable messaging for gameplay state. <strong>Destiny 2</strong> uses UDP for its P2P movement mesh and dedicated server communication. <strong>PlanetSide 2</strong> runs the SOE Protocol over UDP, handling up to 2,000 players per server. <strong>Albion Online</strong> uses Photon's UDP implementation for game state with unreliable movement messages. <strong>Black Desert Online</strong> uses UDP on Pearl Abyss's proprietary engine. <strong>Call of Duty: Warzone</strong> uses UDP for its real-time combat networking.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Reliability</td><td>None by default; application builds what it needs</td></tr>
+    <tr><td>Ordering</td><td>None by default; application adds sequence numbers</td></tr>
+    <tr><td>Latency Impact</td><td>Minimal; no retransmission waits, no congestion backoff</td></tr>
+    <tr><td>Bandwidth</td><td>8-byte header, no ACK overhead (15-30% less than TCP)</td></tr>
+    <tr><td>Best For</td><td>Real-time gameplay: shooters, racing, action, physics</td></tr>
+    <tr><td>Avoid For</td><td>Browser games (no raw UDP access), data that must never be lost</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="websocket">WebSocket</h2>
+
+  <h3>What It Is</h3>
+  <p>WebSocket is a protocol that provides full-duplex bidirectional communication over a single TCP connection. It was standardized in 2011 specifically to give web browsers a way to maintain persistent connections with servers, replacing the hack of long-polling HTTP requests. For browser-based games, WebSocket is often the only real-time communication option available (outside of WebRTC data channels).</p>
+
+  <h3>How It Works</h3>
+  <p>A WebSocket connection starts as a normal HTTP request with an <code>Upgrade</code> header. The server responds with a 101 status code, and the connection switches from HTTP to the WebSocket protocol. From that point forward, both sides can send messages (text or binary) at any time without the overhead of HTTP headers on each message. Messages are framed with a small header (2-14 bytes) that includes the payload length and a masking key (for client-to-server messages).</p>
+  <p>Because WebSocket runs over TCP, it inherits all of TCP's properties: guaranteed delivery, strict ordering, and head-of-line blocking. It also inherits TCP's latency characteristics, including Nagle's algorithm (which most WebSocket implementations disable by default) and congestion control behavior.</p>
+
+  <h3>How It Differs from Raw TCP</h3>
+  <p>WebSocket adds message framing on top of TCP's byte stream. Raw TCP gives you a continuous stream of bytes with no message boundaries; you have to implement your own length-prefixed framing. WebSocket handles this for you. It also provides a standard handshake that works through HTTP proxies and load balancers, which is critical for browser deployment where you cannot open raw TCP sockets.</p>
+
+  <h3>Godot's WebSocket Support</h3>
+  <p>Godot has built-in WebSocket support through the <code>WebSocketMultiplayerPeer</code> class, which integrates with the engine's high-level multiplayer API. This means you can swap between ENet (for native builds) and WebSocket (for web exports) without rewriting your game logic. Godot supports both <code>ws://</code> and <code>wss://</code> (secure) connections, though deploying to HTTPS-only platforms like itch.io requires proper SSL certificates.</p>
+  <p>The <code>MultiplayerSynchronizer</code> node handles state replication, and RPCs work the same way regardless of whether the underlying transport is ENet or WebSocket. This makes WebSocket the default path for Godot web exports.</p>
+
+  <h3>When to Use It</h3>
+  <p>Use WebSocket when your game must run in a web browser, when your game's pace does not demand sub-frame latency (turn-based, card games, casual multiplayer, social games), or when you need to pass through corporate firewalls and HTTP proxies that block UDP traffic. WebSocket on port 443 with TLS gets through almost any network.</p>
+
+  <h3>Which Games Use It</h3>
+  <p>Browser-based multiplayer games are the primary users. <strong>Godot web exports</strong> use WebSocket as the default multiplayer transport. Many .io-style browser games (agar.io clones, browser-based MMOs) run on WebSocket. It also commonly handles non-gameplay traffic like lobby chat, matchmaking UI, and friend lists even in native games.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Reliability</td><td>Guaranteed (TCP underneath)</td></tr>
+    <tr><td>Ordering</td><td>Strict ordering (TCP underneath)</td></tr>
+    <tr><td>Latency</td><td>Same as TCP plus small framing overhead</td></tr>
+    <tr><td>Browser Support</td><td>All modern browsers</td></tr>
+    <tr><td>Best For</td><td>Browser games, lobby systems, chat, turn-based multiplayer</td></tr>
+    <tr><td>Avoid For</td><td>Twitch gameplay in browsers (consider WebRTC data channels instead)</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="webrtc">WebRTC</h2>
+
+  <h3>What It Is</h3>
+  <p>WebRTC (Web Real-Time Communication) is a set of browser APIs and protocols for establishing peer-to-peer connections between browsers (or other endpoints) without plugins. Originally designed for voice and video calling, WebRTC also includes <strong>data channels</strong> that can send arbitrary binary data with configurable reliability, making them useful for game networking.</p>
+
+  <h3>How It Works</h3>
+  <p>WebRTC connections require a <strong>signaling server</strong> to exchange connection metadata between peers, but the signaling protocol itself is not defined by WebRTC. You can use WebSocket, HTTP, carrier pigeon, or anything else to exchange the initial handshake data. The actual connection uses three protocols working together:</p>
+  <ul>
+    <li><strong>STUN</strong> (Session Traversal Utilities for NAT): A lightweight protocol where clients ask a public STUN server "what is my public IP and port?" The server replies with the external address it sees. This lets peers discover their public-facing network identity, which is often different from their local IP due to NAT.</li>
+    <li><strong>TURN</strong> (Traversal Using Relays around NAT): A relay server that forwards traffic when direct peer-to-peer connections fail. If both peers are behind restrictive NATs (especially symmetric NATs), hole punching will not work and all data must flow through the TURN server. This adds latency and bandwidth cost but guarantees connectivity.</li>
+    <li><strong>ICE</strong> (Interactive Connectivity Establishment): The framework that orchestrates the connection attempt. ICE gathers candidate addresses (local, STUN-discovered, TURN relay), exchanges them with the remote peer via the signaling server, and systematically tests connectivity using each candidate pair. It picks the best working path, preferring direct connections over relayed ones.</li>
+  </ul>
+
+  <h3>Data Channels for Games</h3>
+  <p>WebRTC data channels can be configured in <strong>unreliable, unordered mode</strong>, which gives browser games something close to raw UDP. This is the main appeal for game developers. You get low-latency data delivery without TCP's head-of-line blocking, running inside the browser's security sandbox. Data channels also support configurable reliability: fully reliable, partially reliable (max retransmits), or timed reliability (max lifetime).</p>
+  <p>The downside is complexity. Setting up a WebRTC connection requires STUN/TURN infrastructure, a signaling service, and handling the ICE negotiation process. For small-scale browser games (2-8 players), this overhead is manageable. For anything larger, you are better off with a client-server architecture using WebSocket or WebTransport.</p>
+
+  <h3>How Games Use P2P (The Destiny Model)</h3>
+  <p>Destiny 2 does not use WebRTC specifically, but its networking model illustrates why P2P connections appeal to game developers. Bungie uses a hybrid where dedicated servers handle authoritative game logic (loot, damage validation, activity hosting) while movement and ability data flows through a peer-to-peer mesh between players. This gives players immediate feedback on their own movement without waiting for a server round trip. The tradeoff is that P2P exposes player IP addresses and makes certain types of cheating harder to prevent.</p>
+
+  <h3>When to Use It</h3>
+  <p>Use WebRTC when you are building a browser-based game that needs lower latency than WebSocket can provide, when your game has a small number of players per session (2-8), and when you can tolerate the complexity of STUN/TURN infrastructure. For larger player counts, the connection mesh becomes unmanageable (each player needs a connection to every other player).</p>
+
+  <h3>Which Games Use It</h3>
+  <p>WebRTC sees use primarily in browser-based indie multiplayer games and prototypes. Large-scale production games that use P2P (like <strong>Destiny 2</strong>) implement their own NAT traversal and P2P protocols outside the browser rather than using WebRTC directly.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Reliability</td><td>Configurable per data channel (reliable, partially reliable, unreliable)</td></tr>
+    <tr><td>Ordering</td><td>Configurable per data channel</td></tr>
+    <tr><td>Latency</td><td>Low for direct P2P; higher through TURN relay</td></tr>
+    <tr><td>Infrastructure</td><td>Requires signaling server, STUN server, TURN server</td></tr>
+    <tr><td>Best For</td><td>Small-scale browser P2P games (2-8 players)</td></tr>
+    <tr><td>Avoid For</td><td>Large player counts, server-authoritative games, non-browser platforms</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="quic">QUIC</h2>
+
+  <h3>What It Is</h3>
+  <p>QUIC is a transport protocol originally designed by Google and now standardized by the IETF as the foundation for HTTP/3. It runs over UDP but reimplements TCP's reliability, flow control, and congestion control at the application layer while adding multiplexed streams that avoid head-of-line blocking. Think of it as "TCP done right for the modern internet, running on top of UDP."</p>
+
+  <h3>How It Works</h3>
+  <p>QUIC establishes connections with a <strong>0-RTT or 1-RTT handshake</strong> (compared to TCP's 1-RTT plus TLS's additional roundtrips). All QUIC traffic is encrypted by default using TLS 1.3 baked directly into the protocol. There is no unencrypted QUIC.</p>
+  <p>The key innovation for games is <strong>multiplexed independent streams</strong>. Within a single QUIC connection, you can open multiple streams that each maintain their own ordering and reliability guarantees. If a packet belonging to Stream A is lost, only Stream A stalls while waiting for retransmission. Stream B continues processing normally. This eliminates TCP's head-of-line blocking problem without giving up reliability entirely.</p>
+  <p>An IETF extension also defines <strong>unreliable datagrams</strong> within QUIC connections. These datagrams share the connection's encryption and congestion control context but are not retransmitted if lost and are not flow-controlled. This gives games both reliable streams (for inventory, chat, reliable events) and unreliable datagrams (for position updates, input) over a single connection.</p>
+
+  <h3>Connection Migration</h3>
+  <p>QUIC connections are identified by a connection ID rather than the traditional 4-tuple of source/destination IP and port. This means a mobile player switching from Wi-Fi to cellular does not lose their connection. The connection transparently migrates to the new network path. For mobile games, this is a significant quality-of-life improvement.</p>
+
+  <h3>Current State for Game Networking</h3>
+  <p>QUIC for games is still in the early-adoption phase but gaining momentum. Microsoft's <strong>MsQuic</strong> implementation is available in the Xbox Game Development Kit (GDK), making it accessible to console developers. The <strong>Bevy Quinnet</strong> plugin brings QUIC-based networking to the Bevy game engine in Rust. Testing from 2025 shows that <strong>WebTransport</strong> (the browser-facing API built on QUIC/HTTP/3) can reduce perceived lag by 35% compared to WebSocket in FPS games and support 2-3x more concurrent units in RTS games with the same server hardware.</p>
+  <p>The main limitation is browser access. Browsers do not expose raw QUIC connections to JavaScript. WebTransport is the bridge, but it is still gaining browser support and lacks the maturity of WebSocket. For native games, QUIC is fully usable today through libraries like MsQuic, Quinn (Rust), and quiche (Cloudflare).</p>
+
+  <h3>When to Use It</h3>
+  <p>Consider QUIC when you need both reliable and unreliable data on the same connection, when you want built-in encryption without a separate TLS layer, when you are targeting mobile platforms where connection migration matters, or when you are building a new project and want to avoid implementing your own reliable-UDP protocol from scratch. It is not yet a proven choice for competitive FPS at the highest level, but for MMOs and mixed-traffic games, the multiplexed streams model is a natural fit.</p>
+
+  <h3>Which Games Use It</h3>
+  <p>No major shipped titles have publicly confirmed QUIC as their primary game protocol yet. <strong>Xbox GDK titles</strong> have access to MsQuic. The Bevy engine community is experimenting with it. WebTransport-based browser games are starting to appear. This is a technology to watch rather than a proven production choice as of early 2026.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Reliability</td><td>Per-stream reliable + unreliable datagrams</td></tr>
+    <tr><td>Ordering</td><td>Per-stream ordered (no cross-stream HOL blocking)</td></tr>
+    <tr><td>Encryption</td><td>Mandatory TLS 1.3 built into the protocol</td></tr>
+    <tr><td>Connection Setup</td><td>0-RTT for resumed connections, 1-RTT for new</td></tr>
+    <tr><td>Best For</td><td>Mixed traffic games, mobile games, next-gen transport</td></tr>
+    <tr><td>Avoid For</td><td>If you need a battle-tested protocol with years of production history</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <!-- APPLICATION PROTOCOLS -->
+  <!-- ================================================================== -->
+
+  <h2 id="grpc">gRPC</h2>
+
+  <h3>What It Is</h3>
+  <p>gRPC is Google's open-source remote procedure call framework. It lets you define service interfaces in a <code>.proto</code> file using Protocol Buffers (protobuf), then auto-generates client and server code in dozens of languages. It runs over HTTP/2, which gives it multiplexed streams, header compression, and bidirectional streaming out of the box.</p>
+
+  <h3>How It Works</h3>
+  <p>You define your service in a <code>.proto</code> file that specifies RPC methods and their request/response message types. The protobuf compiler generates strongly-typed client stubs and server interfaces. Messages are serialized as compact binary data. A protobuf message encoding the same data as a 22-byte JSON object might only take 7 bytes.</p>
+  <p>gRPC supports four communication patterns: <strong>unary RPCs</strong> (one request, one response), <strong>server streaming</strong> (one request, stream of responses), <strong>client streaming</strong> (stream of requests, one response), and <strong>bidirectional streaming</strong> (both sides stream concurrently). The bidirectional streaming pattern is the most relevant for games, allowing the server and client to send messages independently over a single connection.</p>
+
+  <h3>How EVE Online Uses It (Quasar)</h3>
+  <p>CCP Games adopted gRPC for EVE Online through their <strong>Quasar</strong> initiative, which modernizes the game's 20-year-old backend architecture. EVE's original networking used machoNet, a custom RPC system built on Stackless Python. The last major networking change before Quasar was CarbonIO in 2011.</p>
+  <p>Quasar uses gRPC with Protocol Buffers to move game services off the main Tranquility server cluster and into independent microservices running in Kubernetes. The Skill Plans feature was the first system to operate entirely through gRPC without touching Tranquility or its database. The EVE desktop client communicates via gRPC to the new service ecosystem, and the fast serialization of protobuf combined with message routing happening outside Python's Global Interpreter Lock dramatically improves performance.</p>
+  <p>CCP's ongoing migration involves remodeling parts of the EVE universe into protobuf message definitions, which is a massive undertaking given the game's complexity. They also adopted Go for modern services, moving away from Python for performance-critical backend work.</p>
+
+  <h3>When to Use It</h3>
+  <p>gRPC is excellent for backend game services that do not need real-time frame-by-frame updates: matchmaking, authentication, player profiles, leaderboards, inventory management, marketplace APIs, analytics pipelines, and inter-service communication in a microservices architecture. Its strong typing and code generation reduce bugs at service boundaries. It is not suitable for real-time gameplay networking because HTTP/2 over TCP still has head-of-line blocking.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>EVE Online</strong> (Quasar backend services via gRPC + protobuf). Other studios likely use gRPC for backend services without publicly documenting it, since it is the standard RPC framework for microservices architectures that many game backends now run on.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Transport</td><td>HTTP/2 over TCP (gRPC-Web for browsers)</td></tr>
+    <tr><td>Serialization</td><td>Protocol Buffers (binary, compact, fast)</td></tr>
+    <tr><td>Streaming</td><td>Unary, server streaming, client streaming, bidirectional</td></tr>
+    <tr><td>Languages</td><td>C++, Go, Java, Python, C#, Rust, Node.js, and more</td></tr>
+    <tr><td>Best For</td><td>Backend services, matchmaking, APIs, microservices</td></tr>
+    <tr><td>Avoid For</td><td>Real-time gameplay networking (latency too high)</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="raknet">RakNet</h2>
+
+  <h3>What It Is</h3>
+  <p>RakNet is a cross-platform C++ networking library specifically designed for games. It was the go-to game networking library for over 13 years before being acquired by Oculus (Facebook) in 2014 and released as open source under a modified BSD license. It provides reliable and unreliable messaging over UDP, connection management, NAT punchthrough, voice chat, an auto-patcher, remote procedure calls, and object replication.</p>
+
+  <h3>How It Works</h3>
+  <p>RakNet builds a full-featured networking layer on top of UDP. Its reliability system supports multiple delivery modes: unreliable, unreliable sequenced, reliable, reliable ordered, and reliable sequenced. Each mode makes different guarantees about whether packets arrive and in what order. The library handles packet fragmentation transparently, so developers can send messages of any size without worrying about MTU limits. Large messages are split into fragments, transmitted as reliable packets, and reassembled on the receiving end.</p>
+  <p>Connection management includes automated keepalive pinging, round-trip time measurement, bandwidth throttling, and configurable packet loss response. The library uses a sliding window ARQ (Automatic Repeat Request) protocol for its reliability layer, with the newer RakNet+ fork replacing this with KCP for better real-time performance.</p>
+
+  <h3>NAT Punchthrough</h3>
+  <p>RakNet's NAT punchthrough system is one of its most valuable features. It uses a facilitator server to coordinate hole-punching attempts between peers behind NAT. The system includes TTL-based punching to get past dual port-restricted routers and a UDPProxy fallback that relays datagrams when hole-punching fails entirely. The OpenNATGroup feature coordinates group-wide NAT punchthrough, only reporting success when all desired peers have been connected.</p>
+
+  <h3>Roblox's Modified Version</h3>
+  <p><strong>Roblox</strong> uses a modified version of RakNet as its networking transport. The modifications are not publicly documented in detail, but reverse engineering efforts have confirmed that Roblox's network protocol is heavily based on RakNet. Roblox has added their own customizations on top, likely including additional security measures, encryption, and optimizations for their specific use case of user-generated multiplayer games with varying quality requirements.</p>
+
+  <h3>Successor: SLikeNet</h3>
+  <p>Since RakNet's original development has stopped, the community fork <strong>SLikeNet</strong> continues active maintenance. It builds on RakNet's codebase with bug fixes, modernization, and continued cross-platform support for developers who need a maintained version of the library.</p>
+
+  <h3>When to Use It</h3>
+  <p>RakNet was the default recommendation for game networking for many years, and its concepts and API design influenced nearly every game networking library that followed. Today, ENet or SteamNetworkingSockets are more commonly recommended for new projects due to better maintenance and lighter weight, but RakNet remains relevant for understanding existing codebases (like Roblox and Minecraft Bedrock) and for projects that need its specific feature set (NAT punchthrough, voice chat, auto-patching).</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>Minecraft Bedrock Edition</strong> uses RakNet as its networking transport layer, with the protocol handling reliability, ordering, fragmentation, and the connection handshake including MTU discovery. <strong>Roblox</strong> runs on a heavily modified fork. Historically, <strong>LEGO Universe</strong>, <strong>Unity</strong> (used RakNet internally for older networking), and many other titles shipped with RakNet.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Transport</td><td>UDP with configurable reliability layers</td></tr>
+    <tr><td>Reliability Modes</td><td>Unreliable, unreliable sequenced, reliable, reliable ordered, reliable sequenced</td></tr>
+    <tr><td>NAT Punchthrough</td><td>Built-in with facilitator server, TTL punching, UDPProxy fallback</td></tr>
+    <tr><td>License</td><td>Modified BSD (open source since 2014)</td></tr>
+    <tr><td>Best For</td><td>Games needing full-featured networking with NAT traversal</td></tr>
+    <tr><td>Avoid For</td><td>New projects (consider ENet or SteamNetworkingSockets instead for active maintenance)</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="enet">ENet</h2>
+
+  <h3>What It Is</h3>
+  <p>ENet is a lightweight, reliable UDP networking library written in C. It was created specifically for the multiplayer first-person shooter <em>Cube</em>, which needed low-latency communication with frequent data sends where TCP was unsuitable. ENet provides optional reliable, in-order delivery of packets and fragmentation on top of UDP, while deliberately omitting higher-level features like authentication, lobbying, server discovery, and encryption to stay small and embeddable.</p>
+
+  <h3>How It Works</h3>
+  <p>ENet supports three reliability modes for packets:</p>
+  <ul>
+    <li><strong>Reliable sequenced</strong>: Packets are guaranteed to arrive and are delivered in order. If a higher-sequence packet arrives before a lower one, the higher packet waits in a buffer until the gap is filled.</li>
+    <li><strong>Unreliable sequenced</strong>: Packets are not guaranteed to arrive. If a packet with a lower sequence number arrives after a higher one has already been delivered, ENet discards the late packet. This keeps the client always showing the newest data.</li>
+    <li><strong>Unreliable</strong>: Packets may be delivered out of order, with no sequencing or reliability.</li>
+  </ul>
+  <p>Large packets are automatically fragmented to fit within the MTU and reassembled on the remote end. ENet aggregates multiple protocol commands (including acknowledgments and data transfers) into larger packets to reduce overhead and minimize packet loss opportunities.</p>
+
+  <h3>Channels</h3>
+  <p>ENet supports multiple independent <strong>channels</strong> within a single connection. Each channel maintains its own ordering and reliability state. This means reliable messages on channel 0 (say, chat) will not block unreliable messages on channel 1 (say, position updates). By default, ENet uses 2 channels: one for reliable traffic and one for unreliable traffic. You can configure more channels to separate different traffic types further.</p>
+
+  <h3>Peer Management and Flow Control</h3>
+  <p>ENet provides an in-flight data window for reliable packets, preventing the connection from being overwhelmed. A static bandwidth allocation mechanism limits the total packet volume based on host capabilities. Connection liveness is monitored through periodic pings that also measure round-trip time. ENet automatically throttles unreliable packets based on connection quality, dropping them probabilistically when the connection degrades rather than letting them pile up.</p>
+
+  <h3>Godot's Default Networking</h3>
+  <p>Godot uses a <strong>modified version of ENet with full IPv6 support</strong> as its default multiplayer transport for native builds. The high-level multiplayer API provides peer management, RPC systems, and scene tree integration on top of ENet. Developers interact with transfer modes (<code>TRANSFER_MODE_UNRELIABLE</code>, <code>TRANSFER_MODE_UNRELIABLE_ORDERED</code>, <code>TRANSFER_MODE_RELIABLE</code>) and annotate functions with <code>@rpc</code> to make them remotely callable. Godot also supports multiple ENet compression modes: none, range coder, FastLZ, zlib, and Zstandard.</p>
+
+  <h3>When to Use It</h3>
+  <p>ENet is an excellent choice when you want a small, well-understood reliable UDP library without the weight of RakNet's full feature set. It is the right pick for Godot-based projects (since it is already integrated), for small to mid-scale multiplayer games (up to 32-64 peers by default), and for any project where you want to control higher-level features yourself. It lacks built-in NAT punchthrough, voice chat, and encryption, so you will need external solutions for those.</p>
+
+  <h3>Which Games Use It</h3>
+  <p>ENet is the default networking transport for all <strong>Godot Engine</strong> native multiplayer games. The original <em>Cube</em> and <em>Cube 2: Sauerbraten</em> games that spawned ENet still use it. Numerous indie titles across various engines use ENet either directly or through wrappers.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Transport</td><td>UDP with configurable reliability</td></tr>
+    <tr><td>Reliability Modes</td><td>Reliable sequenced, unreliable sequenced, unreliable</td></tr>
+    <tr><td>Channels</td><td>Multiple independent channels per connection (default 2)</td></tr>
+    <tr><td>Fragmentation</td><td>Automatic, transparent to the developer</td></tr>
+    <tr><td>License</td><td>MIT</td></tr>
+    <tr><td>Best For</td><td>Godot games, lightweight multiplayer, projects needing fine control</td></tr>
+    <tr><td>Avoid For</td><td>Projects needing built-in NAT traversal or encryption</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="steamnet">SteamNetworkingSockets</h2>
+
+  <h3>What It Is</h3>
+  <p>SteamNetworkingSockets (also called GameNetworkingSockets in its open-source form) is Valve's networking library. It provides reliable and unreliable messages over UDP, robust message fragmentation, P2P networking with NAT traversal, and encryption. Despite "Steam" in the name, the open-source version works without Steam. Valve released it specifically so developers would code against the API without hesitation, knowing they could use the Steamworks version on Steam and the open-source version everywhere else.</p>
+
+  <h3>How It Works</h3>
+  <p>The library provides a message-based API (not stream-based) with configurable reliability per message. It handles connection management, keepalive, and automatically fragments large messages across multiple UDP packets. All connections are encrypted.</p>
+  <p>For NAT traversal, SteamNetworkingSockets supports a pluggable signaling service for peer discovery. The signaling requirements are minimal: best-effort datagram delivery of small messages (a few KB at most). The protocol tolerates dropped, duplicated, or reordered signaling messages, which may slow negotiation but will not cause failure. The open-source version can compile against Google's WebRTC ICE implementation for NAT traversal, using it at a low level for datagram transport only (no DTLS or WebRTC data channels).</p>
+
+  <h3>Steam Datagram Relay (SDR)</h3>
+  <p>On Steam, Valve provides the <strong>Steam Datagram Relay</strong> network, a virtual private gaming network that routes game traffic through Valve's backbone and relay infrastructure. SDR provides DDoS protection by never revealing server or player IP addresses, authentication and rate-limiting of all relayed traffic, and often faster routing than the public internet (Valve's backbone can find shorter paths for a surprising number of players). SDR works for both peer-to-peer traffic and dedicated servers. The relay network code is not open-source and is only available through the Steamworks SDK.</p>
+
+  <h3>When to Use It</h3>
+  <p>SteamNetworkingSockets is the natural choice for any game shipping on Steam. You get the SDR relay network for free, which handles NAT traversal and DDoS protection without you building or paying for that infrastructure. The open-source version is also a solid choice for non-Steam projects that want a well-maintained, Valve-quality networking library with modern encryption.</p>
+
+  <h3>Which Games Use It</h3>
+  <p>Any game using Steamworks networking APIs is using SteamNetworkingSockets. This includes Valve's own titles and the vast majority of Steam multiplayer games that rely on Steam's networking infrastructure. The library powers both small indie multiplayer titles and large-scale competitive games on the Steam platform.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Transport</td><td>UDP with configurable reliability</td></tr>
+    <tr><td>Encryption</td><td>Built-in, always on</td></tr>
+    <tr><td>NAT Traversal</td><td>ICE (open-source) or Steam Datagram Relay (Steamworks)</td></tr>
+    <tr><td>DDoS Protection</td><td>Via SDR relay network (Steam only)</td></tr>
+    <tr><td>License</td><td>BSD 3-Clause (open-source) / Steamworks SDK (Steam features)</td></tr>
+    <tr><td>Best For</td><td>Steam games, any project wanting modern encrypted game networking</td></tr>
+    <tr><td>Avoid For</td><td>Browser games (no browser support)</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <!-- ARCHITECTURE PATTERNS -->
+  <!-- ================================================================== -->
+
+  <h2 id="auth-server">Client-Server (Authoritative Server)</h2>
+
+  <h3>What It Is</h3>
+  <p>In an authoritative server model, the server is the single source of truth for the game state. Clients send inputs (key presses, mouse clicks, action commands) to the server. The server validates those inputs, simulates the game world, and sends the results back to clients. The clients are essentially privileged spectators that render the server's game state and provide a responsive local experience through prediction.</p>
+
+  <h3>How It Works</h3>
+  <p>The server runs the full game simulation: physics, combat resolution, inventory management, and all game rules. When a client presses the "move forward" key, it sends that input to the server. The server validates that the player can actually move forward (not stunned, not blocked by a wall, not dead), updates the player's position in its simulation, and sends the new position back to the client and all nearby clients.</p>
+  <p>Without any tricks, this creates a delay equal to one full round trip. On a 100ms connection, pressing a key and seeing your character move would take 100ms. That feels sluggish. So the client uses <strong>client-side prediction</strong>: it applies the input locally and immediately shows the predicted result while the server processes the real result. When the server's response arrives, the client checks whether its prediction was correct. If it was (which happens most of the time for movement), nothing visible happens. If the prediction was wrong (the server says you got stunned before you moved), the client corrects by snapping or smoothly blending to the server's authoritative state. This correction is what players experience as "rubber-banding."</p>
+
+  <h3>Latency Compensation Techniques</h3>
+  <ul>
+    <li><strong>Client-Side Prediction</strong>: Apply inputs locally before the server confirms them. The client stores a buffer of recent inputs and their predicted results. When the server confirms an input, the client discards predictions that match and replays any unconfirmed inputs on top of the server's state. QuakeWorld (1996) was the earliest widely recognized FPS to implement this technique.</li>
+    <li><strong>Server Reconciliation</strong>: Each input sent to the server carries a sequence number. The server includes the last processed sequence number in its state updates. The client re-simulates from the server's confirmed state, replaying all inputs the server has not yet acknowledged. This keeps the client's prediction aligned with reality.</li>
+    <li><strong>Entity Interpolation</strong>: Other players are rendered at a position slightly in the past, interpolated between two recent server snapshots. This smooths out jitter from irregular packet arrival. You always see other players where they were about 50-100ms ago, not where they are right now.</li>
+    <li><strong>Lag Compensation (Server Rewind)</strong>: When a player shoots, the server rewinds the world to the exact moment the shot was fired on that player's screen, checks whether the shot hit, and applies the result. This is what Valve calls "rewinding the world" and it became industry standard through the Source Engine (Counter-Strike, Team Fortress 2).</li>
+  </ul>
+
+  <h3>When to Use It</h3>
+  <p>Authoritative server is the gold standard for any competitive multiplayer game. If players can gain an advantage by cheating, or if the game involves real stakes (ranked matches, in-game economies, territorial control), the server must be the authority. The cost is dedicated server infrastructure and the engineering complexity of prediction and reconciliation.</p>
+
+  <h3>Which Games Use It</h3>
+  <p>Nearly every major multiplayer game uses an authoritative server model. <strong>Fortnite</strong>, <strong>Valorant</strong>, <strong>CS2</strong>, <strong>World of Warcraft</strong>, <strong>FFXIV</strong>, <strong>Guild Wars 2</strong>, <strong>EVE Online</strong>, <strong>RuneScape</strong>, <strong>PlanetSide 2</strong>, <strong>Albion Online</strong>, <strong>Star Citizen</strong>, <strong>Ashes of Creation</strong>, and <strong>New World</strong> all use server-authoritative architectures. The specifics vary (tick rate, prediction model, rewind depth) but the principle is the same: the server decides what happens.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Trust Model</td><td>Server is the single source of truth</td></tr>
+    <tr><td>Cheat Resistance</td><td>High (clients cannot lie about game state)</td></tr>
+    <tr><td>Latency Feel</td><td>Good with prediction; rubber-banding on mispredictions</td></tr>
+    <tr><td>Infrastructure Cost</td><td>Dedicated servers required (compute + bandwidth)</td></tr>
+    <tr><td>Best For</td><td>Competitive games, economies, any game where cheating matters</td></tr>
+    <tr><td>Avoid For</td><td>Nothing. This is the default and correct choice for almost everything.</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="client-auth">Client-Server (Client-Authoritative)</h2>
+
+  <h3>What It Is</h3>
+  <p>In a client-authoritative model, the client computes game results locally and sends those results to the server, which trusts them without independent validation. Instead of sending "I pressed the attack button" and letting the server calculate damage, the client sends "I dealt 450 damage to Player B" and the server applies it. This eliminates the latency of waiting for server-side calculation but opens the door to every form of cheating imaginable.</p>
+
+  <h3>The New World Controversy</h3>
+  <p>Amazon's <strong>New World</strong> became the textbook example of what goes wrong when clients have too much authority. At launch in 2021, players discovered that dragging the game window in windowed mode would freeze the client, making their character invulnerable. This worked because the server was waiting for client input before processing game outcomes. Combined with a weapon effect that granted brief invulnerability, this allowed players to become permanently unkillable in PvP.</p>
+  <p>Amazon insisted that New World was "not client authoritative" and that the simulation was "entirely server based." They described their architecture as: clients dispatch controller inputs to the server, the server validates them, physics and game rules run server-side, and outcomes are sent back. They called the invulnerability issue "a particularly bad bug" rather than an architectural flaw. Regardless of the semantics, the incident demonstrated how even small gaps in server authority create exploitable vulnerabilities. New World also suffered from chat-injected HTML, auction house duplication bugs, and other issues that eroded player trust.</p>
+
+  <h3>When It Is Acceptable</h3>
+  <p>Pure client authority is almost never acceptable for competitive or economy-driven games. It can work for cooperative-only games where all players are on the same team and there is no incentive to cheat (co-op PvE, party games). Some games use a hybrid where the client is authoritative over its own movement (for responsiveness) while the server validates combat, inventory, and economy. Destiny 2's hybrid model is an example of this compromise.</p>
+
+  <h3>Which Games Use It</h3>
+  <p>No game in our survey is fully client-authoritative by design. <strong>New World</strong> had server-authority bugs that functionally gave clients too much control. <strong>Black Desert Online</strong> has been criticized by its community for client-sided elements that contribute to desync issues, particularly outside Korea's low-latency internet infrastructure. <strong>Destiny 2</strong> gives clients authority over their own movement and abilities for responsiveness, while the server handles loot and damage validation.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Trust Model</td><td>Server trusts client-computed results</td></tr>
+    <tr><td>Cheat Resistance</td><td>Very low (clients can send whatever they want)</td></tr>
+    <tr><td>Latency Feel</td><td>Excellent (no round-trip wait for results)</td></tr>
+    <tr><td>Infrastructure Cost</td><td>Lower (server does less computation)</td></tr>
+    <tr><td>Best For</td><td>Co-op only games, prototypes, trusted environments</td></tr>
+    <tr><td>Avoid For</td><td>PvP, economies, ranked play, anything where cheating matters</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="p2p">Peer-to-Peer</h2>
+
+  <h3>What It Is</h3>
+  <p>In a peer-to-peer (P2P) architecture, players connect directly to each other without a central game server. One player (the "host") typically runs the game simulation while other players send inputs directly to that host. In a full mesh P2P setup, every player connects to every other player and they collectively maintain the game state, usually through deterministic lockstep (every client runs the same simulation with the same inputs).</p>
+
+  <h3>How It Works</h3>
+  <p>In the simplest model (host-based P2P), one player's machine acts as both client and server. Other players send inputs to the host, the host runs the simulation, and sends results back. This is cheap to operate (no dedicated servers needed) but creates problems: the host has zero latency (unfair advantage in competitive games), if the host disconnects the game ends (or requires expensive "host migration"), and the host's IP is visible to all players (enabling DDoS attacks).</p>
+  <p>Full mesh P2P avoids the single-host problem but requires every player to maintain connections to every other player. For N players, that is N*(N-1)/2 connections. At 16 players, that is 120 connections. At 64 players, it is 2,016. This does not scale.</p>
+
+  <h3>Why Most Games Moved Away from It</h3>
+  <p>P2P had its era. The original Halo, many fighting games, and early console shooters used it because server infrastructure was expensive and console NAT traversal was a solved problem (consoles use UPnP). The downsides proved too severe for large-scale or competitive play: host advantage, DDoS vulnerability, cheating difficulty (there is no trusted authority to validate game state), and the N-squared connection scaling problem.</p>
+
+  <h3>Destiny's Physics Host Model</h3>
+  <p>The original Destiny (2014) used a P2P model where one player's console acted as the "physics host," running physics simulation for all players in that activity. This was cheaper than dedicated servers but caused problems when the physics host had a poor connection or disconnected mid-activity, triggering disruptive host migrations during raids and competitive matches.</p>
+
+  <h3>When to Use It</h3>
+  <p>P2P is appropriate for 1v1 or small-group games where dedicated server cost is prohibitive, for fighting games using rollback netcode (where deterministic lockstep P2P is standard), and for games where all players are in the same physical location (LAN parties). For anything involving more than 8 players, competitive ranking, or real-money economies, use dedicated servers.</p>
+
+  <h3>Which Games Use It</h3>
+  <p>The original <strong>Destiny</strong> (2014) used full P2P with a player-hosted physics simulation. Most fighting games use P2P with rollback netcode. Console games from the Xbox 360 and PS3 era commonly used P2P. Among our 18 surveyed games, none use pure P2P today. <strong>Destiny 2</strong> moved to a hybrid model, and all other surveyed titles use dedicated servers.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Trust Model</td><td>Host is trusted (or all peers in lockstep)</td></tr>
+    <tr><td>Server Cost</td><td>Zero (players provide compute)</td></tr>
+    <tr><td>Scalability</td><td>Poor (N-squared connections)</td></tr>
+    <tr><td>Cheat Resistance</td><td>Low to none</td></tr>
+    <tr><td>Best For</td><td>Fighting games, small co-op, LAN play</td></tr>
+    <tr><td>Avoid For</td><td>MMOs, competitive shooters, anything with more than 8 players</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="hybrid">Hybrid P2P/Server</h2>
+
+  <h3>What It Is</h3>
+  <p>A hybrid architecture splits authority between dedicated servers and peer-to-peer connections. The server handles game logic that needs to be authoritative and cheat-proof (damage calculation, loot distribution, match progression), while P2P connections handle data that benefits from minimal latency (player movement, physics, ability animations).</p>
+
+  <h3>How Destiny 2 Does It</h3>
+  <p>Destiny 2 is the most prominent example of hybrid networking in our survey. Bungie describes their model as using both client-server and peer-to-peer technology. The server is authoritative over how the game progresses, and each player is authoritative over their own movement and abilities.</p>
+  <p>Key improvements from Destiny 1 to Destiny 2 included moving the physics host from a player's console to a dedicated server, eliminating the host migration problem that plagued raids and Trials matches. Every activity in Destiny 2 is hosted by a Bungie server. Persistent character data (inventory, progression, currencies) communicates directly to Bungie's data center with no P2P interference.</p>
+  <p>The P2P component handles movement replication between players, which gives the game its responsive feel. Players see their own actions immediately without waiting for a server round trip. The tradeoff is that the P2P layer exposes player IP addresses and makes hit registration harder to validate server-side.</p>
+
+  <h3>Pros and Cons</h3>
+  <p><strong>Pros:</strong> Movement and abilities feel instantly responsive because they are processed locally. Server infrastructure costs are lower than fully server-authoritative real-time simulation. The game can operate at high fidelity without requiring massive server compute for physics.</p>
+  <p><strong>Cons:</strong> IP address exposure enables DDoS attacks against individual players (a persistent complaint in Destiny's competitive modes). Split authority makes certain cheats harder to detect. The engineering complexity of maintaining two separate authority models is significant. Hit registration can feel inconsistent when the P2P layer and server layer disagree about player positions.</p>
+
+  <h3>When to Use It</h3>
+  <p>Hybrid architectures make sense when you need the feel of P2P responsiveness but the security of server authority for critical game systems. It works best for cooperative PvE games where occasional desync is tolerable and competitive integrity is less critical than in pure PvP. For competitive-only games, fully authoritative servers with client-side prediction are almost always the better choice.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>Destiny 2</strong> is the primary example in our survey. Bungie has maintained this architecture because transitioning to fully dedicated servers would require a fundamental infrastructure overhaul.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Trust Model</td><td>Split: server for critical logic, client for movement</td></tr>
+    <tr><td>Server Cost</td><td>Lower than full authority (movement offloaded to P2P)</td></tr>
+    <tr><td>Responsiveness</td><td>Excellent for movement (local processing)</td></tr>
+    <tr><td>Cheat Resistance</td><td>Medium (critical systems protected, movement exploitable)</td></tr>
+    <tr><td>Best For</td><td>PvE-focused games with some PvP, console titles</td></tr>
+    <tr><td>Avoid For</td><td>Pure competitive PvP, esports titles</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <h2 id="server-meshing">Server Meshing</h2>
+
+  <h3>What It Is</h3>
+  <p>Server meshing is a technology that connects multiple game servers together so they can collectively simulate a single seamless game world. Instead of one server handling everything (which hits a performance ceiling) or splitting the world into separate sharded instances (which breaks immersion), server meshing divides the world into zones where each zone runs on its own server, but players can move between zones without loading screens, disconnections, or visible boundaries.</p>
+
+  <h3>How It Works</h3>
+  <p>The core challenge is handling entities that cross server boundaries. When a player walks from Zone A (running on Server 1) to Zone B (running on Server 2), authority over that player must transfer seamlessly. A <strong>Replication Layer</strong> sits between the game servers and manages this handoff. When a bullet flies from one zone into another, the Replication Layer provides the entity data to both servers. The server simulating the bullet's current zone has authority. As the bullet crosses the boundary, authority transfers and the original server becomes a passive receiver of updates.</p>
+
+  <h3>Static vs. Dynamic Server Meshing</h3>
+  <p><strong>Static server meshing</strong> assigns fixed zones to specific servers. Planet A always runs on Server 1, Space Station B always runs on Server 2. This is simpler to implement but cannot adapt to player density. If 500 players all crowd into Planet A, Server 1 is overloaded while other servers sit idle.</p>
+  <p><strong>Dynamic server meshing</strong> allows zones to be split and merged in real-time based on player density. If 500 players arrive at Planet A, the system subdivides that zone across multiple servers automatically. If an area empties out, those servers can be reclaimed. This is dramatically harder to implement but solves the scalability problem that has limited MMO player density for decades.</p>
+
+  <h3>Star Citizen's Approach</h3>
+  <p><strong>Star Citizen</strong> is the most visible project pursuing server meshing. Their journey:</p>
+  <ul>
+    <li><strong>March 2024</strong>: A meshing test supported 800 concurrent players.</li>
+    <li><strong>October 2024</strong>: A test pushed to 2,000 concurrent players to measure stability.</li>
+    <li><strong>December 2024</strong>: Static server meshing went live with Alpha 4.0 at 500 players per shard, connecting the Stanton and Pyro star systems through a seamless jump point.</li>
+    <li><strong>Early 2025</strong>: CIG's CTO reported that servers ran better with up to 400 players in one area compared to the old single-server model, with improved FPS across the board. Server stability issues became localized rather than universe-wide.</li>
+    <li><strong>CitizenCon 2025</strong>: CIG unveiled the "Expanded Server Mesh" with dynamic splitting and merging of zones based on player density, with no loading screens between ships, stations, or planets.</li>
+  </ul>
+
+  <h3>Industry Significance</h3>
+  <p>Server meshing in various forms is not entirely new. EVE Online has long split solar systems across different server nodes in its cluster. World of Warcraft shards its world into channels. But dynamic server meshing at Star Citizen's scale and fidelity level (no loading screens, seamless handoff, FPS-level physics) has never been done in production. If it works reliably, it could fundamentally change what is possible in MMO design.</p>
+
+  <h3>When to Use It</h3>
+  <p>Server meshing is relevant only for games that need hundreds or thousands of players in a single seamless world without instancing. For most multiplayer games (matches of 2-100 players), it is massive overkill. Even for MMOs, traditional instancing and sharding solve most problems at a fraction of the engineering cost. Server meshing is for the specific case where "everyone shares one world and can see each other" is a core design requirement.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>Star Citizen</strong> is the primary example, with static server meshing live and dynamic meshing in development. <strong>EVE Online</strong> has a form of static server meshing where solar systems run on different nodes within the Tranquility cluster, though CCP does not use that terminology. <strong>Second Life</strong> divides its world into "sims" (simulator regions) running on separate server processes, which is conceptually similar. <strong>Ashes of Creation</strong> has discussed node-based world simulation that may involve meshing-like technology.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Scalability</td><td>Theoretically unlimited (add more servers for more players)</td></tr>
+    <tr><td>Complexity</td><td>Extremely high (boundary handoff, state replication, consistency)</td></tr>
+    <tr><td>Maturity</td><td>Early. Star Citizen's static mesh is live; dynamic is in development.</td></tr>
+    <tr><td>Best For</td><td>Persistent seamless worlds with hundreds+ concurrent players in one area</td></tr>
+    <tr><td>Avoid For</td><td>Session-based games, small-scale multiplayer, anything under 100 players</td></tr>
+  </table>
+
+
+  <!-- ================================================================== -->
+  <!-- KEY CONCEPTS -->
+  <!-- ================================================================== -->
+
+  <h2 id="tick-rate">Tick Rate</h2>
+
+  <h3>What It Is</h3>
+  <p>Tick rate is the frequency at which a game server updates its simulation and sends state to clients, measured in Hertz (Hz). A 64 Hz tick rate means the server processes the entire game state 64 times per second, with each tick lasting 15.6 milliseconds. A 128 Hz tick rate doubles that to 7.8ms per tick. The tick rate determines the resolution of the game's simulation: events that happen between ticks effectively do not exist from the server's perspective.</p>
+
+  <h3>How It Affects Gameplay</h3>
+  <p>Higher tick rates provide more accurate hit registration, smoother movement for other players, shorter windows where cheaters can exploit timing gaps, and a more responsive overall feel. Lower tick rates reduce server CPU and bandwidth costs, which matters enormously at scale. An EVE Online fleet battle with 6,000 players at 128 Hz would require server infrastructure that no MMO budget could justify.</p>
+
+  <h3>Tick Rate Comparison Across Games</h3>
+  <div class="diagram-full" style="overflow-x:auto">
+    <table class="proto" style="min-width:700px">
+      <thead>
+        <tr>
+          <th>Game</th>
+          <th>Tick Rate</th>
+          <th>Tick Duration</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Valorant</td><td>128 Hz</td><td>7.8ms</td><td>Industry-leading for a shipping FPS</td></tr>
+        <tr><td>CS2</td><td>Sub-tick</td><td>Variable</td><td>Server tracks actions between ticks</td></tr>
+        <tr><td>CS:GO (FACEIT/ESEA)</td><td>128 Hz</td><td>7.8ms</td><td>Third-party servers; Valve official was 64 Hz</td></tr>
+        <tr><td>Overwatch 2</td><td>63 Hz</td><td>15.9ms</td><td>Despite early claims of 20 Hz, servers run at ~63 Hz</td></tr>
+        <tr><td>Fortnite</td><td>30 Hz</td><td>33.3ms</td><td>Configurable on Unreal; 30 Hz is typical</td></tr>
+        <tr><td>Dota 2</td><td>64 Hz</td><td>15.6ms</td><td>Standard for Source engine games</td></tr>
+        <tr><td>League of Legends</td><td>30 Hz</td><td>33.3ms</td><td>One of the lowest among major esports titles</td></tr>
+        <tr><td>Apex Legends</td><td>20 Hz</td><td>50ms</td><td>Frequently criticized by competitive players</td></tr>
+        <tr><td>Call of Duty: Warzone</td><td>12-22 Hz</td><td>45-83ms</td><td>Varies by mode and player count</td></tr>
+        <tr><td>Minecraft</td><td>20 Hz</td><td>50ms</td><td>20 ticks per second (TPS)</td></tr>
+        <tr><td>World of Warcraft</td><td>~20 Hz</td><td>50ms</td><td>Varies by server load and content type</td></tr>
+        <tr><td>RuneScape</td><td>1.67 Hz</td><td>600ms</td><td>One "game tick" every 0.6 seconds</td></tr>
+        <tr><td>EVE Online</td><td>1 Hz</td><td>1000ms</td><td>Slowest in our survey; designed for massive fleet battles</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>EVE Online's 1 Hz tick rate and Valorant's 128 Hz represent opposite ends of the design spectrum. EVE trades temporal resolution for the ability to simulate thousands of ships in a single solar system. Valorant trades server cost for the precision that competitive FPS players demand. Both are correct choices for their respective games.</p>
+
+  <div class="callout">
+    <div class="callout-title">CS2's Sub-Tick Innovation</div>
+    <p>Counter-Strike 2 introduced "sub-tick" processing, where the server tracks player actions between tick boundaries. Instead of snapping actions to the nearest tick, the server records the precise timing of inputs within a tick and uses that timing for hit detection. This aims to make the game feel like a higher tick rate without actually increasing server update frequency.</p>
+  </div>
+
+
+  <!-- ================================================================== -->
+  <h2 id="netcode">Netcode</h2>
+
+  <h3>What It Is</h3>
+  <p>"Netcode" is the umbrella term for all the techniques games use to make multiplayer feel responsive despite network latency, packet loss, and jitter. Good netcode makes a game on a 100ms connection feel almost as good as a LAN game. Bad netcode makes a game on a 30ms connection feel like swimming through mud.</p>
+
+  <h3>Client-Side Prediction</h3>
+  <p>The client simulates the outcome of its own inputs locally without waiting for the server. When you press "move forward," your character moves immediately on your screen, even though the server has not confirmed that movement yet. The client stores a buffer of unconfirmed inputs along with their predicted results. When the server catches up and confirms (or denies) those inputs, the client reconciles. This is what makes modern FPS games playable on the internet.</p>
+  <p>Prediction is not limited to movement. Games predict weapon fire, ability usage, vehicle physics, and more. The rule is: predict anything that affects the local player's immediate experience, and let the server correct any wrong predictions.</p>
+
+  <h3>Server Reconciliation</h3>
+  <p>Each input the client sends carries a sequence number. The server includes the sequence number of the last processed input in its state updates. When the client receives a server update, it takes the server's authoritative state, discards all predictions up to the confirmed sequence number, and replays any remaining unconfirmed inputs on top of the server state. If the replay produces a different result than the original prediction, the client smoothly corrects. If the results match, nothing visible happens.</p>
+  <p>The amount of re-simulation depends on latency. On a 300ms connection, the client may need to re-simulate roughly 22 ticks of input on every server update. This can become a significant CPU cost for complex simulations.</p>
+
+  <h3>Entity Interpolation</h3>
+  <p>Remote players (entities you do not control) are rendered at a position slightly in the past, typically 50-100ms behind the server's latest known state. The client maintains a buffer of recent server snapshots and interpolates smoothly between the two most recent ones. This hides jitter from irregular packet arrival and makes remote players appear to move smoothly rather than teleporting between positions.</p>
+  <p>The consequence is that you never see other players where they actually are. You see where they were. This "interpolation delay" stacks on top of network latency, which is why a player with 50ms ping who shoots at an enemy with 50ms ping effectively has 100ms+ of disagreement about where everyone is. Good lag compensation handles this. Bad lag compensation produces the "I was behind the wall!" moments.</p>
+
+  <h3>Lag Compensation (Server Rewind)</h3>
+  <p>When the server receives a "player fired weapon" message, it knows when that message was sent (from the input timestamp and known latency). The server rewinds the game world to the exact moment the shot was fired on the shooter's screen, performs the hit detection against the rewound state, and applies the result to the current state. This is why headshots work even on high-ping connections: the server validates the shot against what the player actually saw.</p>
+  <p>Valve pioneered this technique in the Source Engine and it is now industry standard. The tradeoff is that defending players can get hit "around corners" because the server rewound them to a position they had already moved away from on their own screen. Most games cap the maximum rewind window (Valorant caps at roughly 70ms) to limit this effect.</p>
+
+  <h3>Rollback Netcode</h3>
+  <p>Rollback is the standard for fighting games and some action games. Rather than predicting only your own character, the game predicts the remote player's inputs (usually "they keep doing what they were doing last frame") and simulates both players locally. When actual remote inputs arrive, the game compares them to the prediction. If they differ, it "rolls back" to the last confirmed state and re-simulates forward with the correct inputs. This produces brief visual corrections when predictions are wrong but keeps the game feeling responsive even on higher-latency connections.</p>
+
+  <h3>Which Games Use These Techniques</h3>
+  <p>All of them, to varying degrees. <strong>Valorant</strong> and <strong>CS2</strong> have the most aggressive and well-documented netcode. <strong>Fortnite</strong> uses Unreal Engine's built-in prediction and reconciliation. <strong>Rocket League</strong> uses sophisticated client prediction for its physics-driven gameplay. <strong>World of Warcraft</strong> and <strong>FFXIV</strong> use simpler prediction for movement but rely on server authority for all combat and economy operations. <strong>EVE Online</strong>'s 1 Hz tick rate means prediction is less relevant (there is a full second between updates).</p>
+
+
+  <!-- ================================================================== -->
+  <h2 id="state-sync">State Synchronization</h2>
+
+  <h3>What It Is</h3>
+  <p>State synchronization is how the server gets its view of the game world into every client's memory. At every tick, the server has a complete snapshot of the world: every player position, every projectile, every health bar, every dropped item. The question is how to efficiently transmit that state to clients who need it, without drowning the network in bandwidth.</p>
+
+  <h3>Snapshot vs. Delta Compression</h3>
+  <p>The naive approach is to send a <strong>full snapshot</strong> of the world every tick. For a small game with 10 players and 100 entities, this might work. For an MMO with thousands of entities, it is impossible. A single snapshot of 1,000 entities at 32 bytes each is 32 KB per tick, multiplied by every connected client.</p>
+  <p><strong>Delta compression</strong> solves this by only sending what changed since the last acknowledged snapshot. Clients send ACKs for snapshots they receive. The server keeps a short history (typically 1-2 seconds) of world states. When sending an update to a specific client, the server computes the difference between the current state and the last state that client acknowledged, and sends only the delta. This can reduce bandwidth by 80-90% for relatively static game worlds. The Quake 3 networking model pioneered this approach and it remains the standard.</p>
+  <p>The tricky part is per-entity tracking. Because not every entity is included in every packet (due to priority and bandwidth limits), the server must track which packet each entity's last update was sent in, on a per-client basis. When a packet is ACKed, the server knows which entities that client has confirmed, and can use that as the delta base for future updates.</p>
+
+  <h3>Interest Management and Relevancy</h3>
+  <p>For large game worlds, most entities are irrelevant to most players. A player fighting in the northern mountains does not need updates about players in the southern desert. <strong>Interest management</strong> (also called relevancy or area of interest) determines which entities each client needs to know about.</p>
+  <p>The server maintains a per-client relevancy set, typically based on spatial proximity, line of sight, or game-logic-defined regions. Entities outside a client's relevancy set are not sent at all, saving bandwidth and reducing the information available to cheaters (wallhacks cannot show enemies the client does not know about). When an entity enters a client's relevancy set, the server sends a full spawn message with complete state. When it leaves, the server sends a despawn.</p>
+  <p>Servers typically implement <strong>hysteresis</strong> to prevent flickering at boundaries. Rather than using the same distance for entering and leaving relevancy (which causes rapid spawn/despawn for entities moving along the boundary), the exit distance is slightly larger than the entry distance, with a time delay before removal.</p>
+
+  <h3>Priority-Based Updates</h3>
+  <p>Within a client's relevancy set, not all entities are equally important. Your own character and the enemy shooting at you are more important than an NPC walking across the street 200 meters away. Servers assign <strong>priority scores</strong> to entities and use bandwidth budgets to determine how many entities can be updated per tick. High-priority entities get updated every tick. Low-priority entities might only update every 2nd or 3rd tick, or with reduced precision (fewer bits for position data).</p>
+  <p>Unreal Engine's <strong>Replication Graph</strong> is a sophisticated implementation of this concept. It groups actors into spatial cells and caches relevancy decisions, dramatically reducing the CPU cost of per-frame relevancy checks. Fortnite uses it to handle 100 players with roughly 50,000 replicated actors per match.</p>
+
+  <h3>Additional Compression</h3>
+  <p><strong>Bit-packing</strong> reduces bandwidth by using the minimum number of bits needed for each value. If health ranges from 0 to 100, it only needs 7 bits instead of 32. <strong>Quantization</strong> reduces position precision for distant entities. Libraries like Oodle Network (used by FFXIV since patch 6.3) provide general-purpose network compression trained on game traffic samples.</p>
+
+  <h3>Which Games Use These Techniques</h3>
+  <p>Every multiplayer game uses some form of state synchronization. <strong>Fortnite</strong> and <strong>Unreal Engine</strong> games use the Replication Graph with delta compression and priority-based updates. <strong>EVE Online</strong>'s 1 Hz updates with aggressive interest management let it simulate thousands of ships. <strong>PlanetSide 2</strong> uses spatial interest management to handle 2,000 players per server. <strong>World of Warcraft</strong> uses zone-based relevancy with phasing technology that can create multiple versions of the same area for different player groups.</p>
+
+
+  <!-- ================================================================== -->
+  <h2 id="nat-traversal">NAT Traversal</h2>
+
+  <h3>What It Is</h3>
+  <p>NAT (Network Address Translation) lets multiple devices share a single public IP address by mapping private internal addresses to different ports on the public address. This is how your home router connects all your devices to the internet with one IP. The problem is that NAT blocks unsolicited incoming connections: if two players are both behind NAT routers, neither can directly connect to the other because no mapping exists yet for the incoming traffic.</p>
+
+  <h3>STUN (Session Traversal Utilities for NAT)</h3>
+  <p>STUN is a simple discovery protocol. A client sends a request to a public STUN server asking "what does my traffic look like from outside?" The server replies with the public IP and port that the client's NAT assigned. Now the client knows its external identity and can share that information with peers. STUN servers are cheap to run because they only handle small discovery requests, not game traffic.</p>
+
+  <h3>UDP Hole Punching</h3>
+  <p>Once two players know each other's public IP and port (from STUN), they attempt <strong>hole punching</strong>. Both players send UDP packets to each other simultaneously. When Player A sends a packet to Player B's public address, Player A's NAT creates a mapping allowing return traffic from Player B. When Player B does the same, their NAT creates a reciprocal mapping. If both mappings are created before the packets are dropped by the remote NAT, a direct path is established.</p>
+  <p>This works well with "Full Cone," "Restricted," and "Port-Restricted" NATs. It fails with <strong>Symmetric NATs</strong> (common in corporate networks), which assign different external ports for each unique destination. The port used for the STUN server differs from the port used for the peer, making the discovery information useless.</p>
+
+  <h3>TURN (Traversal Using Relays around NAT)</h3>
+  <p>When hole punching fails (typically 10-15% of connections), a <strong>TURN relay server</strong> acts as a middleman. Player A sends game traffic to the TURN server, which forwards it to Player B, and vice versa. This always works because both players are making outbound connections to a public server, which NAT allows. The cost is added latency (traffic takes an extra hop) and bandwidth (the relay server forwards all traffic). TURN is the fallback of last resort.</p>
+
+  <h3>ICE (Interactive Connectivity Establishment)</h3>
+  <p>ICE is the framework that orchestrates the whole process. It gathers all candidate connection paths (direct local address, STUN-discovered public address, TURN relay), exchanges them with the remote peer through a signaling channel, and systematically tests each candidate pair. It picks the best working path, preferring direct connections over relayed ones. WebRTC uses ICE natively. Game networking libraries like SteamNetworkingSockets and RakNet implement their own versions of this process.</p>
+
+  <h3>Game-Specific Solutions</h3>
+  <p><strong>Valve's Steam Datagram Relay</strong> sidesteps the whole problem by always relaying traffic through their backbone. Players never connect directly, so NAT traversal is irrelevant and IP addresses are never exposed. <strong>RakNet</strong> includes a full NAT punchthrough implementation with a facilitator server, TTL-based punching, and UDPProxy fallback. <strong>Unity Relay</strong> provides a managed relay service that handles connectivity for Unity multiplayer games.</p>
+
+  <h3>For Dedicated Server Games</h3>
+  <p>If your game uses dedicated servers with public IP addresses, NAT traversal is mostly irrelevant for the game traffic itself. Clients make outbound connections to the server, and NAT handles those transparently. NAT traversal becomes relevant only if you need P2P features like voice chat between players or direct file transfer.</p>
+
+  <h3>Which Games Deal With It</h3>
+  <p><strong>Destiny 2</strong> relies on NAT traversal for its P2P movement mesh, which is why Bungie regularly advises players to configure their NAT type to "Open." <strong>Roblox</strong> handles NAT traversal through its modified RakNet stack. Most games in our survey use dedicated servers and avoid the problem entirely: <strong>WoW</strong>, <strong>FFXIV</strong>, <strong>EVE Online</strong>, <strong>GW2</strong>, <strong>Fortnite</strong>, <strong>PlanetSide 2</strong>, and <strong>New World</strong> all use server architectures where clients connect outbound to public servers.</p>
+
+
+  <!-- ================================================================== -->
+  <h2 id="anti-cheat">Anti-Cheat from a Network Perspective</h2>
+
+  <h3>What It Is</h3>
+  <p>From a networking standpoint, anti-cheat boils down to one principle: <strong>never trust the client</strong>. The client runs on hardware the player owns and can modify at will. Any data coming from the client is potentially fabricated. Network-level anti-cheat focuses on ensuring the server validates everything and reveals only what each client needs to know.</p>
+
+  <h3>Server Authority as Anti-Cheat</h3>
+  <p>The most effective anti-cheat measure is an authoritative server that independently computes all game outcomes. If the server calculates damage, validates movement speed, verifies ability cooldowns, and controls item generation, a cheating client cannot simply claim "I dealt 999,999 damage" or "I teleported to the objective." Research has shown that when a game's architecture lets the client compute battle outcomes, a single modified or replayed packet can give the cheater victory. After refactoring to server-authoritative validation that recomputes and verifies state, the same attack fails completely.</p>
+
+  <h3>Input Validation</h3>
+  <p>Even in a server-authoritative model, the server must validate the inputs it receives. Is this movement command physically possible given the player's current state? Is this fire rate consistent with the weapon's specifications? Is this action within the bounds of human reaction time? Servers maintain physics bounds, rate limits, and sanity checks on every incoming input.</p>
+
+  <h3>Information Hiding</h3>
+  <p>A common cheat category is "wallhacks" and "ESP" that reveal hidden enemies. The network-level defense is <strong>interest management</strong>: do not send data about enemies that the client should not be able to see. If the server never tells your client about the player hiding behind a wall, no amount of client modification can reveal them. This is why robust relevancy systems are a security feature, not just a bandwidth optimization.</p>
+
+  <h3>Replay and Timing Attack Detection</h3>
+  <p>Attackers can intercept and replay network packets, or manipulate packet timing to gain advantages. Defenses include sequence numbers and timestamps on all packets (so replayed packets are rejected as stale), encryption of the packet stream so attackers cannot read or modify contents in transit, and server-side dead reckoning to compensate for missing or delayed packets rather than waiting for the client. If a client's packets suddenly stop arriving, the server continues simulating based on the last known state rather than freezing the player in an invulnerable state (the exact bug that plagued New World at launch).</p>
+
+  <h3>Behavioral Analysis</h3>
+  <p>Modern anti-cheat systems go beyond packet-level validation to analyze patterns. Is this player consistently reacting in under 50ms (inhuman)? Are their aim trajectories showing statistical anomalies consistent with aimbot assistance? Do their movement patterns match known cheat signatures? These systems process event logs, replay data, and historical behavior to detect cheating that passes individual packet validation.</p>
+
+  <h3>Multi-Layered Defense</h3>
+  <p>No single technique stops all cheating. Production anti-cheat systems use multiple layers: server authority as the foundation, input validation for sanity checking, information hiding through relevancy, packet encryption and anti-replay, behavioral analysis and pattern matching, and optionally kernel-level client monitoring (like Riot's Vanguard or Epic's Easy Anti-Cheat). The key insight is that perfect security is impossible because the client runs on hardware the player controls. The goal is to make cheating expensive, detectable, and unrewarding.</p>
+
+  <h3>Which Games Focus on This</h3>
+  <p>Every competitive game invests heavily in network-level anti-cheat. <strong>Valorant</strong> uses Riot's Vanguard kernel driver combined with 128 Hz server authority and aggressive server-side validation. <strong>Fortnite</strong> uses Easy Anti-Cheat alongside Unreal Engine's server-authoritative model. <strong>EVE Online</strong>'s entire economy depends on server authority preventing item duplication. <strong>World of Warcraft</strong> uses Blizzard's Warden system for client monitoring combined with server-side validation. <strong>New World</strong>'s early struggles demonstrated what happens when server validation has gaps.</p>
+
+
+  <!-- ========== SOURCES ========== -->
+  <h2 id="sources">Sources</h2>
+
+  <div class="sources">
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://gafferongames.com/post/udp_vs_tcp/" target="_blank">UDP vs. TCP (Gaffer on Games)</a>
+        <div class="source-desc">Glenn Fiedler's foundational article on why games use UDP over TCP. Covers head-of-line blocking, retransmission delays, and congestion control backoff with practical examples.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://www.gabrielgambetta.com/client-server-game-architecture.html" target="_blank">Client-Server Game Architecture (Gabriel Gambetta)</a>
+        <div class="source-desc">Four-part series covering authoritative servers, client-side prediction, server reconciliation, entity interpolation, and lag compensation with interactive demos.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-docs">DOCS</span>
+      <div class="source-info">
+        <a href="https://developer.valvesoftware.com/wiki/Latency_Compensating_Methods_in_Client/Server_In-game_Protocol_Design_and_Optimization" target="_blank">Latency Compensating Methods in Client/Server Protocol Design (Valve)</a>
+        <div class="source-desc">Valve Developer Community documentation on Source Engine's netcode. Covers client-side prediction, lag compensation, server rewind, and entity interpolation as implemented in Counter-Strike and Team Fortress 2.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-talk">TALK</span>
+      <div class="source-info">
+        <a href="https://gdcvault.com/play/1027755/Online-Game-Technology-Summit-Quasar" target="_blank">Quasar: Expanding EVE Online's Server Potential with gRPC (GDC Vault)</a>
+        <div class="source-desc">CCP Games' GDC presentation on migrating EVE Online's backend from machoNet to gRPC with Protocol Buffers. Covers the Quasar architecture, Kubernetes adoption, and Go microservices.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://www.eveonline.com/news/view/introducing-quasar" target="_blank">Introducing Quasar (EVE Online)</a>
+        <div class="source-desc">CCP's official announcement of the Quasar technology, detailing gRPC integration, protobuf serialization outside the GIL, and independent skill plan services running on separate databases.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-docs">DOCS</span>
+      <div class="source-info">
+        <a href="https://github.com/ValveSoftware/GameNetworkingSockets" target="_blank">GameNetworkingSockets (Valve, GitHub)</a>
+        <div class="source-desc">Valve's open-source networking library. Documentation covers reliable/unreliable messaging, P2P with ICE, encryption, and the Steam Datagram Relay architecture.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-docs">DOCS</span>
+      <div class="source-info">
+        <a href="https://partner.steamgames.com/doc/features/multiplayer/steamdatagramrelay" target="_blank">Steam Datagram Relay (Steamworks Documentation)</a>
+        <div class="source-desc">Official documentation on Valve's relay network. Covers DDoS protection, IP address concealment, backbone routing, and integration with GameNetworkingSockets.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-wiki">WIKI</span>
+      <div class="source-info">
+        <a href="https://starcitizen.tools/Server_meshing" target="_blank">Server Meshing (Star Citizen Wiki)</a>
+        <div class="source-desc">Community wiki covering Star Citizen's server meshing architecture. Details the Replication Layer, static vs. dynamic meshing, zone authority transfer, and test milestones.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://wiki.eveuniversity.org/Server_tick" target="_blank">Server Tick (EVE University Wiki)</a>
+        <div class="source-desc">Detailed explanation of EVE Online's 1 Hz server tick. Covers how game mechanics round to full seconds, interaction with Time Dilation, and implications for combat timing.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://diamondlobby.com/server-tick-rates/" target="_blank">Server Tick Rates for Popular Games Compared (Diamond Lobby)</a>
+        <div class="source-desc">Comparison of tick rates across competitive games including Valorant (128 Hz), CS:GO (64/128 Hz), Overwatch 2 (63 Hz), Apex Legends (20 Hz), and others.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://daposto.medium.com/quic-for-gamenetworking-46cf23936228" target="_blank">QUIC as Game Networking Protocol (Daposto)</a>
+        <div class="source-desc">Analysis of QUIC's suitability for game networking. Covers multiplexed streams, unreliable datagrams, comparison with existing reliable-UDP libraries, and the WebTransport bridge for browsers.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-docs">DOCS</span>
+      <div class="source-info">
+        <a href="https://learn.microsoft.com/en-us/gaming/gdk/docs/features/console/networking/game-mesh/msquic-intro-networking" target="_blank">MsQuic for Game Development (Microsoft)</a>
+        <div class="source-desc">Microsoft's documentation on using MsQuic in the Xbox Game Development Kit. Covers QUIC features relevant to games: 0-RTT connection, reliable/unreliable streams, and cross-platform support.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://edgegap.com/blog/multiplayer-game-hosting-deep-dive-exploring-how-destiny-2-uses-both-peer-to-peer-authoritative-servers" target="_blank">Multiplayer Deep Dive: Destiny 2 (Edgegap)</a>
+        <div class="source-desc">Analysis of Destiny 2's hybrid networking model. Covers the split between server-authoritative game logic and P2P movement, improvements from Destiny 1, and IP exposure tradeoffs.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://www.pcgamer.com/new-world-is-not-client-authoritative-amazon-says/" target="_blank">New World Is Not 'Client Authoritative,' Says Amazon (PC Gamer)</a>
+        <div class="source-desc">Coverage of the New World client authority controversy. Includes Amazon's response explaining their server-based simulation model and the specific bug that allowed the invulnerability exploit.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-docs">DOCS</span>
+      <div class="source-info">
+        <a href="https://docs.godotengine.org/en/stable/tutorials/networking/websocket.html" target="_blank">Using WebSockets (Godot Engine Documentation)</a>
+        <div class="source-desc">Official Godot documentation on WebSocket support. Covers WebSocketMultiplayerPeer, integration with the high-level multiplayer API, and secure WSS connections for web exports.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://tailscale.com/blog/how-nat-traversal-works" target="_blank">How NAT Traversal Works (Tailscale)</a>
+        <div class="source-desc">Comprehensive technical deep-dive into STUN, TURN, ICE, and UDP hole punching. Covers NAT types, symmetric NAT challenges, and Tailscale's DERP relay protocol as a fallback.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://gafferongames.com/post/state_synchronization/" target="_blank">State Synchronization (Gaffer on Games)</a>
+        <div class="source-desc">Glenn Fiedler's article on state sync techniques. Covers delta compression, priority-based updates, bandwidth budgeting, and the differences between snapshot and state synchronization approaches.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-wiki">WIKI</span>
+      <div class="source-info">
+        <a href="https://minecraft.wiki/w/RakNet" target="_blank">RakNet (Minecraft Wiki)</a>
+        <div class="source-desc">Documentation of RakNet's role in Minecraft Bedrock Edition. Covers the protocol handshake, MTU discovery, reliability layers, fragmentation, and connection keepalive.</div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- NAV -->
+  <div class="game-nav">
+    <a href="wiki-databases.html">
+      <span class="dir">Previous</span>
+      <span class="name">Databases</span>
+    </a>
+    <a class="next" href="wiki-middleware.html">
+      <span class="dir">Next</span>
+      <span class="name">Middleware</span>
+    </a>
+  </div>
+
+</div>
+
+<!-- TOC HIGHLIGHT SCRIPT -->
+<script>
+(function(){
+  const toc = document.querySelector('.toc');
+  if (!toc) return;
+  const links = Array.from(toc.querySelectorAll('a'));
+  const ids = links.map(a => a.getAttribute('href').slice(1));
+  function update(){
+    let current = ids[0];
+    for (const id of ids){
+      const el = document.getElementById(id);
+      if (el && el.getBoundingClientRect().top <= 100) current = id;
+    }
+    links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + current));
+  }
+  window.addEventListener('scroll', update, {passive:true});
+  update();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Destiny 2 - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Destiny 2</div>
+  <h1>Destiny 2</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Hybrid P2P / Server Authority</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Shared World Shooter / MMO-Lite</span>
+  </div>
+  <p class="lead">Bungie's shared world shooter uses a networking model that is genuinely unlike anything else in the industry. It is not peer-to-peer, it is not dedicated servers, and Bungie deliberately avoids both terms. Every activity runs on Bungie's servers for physics and mission logic, but each player is authoritative over their own movement and abilities. The result is a game that feels like a single-player shooter even in co-op, at the cost of PvP integrity and vulnerability to network manipulation.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Bungie</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2017</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~315K (Steam)</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">Tiger Engine</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">~40 Hz (client send)</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Hybrid Authority</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <h2 id="overview">Overview</h2>
+  <p>Destiny 2 is a shared-world first-person shooter where players explore a solar system filled with PvE activities (story campaigns, strikes, raids, dungeons, patrols, public events) and PvP modes (Crucible, Trials of Osiris, Iron Banner). The game launched in 2017 under the Activision publishing deal, moved to self-publishing in 2019, and migrated from Blizzard's Battle.net to Steam. It operates as a live service with seasonal content updates and annual expansions.</p>
+  <p>The game runs on the <strong>Tiger Engine</strong>, a proprietary engine forked from the Halo-era "blam!" engine in 2008 and developed over six years before Destiny 1 shipped. The Tiger Engine was built from the ground up to support Bungie's vision of a "shared world shooter," where players seamlessly encounter strangers in patrol zones, transition between activities without loading screens, and play cooperative content that feels as responsive as a solo FPS.</p>
+  <p>Destiny 2's networking model is the architectural decision that defines everything about the game's technical character. Bungie calls it a hybrid, but that undersells how unusual it is. The server handles <strong>physics simulation, mission scripting, and game state authority</strong>. Each client handles <strong>its own movement and ability execution</strong> with full local authority. Other players' positions are communicated peer-to-peer between clients, not relayed through the server. This means there is no rubber-banding on your own character, ever, regardless of latency. But it also means PvP hit registration depends on what each player's client thinks happened, and disputes are resolved by a system that intentionally favors both the shooter and the target.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Tiger Engine</h4>
+      <p>Forked from the Halo "blam!" engine in 2008 during Halo: Reach development. Code-named "Tiger" after a piece of concept art featuring a space tiger. Supports physics simulation, rendering, animation, and the unique hybrid networking model. Major engine overhauls came with Beyond Light (2020), which shifted mission scripting to the Physics Host and improved social space transitions.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Client-Authoritative Movement</h4>
+      <p>Each player's position and movement is calculated locally on their own machine and communicated directly to other players. The server never overrides your position. This eliminates rubber-banding entirely, making the game feel responsive regardless of latency. The trade-off: lag switches and network manipulation can make players appear to teleport, and there is no server-side position validation to catch it.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Server Authority: Physics + Mission</h4>
+      <p>While movement is client-authoritative, Bungie's servers run the Physics Host (world physics simulation) and Mission Host (scripting, objective progression, loot drops). In Destiny 1, the Physics Host ran on a player's console, causing host migration problems. In Destiny 2, both hosts run in Bungie's data centers, eliminating mid-raid host migrations.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Shared World Design</h4>
+      <p>Patrol zones silently matchmake players into shared instances of up to 9 players (3 fireteams). As you walk toward a new zone, the game contacts the matchmaking server to find an existing instance and seamlessly loads you into it. Social spaces (the Tower) support 20-26 players per instance. Transitions happen without loading screens, and other players appear and disappear at zone boundaries.</p>
+    </div>
+  </div>
+
+  <!-- DIAGRAM -->
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 860 720">
+      <!-- BACKGROUND GROUPS -->
+      <rect x="10" y="10" width="840" height="80" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="35" class="group-label">PLAYERS (6-26 PER ACTIVITY INSTANCE)</text>
+
+      <rect x="10" y="110" width="420" height="110" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="135" class="group-label">BUNGIE SERVER CLOUD</text>
+
+      <rect x="450" y="110" width="400" height="110" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="470" y="135" class="group-label">MATCHMAKING &amp; ROUTING</text>
+
+      <rect x="10" y="240" width="520" height="190" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="265" class="group-label">ACTIVITY INSTANCES</text>
+
+      <rect x="550" y="240" width="300" height="190" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="570" y="265" class="group-label">PEER-TO-PEER MESH (PLAYERS)</text>
+
+      <rect x="10" y="450" width="520" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="475" class="group-label">DATA &amp; PERSISTENCE</text>
+
+      <rect x="550" y="450" width="300" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="570" y="475" class="group-label">BUNGIE.NET API &amp; SERVICES</text>
+
+      <rect x="10" y="570" width="840" height="130" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="595" class="group-label">ACTIVITY TYPES &amp; MATCHMAKING MODELS</text>
+
+      <!-- PLAYERS -->
+      <rect x="50" y="45" width="120" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="110" y="67" text-anchor="middle" class="box-label">PC (Steam)</text>
+
+      <rect x="210" y="45" width="130" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="275" y="67" text-anchor="middle" class="box-label">PlayStation</text>
+
+      <rect x="380" y="45" width="110" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="435" y="67" text-anchor="middle" class="box-label">Xbox</text>
+
+      <rect x="530" y="45" width="130" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="595" y="67" text-anchor="middle" class="box-label">Epic Games</text>
+
+      <rect x="700" y="45" width="130" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="765" y="67" text-anchor="middle" class="box-label">Cross-Save</text>
+
+      <!-- BUNGIE SERVER CLOUD -->
+      <rect x="35" y="148" width="130" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="100" y="170" text-anchor="middle" class="box-label">Physics Host</text>
+      <text x="100" y="184" text-anchor="middle" class="box-sub">World simulation</text>
+
+      <rect x="185" y="148" width="120" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="245" y="170" text-anchor="middle" class="box-label">Mission Host</text>
+      <text x="245" y="184" text-anchor="middle" class="box-sub">Script / AI / Loot</text>
+
+      <rect x="320" y="148" width="90" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="365" y="170" text-anchor="middle" class="box-label">Zone Host</text>
+      <text x="365" y="184" text-anchor="middle" class="box-sub">Patrol state</text>
+
+      <!-- MATCHMAKING -->
+      <polygon points="560,150 620,175 560,200 500,175" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="560" y="179" text-anchor="middle" class="box-label">Router</text>
+
+      <rect x="650" y="150" width="90" height="50" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="695" y="170" text-anchor="middle" class="box-label">Auth</text>
+      <text x="695" y="184" text-anchor="middle" class="box-sub">Bungie.net</text>
+
+      <rect x="760" y="150" width="70" height="50" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="795" y="172" text-anchor="middle" class="box-label">Social</text>
+      <text x="795" y="186" text-anchor="middle" class="box-sub">Clan/LFG</text>
+
+      <!-- ACTIVITY INSTANCES -->
+      <rect x="35" y="285" width="140" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="105" y="305" text-anchor="middle" class="box-label">Raid Instance</text>
+      <text x="105" y="319" text-anchor="middle" class="box-sub">6 players / no MM</text>
+
+      <rect x="195" y="285" width="140" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="265" y="305" text-anchor="middle" class="box-label">Crucible Match</text>
+      <text x="265" y="319" text-anchor="middle" class="box-sub">6v6 or 3v3</text>
+
+      <rect x="355" y="285" width="150" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="430" y="305" text-anchor="middle" class="box-label">Patrol Zone</text>
+      <text x="430" y="319" text-anchor="middle" class="box-sub">Up to 9 players</text>
+
+      <rect x="35" y="360" width="140" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="105" y="380" text-anchor="middle" class="box-label">Dungeon</text>
+      <text x="105" y="394" text-anchor="middle" class="box-sub">3 players / no MM</text>
+
+      <rect x="195" y="360" width="140" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="265" y="380" text-anchor="middle" class="box-label">Gambit Arena</text>
+      <text x="265" y="394" text-anchor="middle" class="box-sub">4v4 PvEvP</text>
+
+      <rect x="355" y="360" width="150" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="430" y="380" text-anchor="middle" class="box-label">Tower / Social</text>
+      <text x="430" y="394" text-anchor="middle" class="box-sub">20-26 players</text>
+
+      <!-- P2P MESH -->
+      <rect x="580" y="285" width="110" height="44" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="635" y="311" text-anchor="middle" class="box-label">Player A</text>
+
+      <rect x="710" y="285" width="110" height="44" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="765" y="311" text-anchor="middle" class="box-label">Player B</text>
+
+      <rect x="580" y="360" width="110" height="44" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="635" y="386" text-anchor="middle" class="box-label">Player C</text>
+
+      <rect x="710" y="360" width="110" height="44" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="765" y="386" text-anchor="middle" class="box-label">Player D</text>
+
+      <!-- P2P mesh arrows (bidirectional lines) -->
+      <line x1="690" y1="307" x2="710" y2="307" stroke="var(--cyan)" stroke-width="1.5"/>
+      <line x1="635" y1="329" x2="635" y2="360" stroke="var(--cyan)" stroke-width="1.5"/>
+      <line x1="765" y1="329" x2="765" y2="360" stroke="var(--cyan)" stroke-width="1.5"/>
+      <line x1="690" y1="382" x2="710" y2="382" stroke="var(--cyan)" stroke-width="1.5"/>
+      <line x1="690" y1="320" x2="710" y2="368" stroke="var(--cyan)" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="690" y1="370" x2="710" y2="310" stroke="var(--cyan)" stroke-width="1" stroke-dasharray="4 3"/>
+      <text x="700" y="350" text-anchor="middle" class="box-sub" style="fill:var(--cyan);font-weight:600">P2P Mesh</text>
+
+      <!-- DATA LAYER -->
+      <path d="M60,510 L60,500 Q60,490 80,490 L140,490 Q160,490 160,500 L160,510" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="110" cy="510" rx="50" ry="10" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="110" y="530" text-anchor="middle" class="box-label">Character DB</text>
+
+      <path d="M210,510 L210,500 Q210,490 230,490 L290,490 Q310,490 310,500 L310,510" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="260" cy="510" rx="50" ry="10" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="260" y="530" text-anchor="middle" class="box-label">Vault / Inventory</text>
+
+      <path d="M360,510 L360,500 Q360,490 380,490 L440,490 Q460,490 460,500 L460,510" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="410" cy="510" rx="50" ry="10" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="410" y="530" text-anchor="middle" class="box-label">Collections</text>
+
+      <!-- API & SERVICES -->
+      <rect x="575" y="480" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="635" y="500" text-anchor="middle" class="box-label">Bungie.net API</text>
+      <text x="635" y="514" text-anchor="middle" class="box-sub">REST / OAuth</text>
+
+      <rect x="715" y="480" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="775" y="500" text-anchor="middle" class="box-label">DIM / Apps</text>
+      <text x="775" y="514" text-anchor="middle" class="box-sub">3rd Party Tools</text>
+
+      <!-- ACTIVITY TYPES ROW -->
+      <rect x="35" y="610" width="115" height="70" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="92" y="633" text-anchor="middle" class="box-label">Patrol</text>
+      <text x="92" y="647" text-anchor="middle" class="box-sub">Seamless MM</text>
+      <text x="92" y="661" text-anchor="middle" class="box-sub">9 players max</text>
+
+      <rect x="170" y="610" width="115" height="70" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="227" y="633" text-anchor="middle" class="box-label">Strikes</text>
+      <text x="227" y="647" text-anchor="middle" class="box-sub">Matchmade</text>
+      <text x="227" y="661" text-anchor="middle" class="box-sub">3 players</text>
+
+      <rect x="305" y="610" width="115" height="70" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="362" y="633" text-anchor="middle" class="box-label">Crucible</text>
+      <text x="362" y="647" text-anchor="middle" class="box-sub">Skill / Card MM</text>
+      <text x="362" y="661" text-anchor="middle" class="box-sub">6v6 / 3v3</text>
+
+      <rect x="440" y="610" width="115" height="70" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="497" y="633" text-anchor="middle" class="box-label">Raids</text>
+      <text x="497" y="647" text-anchor="middle" class="box-sub">No matchmaking</text>
+      <text x="497" y="661" text-anchor="middle" class="box-sub">6 players</text>
+
+      <rect x="575" y="610" width="115" height="70" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="632" y="633" text-anchor="middle" class="box-label">Gambit</text>
+      <text x="632" y="647" text-anchor="middle" class="box-sub">Matchmade</text>
+      <text x="632" y="661" text-anchor="middle" class="box-sub">4v4 PvEvP</text>
+
+      <rect x="710" y="610" width="120" height="70" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="770" y="633" text-anchor="middle" class="box-label">Trials</text>
+      <text x="770" y="647" text-anchor="middle" class="box-sub">Card-Based MM</text>
+      <text x="770" y="661" text-anchor="middle" class="box-sub">3v3 Elimination</text>
+
+      <!-- ARROWS -->
+      <path d="M110,81 L100,148" class="arrow"/>
+      <path d="M275,81 L245,148" class="arrow"/>
+      <text x="170" y="118" class="arrow-label">connect</text>
+
+      <path d="M435,81 L560,150" class="arrow"/>
+      <text x="520" y="115" class="arrow-label">matchmake</text>
+
+      <path d="M560,200 L430,285" class="arrow"/>
+      <text x="510" y="245" class="arrow-label">assign instance</text>
+
+      <path d="M560,200 L265,285" class="arrow"/>
+      <path d="M560,200 L105,285" class="arrow"/>
+
+      <path d="M100,198 L105,285" class="arrow"/>
+      <text x="70" y="245" class="arrow-label">host</text>
+
+      <path d="M245,198 L265,285" class="arrow"/>
+      <path d="M365,198 L430,285" class="arrow"/>
+
+      <path d="M505,305 L580,305" class="arrow" style="stroke:var(--cyan)"/>
+      <text x="545" y="298" class="arrow-label" style="fill:var(--cyan)">P2P</text>
+
+      <path d="M105,410 L110,490" class="arrow"/>
+      <text x="80" y="450" class="arrow-label">persist</text>
+      <path d="M265,410 L260,490" class="arrow"/>
+      <path d="M430,410 L410,490" class="arrow"/>
+
+      <path d="M635,524 L410,510" class="arrow"/>
+      <text x="540" y="515" class="arrow-label">API read/write</text>
+      <path d="M775,524 L635,524" class="arrow" style="marker-end:none"/>
+    </svg>
+    <div class="diagram-caption">Destiny 2's hybrid architecture: Bungie servers handle physics and mission logic, while player positions flow directly between clients via P2P mesh. Each activity type has its own instancing rules.</div>
+  </div>
+
+  <!-- INFRASTRUCTURE -->
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Bungie operates its own server cloud to host Destiny 2. When Bungie split from Activision in January 2019, they invested in new server infrastructure to handle the transition to self-publishing. The game moved from Blizzard's Battle.net to Steam in October 2019, but the game servers themselves were always Bungie-hosted, separate from the platform storefront.</p>
+
+  <h3>Virtual Headless Consoles</h3>
+  <p>Bungie describes their server infrastructure as running "hundreds of thousands of virtual headless consoles" in their cloud. Each activity instance (a raid, a Crucible match, a patrol zone) runs on one of these virtual machines. The server process runs the same game code as the client but without rendering, acting as the Physics Host and Mission Host for the activity. This is the key architectural change from Destiny 1, where the Physics Host ran on a player's console and the Mission Host ran in the data center.</p>
+
+  <h3>What the Server Controls</h3>
+  <p>The Bungie server is authoritative over:</p>
+  <ul>
+    <li><strong>Physics simulation</strong> (world physics, environmental objects, vehicles)</li>
+    <li><strong>Mission scripting</strong> (objective progression, encounter triggers, boss mechanics)</li>
+    <li><strong>AI behavior</strong> (enemy spawning, pathfinding, aggro targeting)</li>
+    <li><strong>Loot drops</strong> (what items drop, their stats/rolls)</li>
+    <li><strong>Game state</strong> (match score, zone control, public event progress)</li>
+    <li><strong>Economy</strong> (Glimmer, Legendary Shards, currency transactions)</li>
+  </ul>
+
+  <h3>What the Client Controls</h3>
+  <p>Each player's client is authoritative over:</p>
+  <ul>
+    <li><strong>Own movement and position</strong> (no rubber-banding, ever)</li>
+    <li><strong>Own ability execution</strong> (grenades, supers, class abilities)</li>
+    <li><strong>Hit registration</strong> (the shooter's client determines hits)</li>
+  </ul>
+
+  <h3>Social Space Instancing</h3>
+  <p>The Tower (the primary social hub) runs as a separate instance type with different player limits. Historically, Tower instances supported 40-50+ players, but persistent performance issues (particularly on PC since Beyond Light) led Bungie to temporarily reduce the cap to <strong>20 players</strong> per instance. The performance problems stemmed from menu operations (inspecting armor stats, changing shaders) requiring server round-trips that scaled poorly with instance population. After the cap reduction, players reported significant improvement in menu responsiveness.</p>
+
+  <table class="proto">
+    <tr><th>Activity Type</th><th>Max Players</th><th>Matchmaking</th><th>Server Role</th></tr>
+    <tr><td>Patrol Zones</td><td>9 (3 fireteams)</td><td>Seamless / automatic</td><td>Physics + Mission + Zone Host</td></tr>
+    <tr><td>Strikes</td><td>3</td><td>Automatic queue</td><td>Physics + Mission Host</td></tr>
+    <tr><td>Crucible</td><td>12 (6v6)</td><td>Skill-based / connection</td><td>Physics Host + match referee</td></tr>
+    <tr><td>Trials of Osiris</td><td>6 (3v3)</td><td>Card / win-based</td><td>Physics Host + match referee</td></tr>
+    <tr><td>Raids</td><td>6</td><td>None (pre-made fireteam)</td><td>Physics + Mission Host (complex)</td></tr>
+    <tr><td>Dungeons</td><td>3</td><td>None (pre-made fireteam)</td><td>Physics + Mission Host</td></tr>
+    <tr><td>Gambit</td><td>8 (4v4)</td><td>Automatic queue</td><td>Physics + Mission + dual-arena</td></tr>
+    <tr><td>Tower / Social</td><td>20 (reduced from ~50)</td><td>Automatic population</td><td>Minimal (no enemies/combat)</td></tr>
+  </table>
+
+  <!-- NETWORKING -->
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>Destiny 2's networking is, by Bungie's own admission, "uniquely complicated." The core principle is a <strong>peer-to-peer mesh</strong> for player state overlaid on a <strong>server-authoritative backbone</strong> for game logic. Clients send position and action data directly to other clients (not through the server), while the server manages physics, AI, loot, and mission state. All traffic flows over UDP.</p>
+
+  <h3>Why Bungie Chose This Model</h3>
+  <p>Bungie's explicit design goal was for Destiny to "feel like a single-player shooter." In a pure client-server model, all physics calculations happen on the server, and the client is largely a rendering endpoint. This introduces latency between input and outcome that makes the game feel sluggish, especially for movement and abilities. Bungie wanted instant feedback: when you press jump, you jump now, not 50-100ms from now. When you throw a grenade, the trajectory starts immediately, not after a server round-trip. By making each client authoritative over its own actions, the game feels perfectly responsive regardless of latency.</p>
+  <p>The trade-off is that PvP becomes fundamentally less competitive. In Crucible, both players in a gunfight are seeing slightly different versions of reality (each is authoritative over their own position, but sees the other player with latency delay). Destiny's resolution system intentionally supports "trades" (both players killing each other) rather than forcing one player to be wrong. This is a conscious design decision: Bungie would rather both players feel like their shots hit than have one player feel cheated by lag compensation.</p>
+
+  <h3>Client Update Rates</h3>
+  <p>Destiny 2 does not have a traditional "server tick rate" in the way that games with pure dedicated servers do. A player's PC sends approximately <strong>40 updates per second</strong> to other players via the P2P mesh. However, the rate at which a given player receives updates from other players varies based on the sender's hardware and network conditions. On console, update rates can be noticeably lower and less consistent than on PC. Since Destiny 2 does not relay player positions through a central server, there is no single authoritative tick rate to point to.</p>
+
+  <h3>IP Exposure and DDoS</h3>
+  <p>The peer-to-peer component of the network model historically exposed players' IP addresses to every other player in the activity. This made DDoS attacks trivial in competitive modes like Trials of Osiris, where a player could force opponents to disconnect by flooding their IP. Bungie addressed this on PC by migrating from Windows Sockets to <strong>Steam Network Sockets</strong>, which route traffic through Steam's relay infrastructure. Under this system, players are addressed by Steam ID rather than IP, preventing direct IP exposure. Console platforms have their own NAT traversal but are not immune to network-level attacks.</p>
+
+  <div class="callout c-amber">
+    <div class="callout-title">The "Kill Trading" Problem</div>
+    <p>In Destiny 2 PvP, it is common for two players to kill each other simultaneously. This happens because both clients are authoritative over their own hit registration. Player A shoots Player B on Player A's screen. Player B shoots Player A on Player B's screen. Both clients report valid kills. The server accepts both. Neither player is "wrong" in the traditional sense of the word, but the experience feels frustrating to players accustomed to games where the server picks one winner. Bungie considers this an acceptable trade-off for the responsiveness of their hybrid model.</p>
+  </div>
+
+  <table class="proto">
+    <tr><th>Protocol</th><th>Usage</th><th>Notes</th></tr>
+    <tr><td>UDP (P2P mesh)</td><td>Player positions &amp; actions</td><td>Direct client-to-client, ~40 Hz send rate on PC</td></tr>
+    <tr><td>UDP (to server)</td><td>Physics &amp; mission state</td><td>Server replication of AI, objectives, loot, environment</td></tr>
+    <tr><td>HTTPS</td><td>API &amp; account services</td><td>Bungie.net authentication, inventory management, third-party apps</td></tr>
+    <tr><td>Steam Network Sockets</td><td>PC relay (post-2020)</td><td>Hides IP addresses via Steam relay infrastructure</td></tr>
+  </table>
+
+  <!-- DATA -->
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>Destiny 2 maintains an extensive persistent data layer for characters, items, progression, and collections. The <strong>Bungie.net API</strong> exposes this data through a comprehensive REST interface that powers both the official companion app and a thriving ecosystem of third-party tools.</p>
+
+  <h3>Inventory and Vault System</h3>
+  <p>Each player has three characters (one per class), each with their own equipped items and a 10-slot-per-type inventory. A shared Vault provides additional storage across characters, along with a general inventory with three 50-item categories. Items are represented as <code>DestinyItemComponent</code> objects with properties including <code>itemHash</code> (the item definition), <code>itemInstanceId</code> (unique per drop), <code>bucketHash</code> (the inventory slot), and <code>transferStatus</code> flags. Location constants track where each item resides: character inventory, vault, vendor, or postmaster.</p>
+
+  <h3>Bungie.net API Architecture</h3>
+  <p>The API uses three fundamental endpoints: <code>GetProfile</code>, <code>GetCharacter</code>, and <code>GetItem</code>. These replaced the older large specialized endpoints and use a component-based query system where callers specify which data layers they want via the <code>?components=</code> query parameter. Authentication uses OAuth2 scopes, with <code>ReadDestinyInventoryAndVault</code> being the primary scope needed for inventory and progression data access.</p>
+  <p>Rate limiting is enforced per-endpoint. For example, the <code>InsertSocketPlugFree</code> endpoint (for applying mods) is limited to 2 actions per second per user. Certain items are protected from API manipulation through hash arrays in the <code>Destiny2CoreSettings</code>.</p>
+
+  <h3>Third-Party Tool Ecosystem</h3>
+  <p>The open API has spawned a rich tool ecosystem. <strong>Destiny Item Manager (DIM)</strong> is the most prominent, built as a React/Redux/TypeScript web application that connects to the Bungie.net API for safe inventory manipulation without accessing game memory. DIM enables players to transfer items between characters and vault without visiting the Tower, manage loadouts, and analyze item stats. Other tools include Braytech, light.gg, and d2gunsmith.com for weapon analysis, plus damagecheck.io for DPS calculations.</p>
+
+  <h3>Damage Calculation Model</h3>
+  <p>Destiny 2's damage system is server-validated with significant complexity. Base damage per bullet is a linear function of the weapon's attack stat, with the Impact stat affecting the function's coefficient and intercept. Additional modifiers are applied as percentage multiplications on the base damage. Weapon archetypes within a frame type deal identical damage (all Adaptive Sniper Rifles do the same DPS), with Exotic weapons as exceptions. Power level differences affect damage asymmetrically: being overleveled provides no damage bonus, but being underleveled applies steep penalties (~33% less at 1 level below, ~53% at 3 levels below). This system forces engagement with the power level grind even for veteran players.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-pink">
+      <h4>Cross-Save System</h4>
+      <p>After splitting from Activision, Bungie implemented cross-save allowing a single set of characters to be used across all platforms (PC, PlayStation, Xbox). The system links platform accounts to a Bungie.net account and designates one platform's characters as the "active" set. DLC purchases remain platform-specific, but Silver (premium currency) and season passes are shared. This replaced the old model where PC progression was locked to Battle.net.</p>
+    </div>
+    <div class="info-card c-cyan">
+      <h4>Content Vault (Sunset Architecture)</h4>
+      <p>In 2020, Bungie introduced the Destiny Content Vault, removing older campaigns, raids, and destinations from the active game. This was an architectural necessity: the Tiger Engine struggled with the accumulated weight of years of content, causing long patch times, excessive storage requirements, and testing burden. Vaulted content could theoretically return (as some raids have), but the vault represents a permanent reduction in live game size to keep the engine manageable.</p>
+    </div>
+  </div>
+
+  <!-- SCALING -->
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <p>Destiny 2's scaling challenges are different from traditional MMOs or battle royales because the game never puts more than 26 players in a single instance. The scaling problem is the sheer number of simultaneous activity instances running globally, each requiring its own server-side Physics Host and Mission Host.</p>
+
+  <h3>Patrol Zone Matchmaking</h3>
+  <p>The most technically interesting scaling challenge is patrol zones. When a player moves toward a new zone boundary, the game contacts the matchmaking server to find an existing instance of that zone. If one exists with available capacity, the player is silently loaded into it. If not, a new instance is spun up. Zone state (enemy spawns, public event progress, patrol mission state) is maintained per-instance by the Zone Host on the server. When the last player leaves a zone instance, the instance is cleaned up.</p>
+  <p>Zone instances are independent server processes that do not communicate with each other. The geometry you see is loaded locally on your machine. Server-side, each zone runs its own mini version of the Destiny executable. This means a patrol destination like the EDZ might have hundreds of simultaneous zone instances running globally, each tracking 3-9 players, each with its own AI spawns and event timers. Players can walk between zones seamlessly because the transition is handled by the matchmaking server finding or creating an instance on the destination side.</p>
+
+  <h3>Raid Complexity</h3>
+  <p>Raids represent the highest server-side computational cost per player. A raid encounter like Riven of a Thousand Voices or The Witness involves multiple scripted phases with complex AI behavior, environmental mechanics (moving platforms, rotating geometry, damage-check timers), and strict state machines governing encounter progression. The Mission Host runs all of this scripting, while the Physics Host handles the environmental physics. A wipe (party kill) requires resetting the encounter state machine to its initial configuration, which must be fast enough that players don't experience a long reload.</p>
+
+  <h3>Gambit's Dual-Arena Problem</h3>
+  <p>Gambit's PvEvP mode is architecturally distinctive because it maintains <strong>two parallel PvE arenas</strong> plus a <strong>PvP invasion link</strong> between them. Each team of four fights AI enemies in their own arena, collecting motes to bank toward summoning a boss. When a player invades the opposing team, their client must seamlessly transition from one arena's state to the other. The server tracks both arenas simultaneously: separate enemy spawns, separate mote counts, separate boss health. The invasion mechanic requires cross-arena player state transfer, which adds complexity to the already-unusual P2P mesh model.</p>
+
+  <div class="callout c-purple">
+    <div class="callout-title">Trials of Osiris: Card-Based Matchmaking</div>
+    <p>Trials uses a unique matchmaking model where players purchase a "passage" card and attempt to win 7 consecutive matches to "go flawless." Matchmaking prioritizes pairing players with the same number of wins on their current card, mimicking a tournament bracket. Bungie has oscillated between card-based matchmaking (match by wins on card) and win-based matchmaking (match by total wins that weekend). The card system creates naturally escalating difficulty since you face opponents on similar win streaks, while the win-based system caused controversy because matches got harder even after losses. Additional refinements include fireteam-size matching (solo players face other solos) and post-flawless pool separation.</p>
+  </div>
+
+  <!-- DEEP DIVES -->
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>The GDC 2015 Talks</h3>
+  <p>Two GDC 2015 presentations provide the most authoritative public documentation of Destiny's networking architecture:</p>
+  <p><strong>"Shared World Shooter: Destiny's Networked Mission Architecture"</strong> by Justin Truman covered the spatial structure of Destiny's game world, the various networked experiences a player is simultaneously connected to, their overlapping responsibilities, rules for host handoff at regional boundaries, and how ungraceful host migrations and disconnections are handled. The key insight is that Destiny's world is built from overlapping "bubbles" of networked state, and the challenge is stitching these bubbles together so players can seamlessly move between them.</p>
+  <p><strong>"Lessons from the Core Engine Architecture of Destiny"</strong> by Chris Butcher covered the six-year development arc of the Tiger Engine from inception to ship, including techniques for large-scale engine refactoring, data lifetime management, object system design, and source code layering. This talk revealed that the engine fork from blam! was driven by the recognition that the Halo codebase was fundamentally unsuited to the persistent, shared-world experience Bungie wanted to build.</p>
+
+  <h3>The Beyond Light Engine Overhaul</h3>
+  <p>When Destiny 2: Beyond Light launched in November 2020, Bungie shipped significant engine changes. The most important for networking was shifting the <strong>mission scripting model to run on the Physics Host</strong> rather than the Mission Host. This change unified the two server-side roles and enabled new behaviors: patrol missions now persist as players move between zones on a destination (previously, they would reset), and joining or leaving a fireteam in the Tower no longer required reloading the entire social space. These quality-of-life improvements came from reducing the separation between the Physics and Mission execution environments.</p>
+
+  <h3>Weapon Sandbox and Server Validation</h3>
+  <p>Destiny 2's weapon sandbox is a complex system with layers of damage modifiers. Weapon damage per bullet is a linear function of attack stat and Impact, with additional multipliers from buffs, debuffs, enemy type, and power level delta. Scout rifles, sniper rifles, and handcannons take additional penalties against Major and Ultra enemies (up to 25% for handcannons against Ultras), while auto rifles and pulse rifles do not.</p>
+  <p>DPS (damage per second) is generally calculated per archetype rather than per individual weapon: all Adaptive Sniper Rifles deal the same damage at the same rate of fire. Exotic weapons are exceptions with unique damage profiles. The server validates damage outcomes, but because hit registration is client-authoritative, the validation is largely confirming that the reported hit is plausible (correct weapon, correct target, reasonable position) rather than re-simulating the entire shot trajectory.</p>
+
+  <h3>Season Pass Content Delivery</h3>
+  <p>Destiny 2's seasonal content model delivers new activities, weapons, and narrative beats on a quarterly cadence. Seasonal content is pre-loaded in patches but time-gated through server-side flags. The Mission Host controls when seasonal activities become available, and the matchmaking server adds new playlists to the activity selection. Hotfixes can adjust weapon balance, ability tuning, and economy values without client patches by pushing server-side configuration changes. This split between client-side content delivery (assets, code) and server-side activation (timing, tuning) allows Bungie to control the content drip without requiring frequent large downloads.</p>
+
+  <!-- EVOLUTION -->
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <span class="year">2008</span>
+      <span class="desc"><strong>Tiger Engine development begins.</strong> Bungie forks the blam! engine during Halo: Reach development, recognizing that the Halo codebase cannot support their vision of a persistent shared world. Six years of engine development follow before Destiny 1 ships.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2014</span>
+      <span class="desc"><strong>Destiny 1 launches.</strong> The hybrid P2P/server model debuts. The Physics Host runs on a player's console, causing mid-activity host migrations when that player disconnects. The Mission Host runs in Bungie's data center. The model is controversial but enables the responsive gunplay that defines the franchise.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2015</span>
+      <span class="desc"><strong>GDC talks reveal architecture details.</strong> Justin Truman presents the networked mission architecture, Chris Butcher presents engine lessons. The community gains its deepest understanding of how the shared world stitching, host handoff, and bubble-based instancing work.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2017</span>
+      <span class="desc"><strong>Destiny 2 launches on Battle.net.</strong> The Physics Host moves to Bungie's servers, eliminating host migration. Bungie invests in "hundreds of thousands of virtual headless consoles" in their cloud. The P2P mesh for player state is retained. PC launch on Battle.net is the first non-Blizzard title on the platform.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2019</span>
+      <span class="desc"><strong>Bungie splits from Activision, migrates to Steam.</strong> Self-publishing begins with Shadowkeep. The game goes free-to-play as "New Light." Cross-save enables character portability across platforms. The Bungie.net API ecosystem matures, with DIM becoming the de facto inventory management tool.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2020</span>
+      <span class="desc"><strong>Beyond Light and the Content Vault.</strong> Major engine overhaul unifies mission scripting on the Physics Host. The Content Vault removes older campaigns and destinations to reduce game size and maintenance burden. PC networking migrates from Windows Sockets to Steam Network Sockets, hiding player IP addresses to combat DDoS in Trials.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2022</span>
+      <span class="desc"><strong>Sony acquires Bungie for $3.6 billion.</strong> Destiny 2 launches on Epic Games Store. Tower instance player cap reduced from ~50 to 20 to address persistent performance issues. The Witch Queen expansion ships with Gambit rework, consolidating the mode to a single match format.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2024</span>
+      <span class="desc"><strong>The Final Shape expansion.</strong> Peak concurrent on Steam reaches 314,634. Crucible Competitive Divisions launch with skill-based progression. Trials matchmaking undergoes another iteration with fireteam-size matching and increased solo/duo protections. The Bungie.net API continues as one of the most comprehensive public game APIs in the industry.</span>
+    </div>
+  </div>
+
+  <!-- SOURCES -->
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://gdcvault.com/play/1022247/Shared-World-Shooter-Destiny-s">GDC 2015: Shared World Shooter - Destiny's Networked Mission Architecture</a>
+        <div class="source-desc">Justin Truman's GDC presentation covering Destiny's bubble-based instancing, host handoff rules, and the spatial structure of the networked world.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://gdcvault.com/play/1022106/Lessons-from-the-Core-Engine">GDC 2015: Lessons from the Core Engine Architecture of Destiny</a>
+        <div class="source-desc">Chris Butcher's GDC presentation on the Tiger Engine's six-year development from Halo blam! fork to Destiny 1 ship, covering refactoring strategies and system design.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.pcgamer.com/the-strange-science-of-destiny-2s-uniquely-complicated-netcode/">The Strange Science of Destiny 2's 'Uniquely Complicated' Netcode</a>
+        <div class="source-desc">PC Gamer's deep dive into Destiny 2's hybrid networking model, covering client authority, P2P mesh, and the trade-offs for PvP competitive integrity.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info">
+        <a href="https://gist.github.com/nessus42/df399f31e4ab41192cbd51b32e9d7b73">How Networking Works in Destiny 1 and How It Differs in Destiny 2</a>
+        <div class="source-desc">Comprehensive community analysis of Destiny's networking architecture, covering Physics Host migration, Mission Host roles, and the Destiny 1 to Destiny 2 changes.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info">
+        <a href="https://gist.github.com/nessus42/a0e2826683e9fad3027728dde78310e3">Destiny Networking Primer: Kill Trading and Dying Behind Cover</a>
+        <div class="source-desc">Technical explanation of why kill trading is an inherent consequence of Destiny's client-authoritative hit registration model, with latency analysis.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://edgegap.com/blog/multiplayer-game-hosting-deep-dive-exploring-how-destiny-2-uses-both-peer-to-peer-authoritative-servers">Multiplayer Game Hosting Deep Dive: Destiny 2</a>
+        <div class="source-desc">Edgegap's technical analysis of Destiny 2's hybrid hosting model, examining the balance between P2P player state and server-authoritative game logic.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://bungie.fandom.com/wiki/Tiger_Engine">Tiger Engine - Bungie Wiki</a>
+        <div class="source-desc">Documentation of the Tiger Engine's history, capabilities, and evolution from the blam! engine through Destiny 1 and Destiny 2 development.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://bungie-net.github.io/">Bungie.net API Documentation</a>
+        <div class="source-desc">Official Bungie API reference covering all endpoints for profile, character, item, vendor, and activity data, plus OAuth2 authentication flows.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://github.com/Bungie-net/api">Bungie-net/api GitHub Repository</a>
+        <div class="source-desc">Official GitHub repository for Bungie.net API resources, including endpoint documentation, type definitions, and community support.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://en.wikipedia.org/wiki/Destiny_2">Destiny 2 - Wikipedia</a>
+        <div class="source-desc">Comprehensive overview of Destiny 2's development, launch, business model changes, Activision split, and platform migration history.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME NAV -->
+  <div class="game-nav">
+    <a class="prev" href="warzone.html">
+      <span class="dir">Previous</span>
+      <span class="name">Call of Duty: Warzone</span>
+    </a>
+    <a class="next" href="roblox.html">
+      <span class="dir">Next</span>
+      <span class="name">Roblox</span>
+    </a>
+  </div>
+
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

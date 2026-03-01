@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Minecraft</div>
+  <h1>Minecraft</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Single-Threaded Tick</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Sandbox / Survival</span>
+  </div>
+  <p class="lead">The best-selling game of all time runs on a fundamentally single-threaded server loop ticking at 20 TPS. Two completely separate codebases (Java Edition and Bedrock Edition) use different languages, protocols, and world formats, connected by a massive ecosystem of community server software, proxy networks, and mods.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Mojang Studios</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2011</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~3.6M (Hypixel alone: 200K+)</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">Java (JVM) / C++ (Bedrock)</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">20 TPS</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Single-Thread / Proxy Network</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <h2 id="overview">Overview</h2>
+  <p>Minecraft's server architecture is unusual for a game of its scale. The core game loop is single-threaded: one thread processes all entity movement, block updates, redstone circuits, chunk ticking, and player actions sequentially, every 50 milliseconds. This 20-tick-per-second heartbeat is the fundamental constraint that shapes everything about Minecraft server performance, and it has not changed since the game's earliest multiplayer implementation.</p>
+  <p>There are two completely separate editions of the game. Java Edition runs on the JVM and uses a custom TCP-based protocol. Bedrock Edition is written in C++ and uses the RakNet UDP protocol. They cannot natively connect to each other. They use different world save formats, different networking stacks, and different modding APIs. Bedrock runs on Windows 10/11, consoles, and mobile. Java Edition runs on Windows, macOS, and Linux.</p>
+  <p>The community server ecosystem is where things get architecturally interesting. Vanilla Minecraft servers top out at maybe 50-80 concurrent players before the tick loop starts lagging. Large networks like Hypixel handle over 200,000 concurrent players by running hundreds or thousands of individual server instances behind a proxy layer (BungeeCord or Velocity) that presents a single IP address to players and routes them between backend servers transparently. Modified server software like Paper, Spigot, and Fabric optimize the vanilla tick loop to squeeze more performance out of the single-threaded constraint.</p>
+  <p>Mojang's own hosted service, Realms, provides simple multiplayer for up to 10 players per world on pre-configured cloud instances with fixed render distances and no mod support. It is the simplest way to run a Minecraft server and the least capable.</p>
+
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 800 700">
+      <!-- PLAYERS -->
+      <rect x="140" y="10" width="160" height="36" rx="16" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="220" y="33" text-anchor="middle" class="box-label">Java Edition Players</text>
+
+      <rect x="500" y="10" width="160" height="36" rx="16" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="580" y="33" text-anchor="middle" class="box-label">Bedrock Players</text>
+
+      <!-- AUTH -->
+      <rect x="310" y="75" width="180" height="40" rx="8" fill="none" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="400" y="93" text-anchor="middle" class="box-label">Microsoft Auth (OAuth2)</text>
+      <text x="400" y="106" text-anchor="middle" class="box-sub">sessionserver.mojang.com</text>
+
+      <!-- PROXY LAYER -->
+      <rect x="60" y="155" width="340" height="80" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="80" y="175" class="group-label">PROXY LAYER (LARGE NETWORKS)</text>
+
+      <polygon points="130,195 160,210 130,225 100,210" fill="none" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="130" y="214" text-anchor="middle" class="box-label" style="font-size:9px">Velocity</text>
+
+      <polygon points="230,195 260,210 230,225 200,210" fill="none" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="230" y="214" text-anchor="middle" class="box-label" style="font-size:9px">Velocity</text>
+
+      <polygon points="330,195 360,210 330,225 300,210" fill="none" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="330" y="214" text-anchor="middle" class="box-label" style="font-size:9px">Velocity</text>
+
+      <!-- GEYSER BRIDGE -->
+      <rect x="440" y="160" width="140" height="36" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="510" y="178" text-anchor="middle" class="box-label">GeyserMC</text>
+      <text x="510" y="190" text-anchor="middle" class="box-sub">Protocol Bridge</text>
+
+      <!-- REALMS -->
+      <rect x="620" y="155" width="140" height="80" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="640" y="175" class="group-label">REALMS</text>
+      <rect x="640" y="185" width="100" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="690" y="205" text-anchor="middle" class="box-label">Cloud Instance</text>
+      <text x="690" y="217" text-anchor="middle" class="box-sub">10 players max</text>
+
+      <!-- GAME SERVERS -->
+      <rect x="60" y="280" width="520" height="130" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="80" y="300" class="group-label">BACKEND GAME SERVERS (PAPER / SPIGOT / VANILLA)</text>
+
+      <rect x="80" y="310" width="110" height="50" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="135" y="332" text-anchor="middle" class="box-label">Lobby</text>
+      <text x="135" y="346" text-anchor="middle" class="box-sub">Paper 1.21</text>
+
+      <rect x="200" y="310" width="110" height="50" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="255" y="332" text-anchor="middle" class="box-label">Survival</text>
+      <text x="255" y="346" text-anchor="middle" class="box-sub">Paper 1.21</text>
+
+      <rect x="320" y="310" width="110" height="50" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="375" y="332" text-anchor="middle" class="box-label">SkyBlock</text>
+      <text x="375" y="346" text-anchor="middle" class="box-sub">Custom Fork</text>
+
+      <rect x="440" y="310" width="120" height="50" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="500" y="332" text-anchor="middle" class="box-label">Minigames x50</text>
+      <text x="500" y="346" text-anchor="middle" class="box-sub">Instance Pool</text>
+
+      <text x="320" y="395" text-anchor="middle" class="box-sub">Each server: single-threaded main loop, 20 TPS target, independent JVM process</text>
+
+      <!-- TICK LOOP DETAIL -->
+      <rect x="60" y="450" width="520" height="75" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="80" y="468" class="group-label">SINGLE TICK (50ms BUDGET)</text>
+      <rect x="80" y="478" width="75" height="30" rx="4" fill="none" stroke="var(--orange)" stroke-width="1"/>
+      <text x="117" y="498" text-anchor="middle" class="box-sub">Entities</text>
+      <rect x="162" y="478" width="75" height="30" rx="4" fill="none" stroke="var(--orange)" stroke-width="1"/>
+      <text x="199" y="498" text-anchor="middle" class="box-sub">Blocks</text>
+      <rect x="244" y="478" width="75" height="30" rx="4" fill="none" stroke="var(--orange)" stroke-width="1"/>
+      <text x="281" y="498" text-anchor="middle" class="box-sub">Redstone</text>
+      <rect x="326" y="478" width="75" height="30" rx="4" fill="none" stroke="var(--orange)" stroke-width="1"/>
+      <text x="363" y="498" text-anchor="middle" class="box-sub">Chunks</text>
+      <rect x="408" y="478" width="75" height="30" rx="4" fill="none" stroke="var(--orange)" stroke-width="1"/>
+      <text x="445" y="498" text-anchor="middle" class="box-sub">Players</text>
+      <rect x="490" y="478" width="75" height="30" rx="4" fill="none" stroke="var(--orange)" stroke-width="1"/>
+      <text x="527" y="498" text-anchor="middle" class="box-sub">Plugins</text>
+
+      <!-- DATA LAYER -->
+      <rect x="60" y="565" width="700" height="110" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="80" y="583" class="group-label">PERSISTENCE</text>
+
+      <ellipse cx="160" cy="605" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M105,605 L105,640 Q105,655 160,655 Q215,655 215,640 L215,605" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="160" y="630" text-anchor="middle" class="box-label">Anvil (.mca)</text>
+      <text x="160" y="644" text-anchor="middle" class="box-sub">Chunk Regions</text>
+
+      <ellipse cx="330" cy="605" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M275,605 L275,640 Q275,655 330,655 Q385,655 385,640 L385,605" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="330" y="630" text-anchor="middle" class="box-label">player/*.dat</text>
+      <text x="330" y="644" text-anchor="middle" class="box-sub">NBT Player Data</text>
+
+      <ellipse cx="500" cy="605" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M445,605 L445,640 Q445,655 500,655 Q555,655 555,640 L555,605" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="500" y="630" text-anchor="middle" class="box-label">level.dat</text>
+      <text x="500" y="644" text-anchor="middle" class="box-sub">World Settings</text>
+
+      <rect x="600" y="600" width="140" height="50" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="670" y="622" text-anchor="middle" class="box-label">Redis / MySQL</text>
+      <text x="670" y="636" text-anchor="middle" class="box-sub">Network State</text>
+
+      <!-- ARROWS -->
+      <line x1="220" y1="46" x2="350" y2="75" class="arrow"/>
+      <rect x="260" y="50" width="52" height="14" fill="var(--surface)"/><text x="286" y="60" text-anchor="middle" class="arrow-label">HTTPS</text>
+
+      <line x1="580" y1="46" x2="450" y2="75" class="arrow"/>
+
+      <line x1="220" y1="46" x2="220" y2="155" class="arrow"/>
+      <rect x="196" y="108" width="48" height="14" fill="var(--surface)"/><text x="220" y="118" text-anchor="middle" class="arrow-label">TCP</text>
+
+      <line x1="580" y1="46" x2="510" y2="160" class="arrow"/>
+      <rect x="530" y="100" width="60" height="14" fill="var(--surface)"/><text x="560" y="110" text-anchor="middle" class="arrow-label">RakNet</text>
+
+      <line x1="580" y1="46" x2="690" y2="155" class="arrow"/>
+
+      <line x1="230" y1="235" x2="230" y2="280" class="arrow"/>
+      <rect x="196" y="250" width="68" height="14" fill="var(--surface)"/><text x="230" y="260" text-anchor="middle" class="arrow-label">Forward</text>
+
+      <line x1="510" y1="196" x2="400" y2="280" class="arrow"/>
+      <rect x="430" y="230" width="68" height="14" fill="var(--surface)"/><text x="464" y="240" text-anchor="middle" class="arrow-label">Translate</text>
+
+      <line x1="320" y1="410" x2="320" y2="450" class="arrow"/>
+      <line x1="320" y1="525" x2="320" y2="565" class="arrow"/>
+      <rect x="290" y="538" width="60" height="14" fill="var(--surface)"/><text x="320" y="548" text-anchor="middle" class="arrow-label">Disk I/O</text>
+    </svg>
+    <div class="diagram-caption">Minecraft network architecture: Java/Bedrock clients, proxy layer (Velocity), backend game servers, single-threaded tick loop, and Anvil file persistence</div>
+  </div>
+
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>A Minecraft server, at its most basic, is a single JVM process (Java Edition) or a single native process (Bedrock Dedicated Server) running on one machine. There is no built-in sharding, no distributed state, and no horizontal scaling. If you want to serve more players, you need to run more separate server processes and connect them with external tools.</p>
+
+  <h3>Vanilla Server Architecture</h3>
+  <p>The vanilla Minecraft server (distributed by Mojang as <code>server.jar</code>) is a single-threaded Java application. The main game loop runs every 50ms (20 TPS). In each tick, the server processes: entity AI and movement, scheduled block updates, random block ticks (crop growth, fire spread), redstone circuits, chunk loading and generation, player input processing, and network packet handling. All of this runs sequentially on one thread. If any single step takes too long, the entire server lags.</p>
+  <p>A vanilla server with a view distance of 10 loads (2 * 10 + 1)^2 = 441 chunks per player. With 10 players scattered across the world, that can be over 4,000 unique chunks loaded simultaneously. Each chunk is 16 blocks wide, 16 blocks long, and 384 blocks tall (since 1.18), containing up to 98,304 blocks. If even a small percentage of those blocks are tile entities (furnaces, hoppers, signs), the per-tick computation adds up fast.</p>
+
+  <h3>Paper and Spigot</h3>
+  <p>Paper is the community standard for production Minecraft servers. It is a fork of Spigot, which is a fork of CraftBukkit, which is a fork of the vanilla server. Each layer adds performance optimizations and plugin API extensions. Paper typically delivers 20-50% better TPS than Spigot on the same hardware, and uses 15-25% less RAM. Key optimizations include async chunk loading (chunk I/O moved off the main thread), entity activation ranges (distant entities tick less frequently), and aggressive timings profiling to identify bottleneck plugins.</p>
+  <p>Folia, a newer fork of Paper, introduces regionized multithreading. Instead of one thread ticking the entire world, Folia divides the world into independent regions that can tick in parallel on separate threads. This is a fundamental architectural change that breaks compatibility with most existing plugins but allows servers to scale across CPU cores for the first time.</p>
+
+  <h3>Proxy Networks (BungeeCord / Velocity)</h3>
+  <p>Large Minecraft networks like Hypixel use a proxy-based architecture. Players connect to a proxy server (Velocity or BungeeCord), which acts as a reverse proxy. Behind the proxy sit dozens or hundreds of independent Minecraft server instances, each running its own JVM. The proxy handles authentication, routing, and seamless server switching. When a player types <code>/lobby</code> or enters a minigame, the proxy transfers their connection from one backend server to another without the player disconnecting.</p>
+  <p>Velocity (built by the PaperMC team) is the modern replacement for BungeeCord. It offers up to 8x better throughput, uses HMAC-signed modern forwarding (preventing player identity spoofing), and supports native compression libraries. A typical network setup requires the proxy instance (1 GB RAM), a lobby server (2-4 GB RAM), and multiple backend servers scaling based on player count.</p>
+
+  <h3>Hypixel: The Largest Minecraft Server</h3>
+  <p>Hypixel has peaked at over 200,000 concurrent players. Its architecture uses multiple Velocity/BungeeCord proxies behind Cloudflare Spectrum (for DDoS protection), with every proxy connected to every backend game server. Redis or a similar key-value store tracks per-proxy player counts, and DNS-level load balancing distributes incoming connections. Game servers are generic instances that dynamically configure themselves for whichever minigame is requested. State like player statistics, friends lists, and inventories is stored in external databases (likely Redis + MySQL/MongoDB), not in the Minecraft world files.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Java Edition Server</h4>
+      <ul>
+        <li>JVM process, single-threaded main loop</li>
+        <li>Custom TCP protocol (reliable, ordered)</li>
+        <li>Anvil file format (.mca) for world data</li>
+        <li>Extensive mod/plugin ecosystem (Spigot, Paper, Forge, Fabric)</li>
+      </ul>
+    </div>
+    <div class="info-card c-green">
+      <h4>Bedrock Dedicated Server</h4>
+      <ul>
+        <li>C++ native binary, more efficient memory use</li>
+        <li>RakNet (UDP) protocol</li>
+        <li>LevelDB for world storage</li>
+        <li>Limited modding (behavior packs, add-ons only)</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Proxy Networks</h4>
+      <ul>
+        <li>Velocity/BungeeCord acts as reverse proxy</li>
+        <li>Single IP for players, many backend servers</li>
+        <li>HMAC-signed forwarding (Velocity Modern)</li>
+        <li>GeyserMC bridges Bedrock clients to Java servers</li>
+      </ul>
+    </div>
+    <div class="info-card c-pink">
+      <h4>Realms (Mojang Hosted)</h4>
+      <ul>
+        <li>Cloud-hosted instances, 10 player max</li>
+        <li>12 chunk render distance (Java), 25 (Bedrock)</li>
+        <li>No mod/plugin support</li>
+        <li>Automatic backups, simple management</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>Java Edition and Bedrock Edition use fundamentally different networking stacks. This is the core reason they cannot interoperate natively.</p>
+
+  <h3>Java Edition: Custom TCP Protocol</h3>
+  <p>Java Edition uses a custom protocol built on TCP. Every packet is reliably delivered in order. The protocol has distinct phases: Handshake, Status (server list ping), Login (authentication), and Play (gameplay). Packets are length-prefixed, optionally compressed (zlib), and optionally encrypted (AES/CFB8 after authentication).</p>
+  <p>The NMS (net.minecraft.server) package contains Mojang's proprietary Java code for all packet handling, entity management, and world simulation. Plugin developers historically accessed NMS classes directly to implement features not exposed through the Bukkit API. This was always fragile because NMS classes changed between Minecraft versions with no stability guarantees. As of Paper 1.20.5, the server ships with Mojang mappings by default instead of Spigot's reobfuscated names, making NMS access slightly more stable but still unsupported.</p>
+
+  <h3>Bedrock Edition: RakNet (UDP)</h3>
+  <p>Bedrock uses RakNet, a UDP-based protocol that adds reliability, ordering, and fragmentation on top of raw UDP datagrams. The default port is 19132 (IPv4). Unlike Java's TCP stream, Bedrock packets have explicit message boundaries. The RakNet handshake begins with MTU discovery to determine the maximum packet size the connection can support. Packets use compression by default and can be encrypted.</p>
+  <p>Because RakNet is UDP-based, Bedrock handles high-latency connections more gracefully than Java Edition's TCP stack. TCP's head-of-line blocking means one lost packet delays all subsequent packets, while RakNet can deliver packets out of order when reliability is not required. This is why Bedrock can feel snappier on mobile networks with packet loss.</p>
+
+  <h3>GeyserMC: Protocol Translation</h3>
+  <p>GeyserMC is a proxy that translates between Bedrock's RakNet protocol and Java Edition's TCP protocol in real time. A Bedrock player connects to Geyser, which translates their packets into Java protocol packets and forwards them to a Java server. This allows Bedrock players to join Java servers, but it adds latency and occasionally causes desync issues because the two editions handle entity movement and block placement slightly differently.</p>
+
+  <table class="proto">
+    <tr><th>Edition</th><th>Protocol</th><th>Port</th><th>Notes</th></tr>
+    <tr><td>Java Edition</td><td><code>TCP (custom)</code></td><td>25565</td><td>Length-prefixed packets, zlib compression, AES encryption</td></tr>
+    <tr><td>Bedrock Edition</td><td><code>RakNet (UDP)</code></td><td>19132</td><td>MTU discovery, built-in reliability, packet-level compression</td></tr>
+    <tr><td>Auth (Java)</td><td><code>HTTPS</code></td><td>443</td><td>sessionserver.mojang.com, Xbox Live token chain</td></tr>
+    <tr><td>Auth (Bedrock)</td><td><code>HTTPS</code></td><td>443</td><td>Xbox Live OAuth2, XSTS token chain</td></tr>
+    <tr><td>Proxy (Velocity)</td><td><code>TCP</code></td><td>25565</td><td>HMAC-signed modern forwarding, native compression</td></tr>
+    <tr><td>Cross-play (Geyser)</td><td><code>RakNet to TCP</code></td><td>19132</td><td>Real-time protocol translation with Floodgate auth</td></tr>
+  </table>
+
+  <div class="callout c-amber">
+    <div class="callout-title">Authentication Flow</div>
+    <p>Both editions now use Microsoft accounts. The flow for Java Edition: the client obtains a Microsoft OAuth2 token, exchanges it for an Xbox Live token, then an XSTS token, and finally a Minecraft access token. When joining a server, the client and server perform a handshake with sessionserver.mojang.com to verify identity. Servers running in "offline mode" skip authentication entirely, which is why private servers can allow cracked clients but also opens the door to identity spoofing.</p>
+  </div>
+
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>Minecraft Java Edition persists its world using the Anvil file format, a binary system based on NBT (Named Binary Tag) serialization. The world directory contains region files, player data, and world configuration.</p>
+
+  <h3>Anvil Region Files (.mca)</h3>
+  <p>The world is divided into regions of 32x32 chunks. Each region is stored in a file named <code>r.x.z.mca</code> where x and z are the region coordinates. The file has a 8KB header containing offset and timestamp tables for all 32x32 = 1024 chunk slots, followed by the compressed chunk data.</p>
+  <p>When a chunk is saved, it is compressed (zlib or zstd depending on version) and written to the next available sector in the region file. If the chunk has grown since its last save (more block entities, for example), the server finds a new contiguous block of sectors to fit it, or appends to the end of the file. This sector-based allocation means region files can develop internal fragmentation over time.</p>
+
+  <h3>Chunk Format (Post-1.18)</h3>
+  <p>Since the 1.18 world height expansion, chunks span from Y=-64 to Y=320 (384 blocks tall). Each chunk is divided into 24 vertical sections of 16x16x16 blocks. Empty sections are not saved. Block data uses a palette-based system: each section stores a list of unique block states (the palette) and a compacted array mapping each position to a palette index. This is significantly more space-efficient than storing full block IDs for every position.</p>
+  <p>Biome data is stored in 4x4x4 cells (64 entries per section). Each chunk also stores heightmaps (for lighting and rendering), block entities (furnaces, chests, signs), tile tick schedules (pending block updates), and a generation status field indicating whether the chunk is fully generated or still in a proto-chunk state.</p>
+
+  <h3>Player Data</h3>
+  <p>Each player's data is stored in an individual NBT file under <code>world/playerdata/[uuid].dat</code>. This includes inventory, position, health, experience, achievements, and other per-player state. Player data files are loaded when a player joins and saved when they disconnect or at regular autosave intervals.</p>
+
+  <h3>World Configuration</h3>
+  <p><code>level.dat</code> stores world-level settings: seed, game rules, difficulty, spawn point, time, weather, data pack configuration, and the world generator type. This file is read at server startup and written periodically during play.</p>
+
+  <h3>Bedrock Edition: LevelDB</h3>
+  <p>Bedrock Edition uses Google's LevelDB instead of the Anvil format. LevelDB is a key-value store that handles its own compaction and caching. Chunk data is stored as key-value pairs where the key encodes chunk coordinates and the value contains the serialized block/entity data. This approach is better suited to the resource-constrained environments (mobile, consoles) where Bedrock runs.</p>
+
+  <div class="info-grid">
+    <div class="info-card full c-purple">
+      <h4>Anvil Format Anatomy</h4>
+      <p>Region file <code>r.0.0.mca</code> contains chunks (0,0) through (31,31). Header: 4KB offset table + 4KB timestamp table. Body: compressed NBT chunk data in 4KB sectors. Each chunk's NBT contains: <strong>sections[]</strong> (block palettes + packed states), <strong>block_entities[]</strong> (furnaces, chests, etc.), <strong>Heightmaps</strong> (WORLD_SURFACE, OCEAN_FLOOR, etc.), <strong>structures</strong> (references to generated features), <strong>Status</strong> (generation progress: empty through full), <strong>blending_data</strong> (for upgrading old chunks to new height format).</p>
+    </div>
+  </div>
+
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <h3>The Single-Thread Bottleneck</h3>
+  <p>Minecraft's performance is CPU-bound on a single core. Adding more CPU cores does not help the main game loop. Adding more RAM beyond what is needed for loaded chunks provides diminishing returns. The single most impactful hardware upgrade for a Minecraft server is a CPU with the highest single-thread performance available.</p>
+  <p>The main tick loop processes everything sequentially: it ticks every loaded entity (mobs, dropped items, minecarts), processes block updates (water flow, fire spread, gravity), runs scheduled tick events (redstone, growing crops), and handles player actions (movement validation, block breaking, chat). If any of these operations takes too long, the server cannot complete its tick within the 50ms budget and TPS drops below 20.</p>
+
+  <h3>Common Performance Killers</h3>
+  <p><strong>Chunk generation:</strong> Generating new terrain in real time is extremely CPU-intensive. Servers that allow free exploration will experience TPS drops when players venture into ungenerated areas. The standard mitigation is pre-generating the world before players arrive.</p>
+  <p><strong>Entity accumulation:</strong> Hundreds of mobs packed into a small area (like a spawner farm) create significant per-tick overhead. Each entity needs pathfinding, AI, and collision checks. Paper mitigates this with entity activation ranges: entities more than 32 blocks from a player tick at reduced frequency or not at all.</p>
+  <p><strong>Redstone machines:</strong> Complex redstone circuits generate cascading block updates. A single redstone pulse can trigger hundreds of block updates that all process within the same tick. The redstone system uses a two-phase tick (produce and consume) that spans 2 game ticks, and the maximum number of scheduled ticks per game tick is 65,536.</p>
+  <p><strong>Tile entities:</strong> Hoppers, furnaces, brewstands, and other block entities run their logic every tick. A storage system with 500 hoppers adds 500 tile entity ticks per game tick. This is why large hopper-based sorting systems are notorious for tanking server performance.</p>
+
+  <h3>Optimization Layers</h3>
+  <p>The community has built multiple optimization layers. <strong>Paper</strong> optimizes vanilla code paths (async chunk I/O, entity activation ranges, hoppper optimization). <strong>Lithium</strong> (Fabric mod) rewrites vanilla algorithms with faster implementations (pathfinding, block tick scheduling, entity collisions). <strong>Spark</strong> is a profiling tool that generates web-based reports showing exactly what is consuming tick time. The <code>sync-chunk-writes</code> option in server.properties (disabled by default in Paper) moves chunk saving off the main thread, preventing disk I/O from blocking the tick loop.</p>
+
+  <h3>Simulation Distance vs. View Distance</h3>
+  <p>Since Java 1.18, servers can configure simulation distance and view distance separately. View distance controls how many chunks are sent to the client for rendering. Simulation distance controls how many chunks are actively ticked (entities move, crops grow, redstone operates). Setting view distance to 12 and simulation distance to 4 lets players see far while only ticking a small area, dramatically reducing per-player server load.</p>
+
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>The Tick Loop in Detail</h3>
+  <p>Every 50ms, the server executes a single game tick. The order of operations within a tick is deterministic and fixed. First, the server processes incoming network packets (player movements, block interactions). Then it ticks the world: for each loaded chunk within simulation distance, the server runs scheduled tick events, random block ticks (3 per subchunk by default), and entity ticks. Then it processes chunk loading/unloading. Finally, it sends outbound packets to players (state updates, chunk data). If the total time exceeds 50ms, the server falls behind and the next tick starts immediately, causing TPS to drop.</p>
+  <p>Random ticks are the mechanism behind organic world changes. Each tick, for each loaded chunk, the server selects 3 random block positions per subchunk (configurable via <code>randomTickSpeed</code> gamerule). If the selected block responds to random ticks (wheat grows, leaves decay, fire spreads), it runs that block's tick logic. Most random tick targets are air blocks, which do nothing. This randomized approach distributes the cost of organic simulation across many ticks rather than doing it all at once.</p>
+
+  <h3>Forge and Fabric: The Mod Ecosystem</h3>
+  <p>Forge (2011) and Fabric (2018) take fundamentally different approaches to modding. Forge uses a heavyweight event bus system with extensive hooks into vanilla code, providing a stable(ish) API for mods. Fabric uses lightweight mixins that inject code directly into vanilla classes at load time, providing lower overhead but requiring more careful compatibility management between mods. NeoForge (2023) is a community fork of Forge that modernizes the API while maintaining compatibility with the Forge ecosystem.</p>
+  <p>Mods modify the server at the code level: adding new blocks, entities, dimensions, crafting recipes, world generators, or entirely new game mechanics. Unlike plugins (which work through an API layer), mods require matching installations on both client and server. This is why modded Minecraft is typically played in curated modpacks where everyone installs the same set of mods.</p>
+
+  <h3>Spawn Chunks and Always-Loaded Regions</h3>
+  <p>A special set of chunks around the world spawn point stays loaded at all times, even when no players are nearby. The central spawn chunks tick at the entity-ticking level, meaning mobs move, redstone operates, and farms produce output continuously. Technical players exploit this by building their most important automated farms (iron farms, crop farms, XP grinders) in the spawn chunks so they run 24/7 as long as the server is up.</p>
+
+  <h3>Bedrock Marketplace</h3>
+  <p>Bedrock Edition has an official marketplace where creators sell maps, skins, texture packs, and mash-up packs for Minecoins (Bedrock's virtual currency). Unlike Java's free modding ecosystem, Bedrock's marketplace is a curated, monetized storefront. Creators must apply and be accepted into the Minecraft Partner Program. Content goes through a review process before listing. This is a fundamentally different economic model: Java monetizes through server hosting and donations, while Bedrock monetizes through a centralized content marketplace.</p>
+
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <span class="year">2009</span>
+      <span class="desc"><strong>Minecraft Classic multiplayer.</strong> The first multiplayer implementation, basic client-server with no persistent world saving. Custom Creative-mode only.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2010</span>
+      <span class="desc"><strong>Survival Multiplayer (SMP) added.</strong> Server-authoritative survival gameplay. World persistence through the Alpha/Infdev save format (later replaced by MCRegion, then Anvil).</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2011</span>
+      <span class="desc"><strong>Bukkit project starts.</strong> Community creates the CraftBukkit server wrapper, introducing the plugin API that will define the Minecraft server ecosystem for the next decade.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2012</span>
+      <span class="desc"><strong>Anvil file format and Spigot.</strong> MCRegion replaced by Anvil (.mca), supporting block IDs up to 4096. Spigot forks CraftBukkit with performance optimizations. BungeeCord proxy created.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2014</span>
+      <span class="desc"><strong>Microsoft acquires Mojang for $2.5 billion.</strong> Pocket Edition (later renamed Bedrock) grows alongside Java Edition. Mojang authentication begins migrating toward Microsoft accounts.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2016</span>
+      <span class="desc"><strong>Paper project forks Spigot.</strong> Focuses on aggressive performance optimization and bug fixes. Becomes the de facto standard for production plugin servers.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2018</span>
+      <span class="desc"><strong>Fabric loader launches.</strong> Lightweight modding platform as an alternative to Forge. Uses mixin-based injection instead of Forge's event bus. Velocity proxy project starts.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2021</span>
+      <span class="desc"><strong>1.18: Caves and Cliffs Part 2.</strong> World height doubled to 384 blocks (-64 to +320). Chunk format rewritten to support variable height sections. Terrain generation completely overhauled. Major performance implications for servers.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2023</span>
+      <span class="desc"><strong>NeoForge splits from Forge.</strong> Community fork after leadership dispute. Paper 1.20.5 ships with Mojang mappings by default, ending the Spigot reobfuscation era. Folia introduces regionized multithreading.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2024</span>
+      <span class="desc"><strong>Mojang account migration complete.</strong> All players now use Microsoft accounts. Legacy Yggdrasil authentication deprecated. Cross-play between Bedrock platforms continues expanding.</span>
+    </div>
+  </div>
+
+  <div class="callout c-purple">
+    <div class="callout-title">Folia: The Multithreaded Future?</div>
+    <p>Folia (by the PaperMC team) is the most ambitious attempt to break Minecraft's single-threaded constraint. It divides the world into independent regions that tick in parallel on separate threads. Two players on opposite sides of the world no longer share a tick budget. The catch: Folia breaks nearly all existing plugins because the Bukkit API assumes single-threaded access to the world. Plugins must be rewritten to be thread-safe. This makes Folia a clean break from the existing ecosystem, and adoption has been slow. But for servers with large worlds and spread-out player bases, the potential performance gains are enormous.</p>
+  </div>
+
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://minecraft.wiki/w/Tick">Tick - Minecraft Wiki</a>
+        <div class="source-desc">Official wiki documentation on game ticks, random ticks, redstone ticks, and the 20 TPS system.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://minecraft.wiki/w/Chunk_format">Chunk Format - Minecraft Wiki</a>
+        <div class="source-desc">Complete documentation of the Anvil chunk format, NBT structure, palette system, and section layout.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://minecraft.wiki/w/Region_file_format">Region File Format - Minecraft Wiki</a>
+        <div class="source-desc">Technical specification for .mca region files including header structure, sector allocation, and compression.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://wiki.bedrock.dev/servers/raknet">RakNet Protocol - Bedrock Wiki</a>
+        <div class="source-desc">Community documentation of Bedrock Edition's RakNet implementation, MTU discovery, and packet structure.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://docs.papermc.io/paper/dev/internals/">Paper Internals Documentation</a>
+        <div class="source-desc">PaperMC docs on Mojang mappings, NMS usage, and the transition away from Spigot reobfuscation.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://papermc.io/software/velocity">Velocity - PaperMC</a>
+        <div class="source-desc">Official Velocity documentation covering modern forwarding, HMAC signing, and performance benchmarks vs. BungeeCord.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info">
+        <a href="https://hypixel.net/threads/simplified-hypixel-network-architecture.4117196/">Simplified Hypixel Network Architecture</a>
+        <div class="source-desc">Hypixel forums community analysis of the network's proxy, game server, and state management architecture.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://gameteam.io/blog/java-edition-vs-bedrock-server-technical-differences/">Java Edition vs Bedrock Server: Technical Differences</a>
+        <div class="source-desc">Detailed comparison of JVM vs. C++ runtimes, TCP vs. RakNet, RAM usage, and modding capabilities.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://minecraft.wiki/w/Microsoft_authentication">Microsoft Authentication - Minecraft Wiki</a>
+        <div class="source-desc">Documentation of the OAuth2/Xbox Live/XSTS token chain used for Minecraft authentication.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.spigotmc.org/wiki/general-introduction-of-packets-nms/">General Introduction of Packets and NMS - SpigotMC</a>
+        <div class="source-desc">SpigotMC wiki guide to the packet system, NMS classes, version-specific mappings, and reflection approaches.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="game-nav">
+    <a href="roblox.html"><span class="dir">Previous</span><span class="name">Roblox</span></a>
+    <a class="next" href="second-life.html"><span class="dir">Next</span><span class="name">Second Life</span></a>
+  </div>
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

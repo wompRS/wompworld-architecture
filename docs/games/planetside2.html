@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlanetSide 2 - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / PlanetSide 2</div>
+  <h1>PlanetSide 2</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Single-Shard Continents</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">MMOFPS</span>
+  </div>
+  <p class="lead">The only MMOFPS to consistently sustain battles with hundreds of simultaneous players on a single continent, built on Sony Online Entertainment's proprietary ForgeLight engine with client-side hit detection as the defining architectural trade-off.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Rogue Planet / Toadman</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2012</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~2,000/continent</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">ForgeLight</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">~10-20 Hz</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Per-Continent Shards</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <h2 id="overview">Overview</h2>
+  <p>PlanetSide 2 is a free-to-play massively multiplayer online first-person shooter where three factions fight for territorial control across continents that are each 64 km² in size. The game's defining technical achievement is supporting battles with hundreds of players in a single area on a single server, something no other FPS has matched at the same scale in a persistent world.</p>
+  <p>The game runs on <strong>ForgeLight</strong>, a proprietary MMO engine developed by Sony Online Entertainment (SOE, later Daybreak Game Company). ForgeLight was built specifically to handle massive player counts without traditional zone boundaries. Players traverse the entire continent seamlessly with no loading screens. The engine was also used for H1Z1, Landmark, and the cancelled EverQuest Next.</p>
+  <p>The critical architectural decision that makes PlanetSide 2 possible is <strong>client-side hit detection</strong>. In a game where the server is tracking the positions of over a thousand players plus vehicles, grenades, deployables, and construction objects, there is simply no way to also validate every bullet trajectory server-side. The client reports hits, the server trusts those reports (within anti-cheat bounds), and health values are managed server-side. This hybrid model makes the shooter gameplay feel responsive even in massive battles, at the cost of "dying behind cover" and vulnerability to high-latency exploitation.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>ForgeLight Engine</h4>
+      <p>A proprietary engine designed for MMO-scale player counts. Supports seamless worlds without zone loading screens. Originally DirectX 9 only, upgraded to DirectX 11 in 2019 for a measured 20% FPS improvement. Uses Nvidia PhysX for vehicle and environmental physics. Primarily single-threaded at launch, with threading improvements for the PS4 port.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Client-Side Hit Detection</h4>
+      <p>Gunfire hits are determined by the shooter's client. If you shot someone on your screen, the server accepts the damage. This means you can be killed after reaching cover, because on the attacker's screen you were still exposed 100-200ms ago. Vehicle ramming/roadkill damage is the exception, calculated on the victim's client instead.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Lattice Territory System</h4>
+      <p>Replaced the original hex influence system, which allowed "ghost capping" of empty bases. The lattice restricts which bases can be attacked based on adjacency links, forcing factions to push along defined front lines. Average adjacency dropped from ~6 connections to ~3, concentrating fights at predictable chokepoints.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Three-Faction Warfare</h4>
+      <p>Three permanent factions (Terran Republic, New Conglomerate, Vanu Sovereignty) plus the neutral Nanite Systems Operatives. The three-way dynamic prevents stalemates and creates shifting alliances. Population balance is enforced through continent queues that restrict overpopulated factions from joining.</p>
+    </div>
+  </div>
+
+  <!-- DIAGRAM -->
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 860 640">
+      <!-- BACKGROUND GROUPS -->
+      <rect x="10" y="10" width="840" height="90" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="35" class="group-label">PLAYERS (HUNDREDS PER CONTINENT)</text>
+
+      <rect x="10" y="120" width="840" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="145" class="group-label">LOGIN &amp; ROUTING</text>
+
+      <rect x="10" y="240" width="840" height="170" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="265" class="group-label">CONTINENT SERVERS (ONE PER OPEN CONTINENT)</text>
+
+      <rect x="10" y="430" width="540" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="455" class="group-label">PERSISTENCE &amp; STATE</text>
+
+      <rect x="570" y="430" width="280" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="590" y="455" class="group-label">GAME SYSTEMS</text>
+
+      <rect x="10" y="550" width="840" height="80" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="575" class="group-label">POPULATION &amp; BALANCE MANAGEMENT</text>
+
+      <!-- PLAYERS -->
+      <rect x="50" y="45" width="100" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="100" y="67" text-anchor="middle" class="box-label">TR Players</text>
+
+      <rect x="200" y="45" width="100" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="250" y="67" text-anchor="middle" class="box-label">NC Players</text>
+
+      <rect x="350" y="45" width="100" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="400" y="67" text-anchor="middle" class="box-label">VS Players</text>
+
+      <rect x="510" y="45" width="100" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="560" y="67" text-anchor="middle" class="box-label">NSO Players</text>
+
+      <rect x="670" y="45" width="140" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="740" y="67" text-anchor="middle" class="box-label">Spectators</text>
+
+      <!-- LOGIN / AUTH -->
+      <rect x="80" y="155" width="160" height="44" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5" class="box"/>
+      <text x="160" y="175" text-anchor="middle" class="box-label">Login / Auth Server</text>
+      <text x="160" y="189" text-anchor="middle" class="box-sub">Daybreak Account</text>
+
+      <!-- CONTINENT ROUTER -->
+      <polygon points="400,155 460,177 400,199 340,177" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="400" y="180" text-anchor="middle" class="box-label">Continent Router</text>
+
+      <!-- FACTION BALANCE -->
+      <rect x="540" y="155" width="160" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="620" y="175" text-anchor="middle" class="box-label">Population Queue</text>
+      <text x="620" y="189" text-anchor="middle" class="box-sub">Faction Balance Check</text>
+
+      <!-- CONTINENT SERVERS -->
+      <rect x="30" y="285" width="190" height="60" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="125" y="310" text-anchor="middle" class="box-label">Indar (64 km²)</text>
+      <text x="125" y="327" text-anchor="middle" class="box-sub">Lattice, Captures, Vehicles</text>
+
+      <rect x="235" y="285" width="190" height="60" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="330" y="310" text-anchor="middle" class="box-label">Esamir (64 km²)</text>
+      <text x="330" y="327" text-anchor="middle" class="box-sub">Lattice, Captures, Vehicles</text>
+
+      <rect x="440" y="285" width="190" height="60" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="535" y="310" text-anchor="middle" class="box-label">Amerish (64 km²)</text>
+      <text x="535" y="327" text-anchor="middle" class="box-sub">Lattice, Captures, Vehicles</text>
+
+      <rect x="645" y="285" width="190" height="60" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="740" y="310" text-anchor="middle" class="box-label">Hossin / Oshur</text>
+      <text x="740" y="327" text-anchor="middle" class="box-sub">Rotational Unlock</text>
+
+      <!-- Alert System -->
+      <rect x="280" y="365" width="300" height="36" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="1.5" class="box"/>
+      <text x="430" y="387" text-anchor="middle" class="box-label">Alert &amp; Continent Lock Controller</text>
+
+      <!-- PERSISTENCE -->
+      <path d="M50,470 L50,475 Q50,485 85,485 L125,485 Q160,485 160,475 L160,470 L160,505 Q160,515 125,515 L85,515 Q50,515 50,505 Z" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="105" cy="470" rx="55" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="105" y="497" text-anchor="middle" class="box-label">Player DB</text>
+
+      <path d="M200,470 L200,475 Q200,485 235,485 L275,485 Q310,485 310,475 L310,470 L310,505 Q310,515 275,515 L235,515 Q200,515 200,505 Z" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="255" cy="470" rx="55" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="255" y="497" text-anchor="middle" class="box-label">Territory State</text>
+
+      <rect x="350" y="470" width="170" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="435" y="490" text-anchor="middle" class="box-label">Construction State</text>
+      <text x="435" y="504" text-anchor="middle" class="box-sub">Player-Built Bases</text>
+
+      <!-- GAME SYSTEMS -->
+      <rect x="590" y="470" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="1.5" class="box"/>
+      <text x="650" y="490" text-anchor="middle" class="box-label">Nanite System</text>
+      <text x="650" y="504" text-anchor="middle" class="box-sub">Resource Ticks</text>
+
+      <rect x="720" y="470" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="1.5" class="box"/>
+      <text x="780" y="490" text-anchor="middle" class="box-label">Outfit Wars</text>
+      <text x="780" y="504" text-anchor="middle" class="box-sub">Guild Scoring</text>
+
+      <!-- POPULATION MANAGEMENT -->
+      <rect x="50" y="585" width="180" height="30" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="140" y="604" text-anchor="middle" class="box-label">Continent Queue Manager</text>
+
+      <rect x="260" y="585" width="180" height="30" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="350" y="604" text-anchor="middle" class="box-label">Spawn / Redeploy Logic</text>
+
+      <rect x="470" y="585" width="180" height="30" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="560" y="604" text-anchor="middle" class="box-label">Render Priority System</text>
+
+      <rect x="680" y="585" width="140" height="30" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="750" y="604" text-anchor="middle" class="box-label">Koltyr (Low Pop)</text>
+
+      <!-- ARROWS -->
+      <!-- Players to Login -->
+      <line x1="100" y1="81" x2="140" y2="155" class="arrow"/>
+      <line x1="250" y1="81" x2="170" y2="155" class="arrow"/>
+      <text x="110" y="120" class="arrow-label">AUTH</text>
+
+      <!-- Players to Router -->
+      <line x1="400" y1="81" x2="400" y2="155" class="arrow"/>
+      <line x1="560" y1="81" x2="420" y2="158" class="arrow"/>
+      <text x="430" y="120" class="arrow-label">DEPLOY</text>
+
+      <!-- Login to Router -->
+      <line x1="240" y1="177" x2="340" y2="177" class="arrow"/>
+      <text x="285" y="170" class="arrow-label">SESSION</text>
+
+      <!-- Router to Pop Queue -->
+      <line x1="460" y1="177" x2="540" y2="177" class="arrow"/>
+      <text x="498" y="170" class="arrow-label">CHECK</text>
+
+      <!-- Router to Continents -->
+      <line x1="380" y1="199" x2="125" y2="285" class="arrow"/>
+      <line x1="390" y1="199" x2="330" y2="285" class="arrow"/>
+      <line x1="410" y1="199" x2="535" y2="285" class="arrow"/>
+      <line x1="420" y1="199" x2="740" y2="285" class="arrow"/>
+
+      <!-- Continents to Alert Controller -->
+      <line x1="125" y1="345" x2="330" y2="370" class="arrow"/>
+      <line x1="330" y1="345" x2="380" y2="370" class="arrow"/>
+      <line x1="535" y1="345" x2="480" y2="370" class="arrow"/>
+      <line x1="740" y1="345" x2="530" y2="370" class="arrow"/>
+      <text x="220" y="365" class="arrow-label">TERRITORY %</text>
+
+      <!-- Continents to DBs -->
+      <line x1="125" y1="345" x2="105" y2="458" class="arrow"/>
+      <line x1="330" y1="345" x2="255" y2="458" class="arrow"/>
+      <line x1="535" y1="345" x2="435" y2="470" class="arrow"/>
+      <text x="70" y="405" class="arrow-label">PERSIST</text>
+
+      <!-- Continents to Game Systems -->
+      <line x1="740" y1="345" x2="650" y2="470" class="arrow"/>
+      <line x1="740" y1="345" x2="780" y2="470" class="arrow"/>
+
+    </svg>
+    <div class="diagram-caption">PlanetSide 2's continent-based architecture: each open continent runs on a dedicated server, with population balance enforced through faction queues and continent locking</div>
+  </div>
+
+  <!-- INFRASTRUCTURE -->
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>PlanetSide 2's server model assigns one dedicated server process per open continent. Each continent (Indar, Esamir, Amerish, Hossin, Oshur) is a 64 km² seamless map with no internal zone boundaries. The server tracks every player position, vehicle position, projectile, deployable item, and construction object within that continent simultaneously.</p>
+
+  <h3>Server Names and History</h3>
+  <p>At launch in 2012, PlanetSide 2 had multiple named servers per region. Over the years, declining population led to server merges. In NA, Connery (US West) and Emerald (US East) were the two remaining servers until their merger in April 2025. In EU, Cobalt and Miller merged earlier. The mergers consolidated fragmented populations to restore the massive-scale battles the game was designed around.</p>
+
+  <h3>Continental Population Caps</h3>
+  <p>The game launched with a maximum of 2,000 players per continent. This cap has been progressively reduced over the years, dropping to around 900, then further to roughly 300 per faction (about 900 total). The reductions were driven by server performance: the more players on a continent, the worse the server tick rate and the more pronounced desync becomes. The current caps represent a balance between enabling large battles and keeping the server responsive.</p>
+
+  <h3>Continent Locking and Rotation</h3>
+  <p>Not all continents are open simultaneously. When a faction wins a Meltdown Alert, the continent locks under that faction's control. Locked continents remain closed until the previous continent in the rotation is itself locked, or until the server's global population exceeds 800 players and another continent needs to open. When population drops below 200, the small continent Koltyr enters the lock rotation.</p>
+
+  <div class="callout c-green">
+    <div class="callout-title">Guinness World Record: Largest Online FPS Battle</div>
+    <p>PlanetSide 2 holds the Guinness World Record for most players in a single online FPS battle. The original record of 1,158 players was set in January 2015 on the Hossin continent. In November 2022, as part of the game's 10th anniversary, this was broken twice in a single weekend: Emerald hit 1,228, then Connery reached 1,241. A peak of 1,530 was observed before a server crash.</p>
+  </div>
+
+  <!-- NETWORKING -->
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>PlanetSide 2's networking is built around a fundamental constraint: with 900+ players on a continent, plus hundreds of vehicles, thousands of deployables, and construction objects, server-side hit detection for every bullet is computationally impossible. The solution is a hybrid model where the client handles the most expensive calculation (hit detection) while the server manages authoritative state for everything else.</p>
+
+  <h3>Client-Side Hit Detection: How It Works</h3>
+  <p>When you fire a weapon, your client determines whether the bullet hit another player based on your local view of the game state. If the client determines a hit, it sends a damage report to the server. The server validates the report against anti-cheat heuristics (checking for impossible damage rates, distances, etc.) and applies the damage to the target's health pool, which is tracked server-side.</p>
+  <p>Because every player sees a version of the game state that is 100-200ms behind reality (network latency plus server processing time), this creates the notorious "killed behind cover" effect. On the attacker's screen, you were still exposed. On your screen, you had already reached safety. The attacker's client wins because it reported the hit first.</p>
+
+  <h3>The Peeker's Advantage</h3>
+  <p>Client-side hit detection creates an inherent advantage for aggressive play. When you peek a corner, your client sees the enemy's position from 200ms ago, but the enemy's client still shows you behind the wall. You get a head start on seeing and shooting them. This incentivizes pushing rather than holding positions, which aligns with PlanetSide 2's offensive-focused gameplay design but frustrates defensive players.</p>
+
+  <table class="proto">
+    <thead>
+      <tr><th>System</th><th>Authority</th><th>Update Rate</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Player Position</td><td>Client-reported, server-tracked</td><td>~10-20 Hz</td><td>Server aggregates and broadcasts to nearby players</td></tr>
+      <tr><td>Gunfire Hit Detection</td><td>Client-authoritative</td><td>Per shot</td><td>Client reports hits; server validates and applies damage</td></tr>
+      <tr><td>Vehicle Ramming</td><td>Victim's client</td><td>Per collision</td><td>Exception to the shooter-wins rule</td></tr>
+      <tr><td>Health / Shield</td><td>Server-authoritative</td><td>~10-20 Hz</td><td>Damage applied server-side; no client trust for HP values</td></tr>
+      <tr><td>Territory Capture</td><td>Server-authoritative</td><td>Per tick</td><td>Capture progress calculated from player presence at points</td></tr>
+      <tr><td>Vehicle Physics</td><td>Client-predicted</td><td>PhysX local</td><td>Nvidia PhysX runs locally; server validates position</td></tr>
+      <tr><td>Construction</td><td>Server-authoritative</td><td>On placement</td><td>Blueprints validated against no-build zones and Cortium</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Render Distance vs. Server State</h3>
+  <p>The server always tracks all entities on the continent, but the client does not render all of them. Terrain render distance caps at roughly 2,000-2,500 meters depending on the continent. Player render distance is dynamic: in large battles, the game reduces the number of rendered players based on a threat-priority system. The closest and most dangerous players render first; distant or non-threatening players may not render at all. This means the server knows about enemies your client cannot see, and vice versa.</p>
+
+  <h3>Tick Rate Reality</h3>
+  <p>The server update rate runs in the 10-20 Hz range to accommodate the massive player count. This adds 50-100ms of latency on top of network ping. Combined with client-side hit detection, total combat latency can reach 200-400ms in large fights. Former Creative Director Matt Higby acknowledged this challenge, noting that PlanetSide 2 draws on over a decade of networking experience but faces constraints unique to its scale.</p>
+
+  <!-- DATA -->
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>PlanetSide 2 persists player progression data (certifications, ISO-4, merit, unlocks, loadouts, directives, outfit membership) across sessions in a central database. The more interesting persistence challenge is the continent state itself, which changes continuously as factions capture and lose territory.</p>
+
+  <h3>Territory State Persistence</h3>
+  <p>Every facility on every continent has a capture state: which faction owns it, how many capture points are flipped, and what the current capture timer reads. This state persists through server restarts and continent unlocks. When a locked continent reopens, territory ownership reverts to warpgate defaults, but the lattice structure and facility types remain fixed.</p>
+
+  <h3>The Lattice System (Server-Side)</h3>
+  <p>The lattice is a graph of links between facilities that determines which bases can be attacked. A facility can only be captured if your faction controls at least one adjacent facility via a lattice link, and that adjacent facility must not have any capture points flipped by an enemy. This creates clear front lines and prevents the "ghost capping" problem of the original hex system.</p>
+  <p>The lattice is enforced entirely server-side. The server checks lattice adjacency when players attempt to flip capture points. If your faction has no valid lattice link, the capture point simply will not respond. This was refined in the 2023 "Love Letter" update, which fixed an exploit where a single player could flip a point in a 4-point base and indefinitely block the capture of the next base in the lattice.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-amber">
+      <h4>Nanite Resource System</h4>
+      <p>Players accumulate Nanites at 50 per minute (capped at 750) while active on a continent. Nanites are spent to spawn vehicles, pull MAX suits, and buy consumables like grenades. The cost system prevents vehicle spam: a Lightning tank costs 300 Nanites, meaning a player can pull one every 6 minutes at most. Nanite generation is server-timed and cannot be exploited client-side.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Outfit Resources &amp; War Assets</h4>
+      <p>Outfits (guilds) earn Auraxium, Synthium, and Polystellarite by holding bases during alerts. These resources are spent to craft War Assets like Orbital Strikes (75 Polystellarite, 15 minutes to craft) or the Colossus heavy tank (15 Polystellarite, 30 minutes). Polystellarite is the rarest, earned only from holding center-map bases like The Crown or through expeditions.</p>
+    </div>
+    <div class="info-card c-blue">
+      <h4>Construction System</h4>
+      <p>Players mine Cortium crystals (2,000 to 35,000 units each) using ANT vehicles, then deploy and build fortifications from blueprints. Constructed bases run on Cortium stored in silos. Vehicle terminals at constructed bases spend Cortium instead of player Nanites. No-construction zones around existing facilities prevent spam. Cortium drain, structure health, and module states are all server-tracked.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Lattice Cutoff Mechanics</h4>
+      <p>When a base loses all lattice connections to a friendly warpgate, it becomes "cut off." Cut-off bases do not count toward territory control during alerts, cannot be targeted by the Reinforcements Needed spawn system, and cannot be spawned at unless you are already within that territory. This creates strategic depth around severing supply lines.</p>
+    </div>
+  </div>
+
+  <!-- SCALING -->
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <p>PlanetSide 2's scaling is defined by a hard ceiling: one server per continent, with a fixed population cap. There is no server meshing, no dynamic load distribution, and no way to add more servers to handle a crowded continent. The game scales by opening more continents and distributing players across them.</p>
+
+  <h3>Population Balance Enforcement</h3>
+  <p>The game prevents faction imbalance through continent queues. If your faction already has a disproportionate share of the continent's population, you cannot deploy there until players from other factions join or players from your faction leave. This is a blunt but necessary tool to prevent one faction from overwhelming the others through sheer numbers.</p>
+
+  <h3>Spawn and Redeploy Mechanics</h3>
+  <p>The spawn system is the game's primary tool for directing player flow. The "Reinforcements Needed" system highlights bases under attack or with favorable fight conditions. Players can redeploy (essentially suicide and respawn) to any connected, friendly base. The system deliberately limits spawn options to prevent instant-response to every threat, creating strategic trade-offs about where to commit forces.</p>
+
+  <h3>Alert System and Continent Locking</h3>
+  <p>Meltdown Alerts trigger when any faction reaches 41% territory control after warpgates charge. The alert lasts 90 minutes, and the faction with the most territory at the end wins. The winning faction locks the continent, receives cert and ISO-4 rewards, and the game opens the next continent in rotation. Unstable Alerts trigger on low-population continents (under 150 players), run for only 45 minutes, and offer reduced rewards.</p>
+
+  <table class="proto">
+    <thead>
+      <tr><th>Population Scenario</th><th>Continent Behavior</th><th>Player Experience</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Under 200 globally</td><td>Koltyr enters rotation</td><td>Small-scale fights on compact map</td></tr>
+      <tr><td>200-800 globally</td><td>One continent open</td><td>Concentrated fights, good density</td></tr>
+      <tr><td>800+ globally</td><td>Additional continents unlock</td><td>Players spread across multiple maps</td></tr>
+      <tr><td>Continent at pop cap (~900)</td><td>Faction queues activate</td><td>Overpopulated factions must wait or go elsewhere</td></tr>
+      <tr><td>World Record event (~1,500)</td><td>Server strain, potential crash</td><td>Severe FPS drops, desync, possible crash</td></tr>
+    </tbody>
+  </table>
+
+  <!-- DEEP DIVES -->
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>From Hex to Lattice: A Server-Side Redesign</h3>
+  <p>PlanetSide 2 launched with a hex-based territory system where any facility adjacent to friendly territory could be captured. This created a massive ghost-capping problem: organized groups would avoid fights entirely, roaming the map and capturing empty bases while defenders chased them. The server had to track capture attempts at every hex boundary, and the strategic gameplay suffered.</p>
+  <p>The lattice system, introduced in Game Update 9, replaced the hex adjacency with a curated graph of connections. Each facility has 2-5 lattice links (down from an average of 6 hex neighbors). The server validates every capture attempt against the lattice graph. This reduced the surface area of possible attacks, concentrated player populations at predictable front lines, and dramatically improved fight quality. From a server perspective, the lattice check is trivially cheap compared to the hex influence calculations it replaced.</p>
+
+  <h3>Vehicle Spawning and Physics</h3>
+  <p>Vehicles are spawned at terminals and cost Nanites. Each vehicle has a defined health pool, weapon loadout, and physics model running on Nvidia PhysX. Aircraft (ESFs, Liberators, Galaxies) and ground vehicles (Lightnings, Prowlers, Magriders, Vanguards, Sunderers) coexist in the same airspace and terrain. The server tracks vehicle positions and validates them against the physics simulation.</p>
+  <p>Vehicle spawning at player-constructed bases uses a different resource: Cortium from the base's silo rather than the player's Nanites. A Flash costs 50 Cortium, a Lightning costs 300, and an ESF costs 400. This creates a secondary economy around construction that is entirely Cortium-funded and silo-managed.</p>
+
+  <h3>The DX11 Upgrade</h3>
+  <p>In 2019, PlanetSide 2 received a renderer upgrade from DirectX 9 to DirectX 11. This was announced on the game's 6th anniversary and was purely a performance upgrade: everything was intended to look and play identically, just with better frame rates. Daybreak measured a 20% FPS increase across compatible hardware. The upgrade also enabled multi-threaded rendering, which helped CPU-bound scenarios (large battles), though the game remained primarily CPU-limited. File sizes were reduced through restructured asset packing, and additional encryption was added for cheat prevention.</p>
+  <p>The DX11 upgrade had no impact on server-side processing or networking. It was entirely a client rendering change. However, by improving client FPS in large battles, it indirectly improved the player experience during the scenarios where server tick rate was already degraded.</p>
+
+  <h3>The Construction System's Server Load</h3>
+  <p>The construction system added a significant persistent state burden to continent servers. Each player-built structure has health, a Cortium power cost, and a position that must be validated against no-construction zones. Silos track Cortium levels. Modules (vehicle terminals, repair pads, sky shields, pain spires) track power state and operational status. All of this persists as long as the structures stand, adding entities that the server must track alongside players and vehicles.</p>
+  <p>Infiltrators can hack vehicle terminals at constructed bases, but only if the silo has over 20,000 Cortium (a threshold designed to prevent empty-base exploits). All hacking state is server-validated.</p>
+
+  <h3>Nanite Systems Operatives (NSO)</h3>
+  <p>NSO is a fourth "faction" that functions as a population balance tool. NSO players are automatically assigned to the faction with the lowest population on their continent. This helps even out fights without requiring dedicated population controls. From a server perspective, NSO characters require dynamic faction assignment that changes when players switch continents or when population shifts.</p>
+
+  <h3>Developer Transitions</h3>
+  <p>PlanetSide 2 has changed hands multiple times. It launched under Sony Online Entertainment (SOE), which was sold and became Daybreak Game Company. Daybreak spun off the PlanetSide team into Rogue Planet Games. Most recently, development has been attributed to Toadman Interactive. Through each transition, the server infrastructure and ForgeLight engine have remained fundamentally unchanged, with incremental improvements rather than wholesale replacement.</p>
+
+  <!-- EVOLUTION -->
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="year">2012</div>
+      <div class="desc"><strong>PlanetSide 2 launches.</strong> SOE deploys ForgeLight engine with DX9 renderer. Hex-based territory system. 2,000 player continent cap. Multiple named servers per region.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2013</div>
+      <div class="desc"><strong>Lattice system replaces hex territories (GU9).</strong> Server-enforced adjacency graph eliminates ghost capping. Fight quality improves dramatically as populations concentrate along front lines.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2014</div>
+      <div class="desc"><strong>Continent locking and alert system introduced.</strong> Hossin continent added. Server merge wave consolidates underpopulated servers (Mattherson + Waterson = Emerald).</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2015</div>
+      <div class="desc"><strong>Guinness World Record set.</strong> 1,158 players in a single FPS battle on Hossin. SOE becomes Daybreak Game Company after acquisition by Columbus Nova.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2016</div>
+      <div class="desc"><strong>Construction system launched.</strong> Cortium mining, player-built bases, ANT vehicles. Adds significant persistent state to continent servers.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2019</div>
+      <div class="desc"><strong>DX11 renderer upgrade.</strong> 20% FPS improvement, multi-threaded rendering, restructured asset packing. No server-side changes.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2020</div>
+      <div class="desc"><strong>Escalation update and COVID surge.</strong> Outfit Wars, Bastion Fleet Carriers, War Assets system. Player counts spike to highest levels since 2014. Unofficial record of 1,283 players in a single battle.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2022</div>
+      <div class="desc"><strong>10th Anniversary and new world records.</strong> Oshur continent added. Record broken twice: 1,228 on Emerald, then 1,241 on Connery. Peak of 1,530 observed before server crash. Continent population caps reduced.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2023</div>
+      <div class="desc"><strong>"Love Letter" update.</strong> Lattice exploit fixes, Capture the Conduit mode, new profiling zones for server performance monitoring. Development transitions through Rogue Planet Games.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2025</div>
+      <div class="desc"><strong>Server merges complete.</strong> EU: Cobalt + Miller merged. NA: Connery + Emerald merged in April. Populations consolidated. Development under Toadman Interactive. Continent cap settled around 900 total.</div>
+    </div>
+  </div>
+
+  <!-- SOURCES -->
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://en.wikipedia.org/wiki/PlanetSide_2" target="_blank">PlanetSide 2 - Wikipedia</a>
+        <div class="source-desc">General overview of the game, ForgeLight engine capabilities, and development history</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://en.wikipedia.org/wiki/ForgeLight" target="_blank">ForgeLight Engine - Wikipedia</a>
+        <div class="source-desc">Engine capabilities, player count support, DX9/DX11 history, and games using ForgeLight</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://planetside.fandom.com/wiki/Lattice_Links" target="_blank">Lattice Links - PlanetSide 2 Wiki</a>
+        <div class="source-desc">Detailed documentation of lattice adjacency rules, capture requirements, and cutoff mechanics</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://planetside.fandom.com/wiki/Continent_Locking" target="_blank">Continent Locking - PlanetSide 2 Wiki</a>
+        <div class="source-desc">How continent lock/unlock works, population thresholds, and Koltyr low-pop behavior</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://planetside.fandom.com/wiki/Construction_System" target="_blank">Construction System - PlanetSide 2 Wiki</a>
+        <div class="source-desc">Cortium mining, ANT mechanics, silo management, no-construction zones, and vehicle terminal hacking</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.gamespot.com/articles/planetside-2-sets-guinness-world-record-after-1-15/1100-6424887/" target="_blank">PlanetSide 2 Sets Guinness World Record - GameSpot</a>
+        <div class="source-desc">Coverage of the 2015 world record event with 1,158 players on Hossin</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://wccftech.com/planetside-2-pc-patch-dx11/" target="_blank">DX11 Integration Patch - WCCFTech</a>
+        <div class="source-desc">Technical coverage of the DX11 renderer upgrade and performance improvements</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info">
+        <a href="https://steamcommunity.com/app/218230/discussions/0/143388511231945770/" target="_blank">Why is PlanetSide 2 Client-Side Based? - Steam Community</a>
+        <div class="source-desc">Community discussion of client-side hit detection, peeker's advantage, and networking trade-offs</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.planetside2.com/news/may-dev-letter-2025" target="_blank">Server Merge Retrospective - PlanetSide 2</a>
+        <div class="source-desc">Official developer letter on the Connery/Emerald and Cobalt/Miller mergers</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://planetside.fandom.com/wiki/Alerts" target="_blank">Alerts - PlanetSide 2 Wiki</a>
+        <div class="source-desc">Meltdown Alert triggers, Empire Strength scoring, reward structure, and Unstable Alert variants</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME NAV -->
+  <div class="game-nav">
+    <a href="star-citizen.html"><span class="dir">Previous</span><span class="name">Star Citizen</span></a>
+    <a class="next" href="fortnite.html"><span class="dir">Next</span><span class="name">Fortnite</span></a>
+  </div>
+
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Middleware &amp; Services - Technology Wiki | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <a href="wiki-engines.html">Engines</a>
+  <a href="wiki-languages.html">Languages</a>
+  <a href="wiki-databases.html">Databases</a>
+  <a href="wiki-networking.html">Networking</a>
+  <a href="wiki-middleware.html" style="color:var(--t1);font-weight:700">Middleware</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // WIKI</span>
+</nav>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+  <a href="#networking-middleware">Networking Middleware</a>
+  <a href="#photon">Photon Server / Cloud</a>
+  <a href="#mirror-fishnet">Mirror / FishNet</a>
+  <a href="#nakama">Nakama</a>
+  <a href="#colyseus">Colyseus</a>
+  <a href="#baas">Backend-as-a-Service</a>
+  <a href="#spacetimedb">SpacetimeDB</a>
+  <a href="#playfab">PlayFab</a>
+  <a href="#eos">Epic Online Services</a>
+  <a href="#gamelift">Amazon GameLift</a>
+  <a href="#multiplay">Multiplay (Unity)</a>
+  <a href="#anticheat">Anti-Cheat</a>
+  <a href="#eac">Easy Anti-Cheat</a>
+  <a href="#battleye">BattlEye</a>
+  <a href="#ricochet">RICOCHET</a>
+  <a href="#vac">Valve Anti-Cheat</a>
+  <a href="#infrastructure">Infrastructure</a>
+  <a href="#k8s">Kubernetes / Docker</a>
+  <a href="#cloud-compare">Cloud Providers</a>
+  <a href="#sources">Sources</a>
+</div>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Wiki / Middleware &amp; Services</div>
+  <h1>Game Middleware &amp; Services</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Technology Wiki</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">15 Products Covered</span>
+  </div>
+  <p class="lead">A reference guide to the networking middleware, backend platforms, anti-cheat systems, and cloud infrastructure that power multiplayer games. Each entry covers what the product does, how it works under the hood, what it costs, which of our 18 reference games use it, and when it makes sense for an indie MMO project like Wompworld.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Categories</span><span class="value">4</span></div>
+    <div class="key-stat"><span class="label">Products</span><span class="value">15</span></div>
+    <div class="key-stat"><span class="label">Comparison Tables</span><span class="value">5</span></div>
+    <div class="key-stat"><span class="label">Last Updated</span><span class="value">March 2026</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+<!-- ============================================================ -->
+<!--  SECTION 1: NETWORKING MIDDLEWARE                             -->
+<!-- ============================================================ -->
+
+<h2 id="networking-middleware">Networking Middleware</h2>
+<p>These are libraries and frameworks that handle the actual transport of game data between clients and servers. They sit between your game logic and raw sockets, providing abstractions for things like reliable delivery, state synchronization, matchmaking, and room management. Picking the right one depends on your engine, your scale target, and whether you want someone else managing the infrastructure.</p>
+
+<!-- PHOTON -->
+<h3 id="photon">Photon Server / Photon Cloud (Exit Games)</h3>
+
+<p><strong>What it does:</strong> Photon is the most widely used networking middleware in the game industry, built by Exit Games (based in Hamburg, Germany). It provides a complete networking stack for multiplayer games: connection management, room-based matchmaking, state synchronization, RPCs, and relay servers. Photon comes in two flavors. Photon Cloud is a fully managed SaaS where Exit Games runs the servers for you. Photon Server is the self-hosted version where you run the same core on your own machines.</p>
+
+<p><strong>How it works:</strong> The core of Photon is written in C++ for raw performance, but the application layer is C#. This means your server-side game logic is written in C#, and if your client is also C# (Unity), your entire project can share code between client and server. Photon uses UDP by default for game traffic with its own reliable-UDP protocol on top, falling back to WebSocket for web clients. The architecture is room-based: players join rooms, and the server relays or processes events within each room. For server-authoritative games, you write Photon Server plugins or use Photon Fusion, which adds tick-based simulation, client-side prediction, and lag compensation.</p>
+
+<p><strong>Products in the Photon family:</strong></p>
+<ul>
+  <li><strong>Photon Realtime / PUN 2</strong> - Relay-based multiplayer. Good for co-op, casual competitive. One client is the "host" for game logic, Photon just forwards messages.</li>
+  <li><strong>Photon Fusion 2</strong> - Tick-based netcode with client prediction and server authority. Built for action games. Supports both shared (client-hosted) and dedicated server modes.</li>
+  <li><strong>Photon Quantum</strong> - Deterministic lockstep simulation. All clients run identical simulation. Best for fighting games, RTS, sports. Extremely bandwidth-efficient.</li>
+  <li><strong>Photon Server</strong> - Self-hosted version. You run the C++ core on your own hardware. Full control over the infrastructure and application logic.</li>
+</ul>
+
+<p><strong>Pricing:</strong> Photon uses CCU-based pricing (Concurrently Connected Users). Their rule of thumb: 1 CCU roughly equals 20 DAU or 400 MAU. The free tier gives you 100 CCU, enough for prototyping and small-scale testing. The 500 CCU Growth plan costs $125/month. 2,000 CCU runs $500/month. Above 2,000 CCU, you move to Premium Cloud at roughly $0.50 per CCU per month. Stumble Guys, one of the most-downloaded mobile games of 2022, was paying around $25,000/month for 50,000 CCU while serving 20 million monthly players. Each tier bundles about 3 GB of traffic per CCU.</p>
+
+<p><strong>Which of our 18 games use it:</strong> <strong>Albion Online</strong> is the flagship Photon Server deployment. Their entire server backend runs on Photon Server with C# application code on top. Albion chose Photon specifically because of the C++ core / C# app layer split, which let them write server and client in the same language while getting native performance for networking.</p>
+
+<div class="callout c-amber">
+  <div class="callout-title">Photon vs. Roll Your Own</div>
+  <p>For an indie MMO like Wompworld, Photon Cloud makes sense for session-based gameplay (instanced PvP arenas, matchmade battles). For the persistent open world with hundreds of players per zone, Photon Server (self-hosted) gives you the control you need, but you are writing all the zone management, world partitioning, and persistence logic yourself. Photon handles the transport layer and room management, not the MMO architecture. Albion built all of their cluster management, economy systems, and zone transitions on top of Photon Server.</p>
+</div>
+
+<table class="proto">
+  <tr><th>Aspect</th><th>Photon Cloud</th><th>Photon Server (Self-Hosted)</th></tr>
+  <tr><td>Hosting</td><td>Managed by Exit Games globally</td><td>Your hardware, your ops</td></tr>
+  <tr><td>Cost Model</td><td>CCU-based subscription</td><td>One-time license + your server costs</td></tr>
+  <tr><td>Customization</td><td>Plugins and webhooks</td><td>Full source access to app layer</td></tr>
+  <tr><td>Scale Ceiling</td><td>Proven to 50K+ CCU</td><td>Limited by your hardware</td></tr>
+  <tr><td>Best For</td><td>Session-based, fast iteration</td><td>MMOs, persistent worlds, full control</td></tr>
+</table>
+
+<!-- MIRROR / FISHNET -->
+<h3 id="mirror-fishnet">Mirror / FishNet (Unity Open Source)</h3>
+
+<p><strong>What they are:</strong> Mirror and FishNet are the two leading open-source networking libraries for Unity. Both are free, both are community-driven, and both exist because Unity deprecated their built-in networking (UNET) in 2018 and left a vacuum that took years to fill.</p>
+
+<p><strong>Mirror</strong> is the direct successor to UNET. It started as a fork and has been battle-tested for over 10 years. Mirror supports UDP, TCP, WebSockets, and Steam transport. It includes spatial hashing for interest management, synced variables, remote procedure calls, automatic message batching, and built-in Transform and Physics synchronization. It ships allocation-free at runtime (except for transports). Mirror is used by thousands of Steam games, including Population: ONE (acquired by Meta in 2021) and Zooba by Wildlife Studios, which hit 100+ million downloads on Google Play.</p>
+
+<p><strong>FishNet (Fish-Networking)</strong> is the newer challenger. It was built from scratch rather than forked from UNET, which gave it a cleaner architecture. FishNet includes built-in client-side prediction and lag compensation out of the box, which Mirror does not have natively. It also provides more granular control over bandwidth, scene management, and object spawning. FishNet is gaining adoption fast, particularly among developers building action games where prediction and rollback matter.</p>
+
+<table class="proto">
+  <tr><th>Feature</th><th>Mirror</th><th>FishNet</th></tr>
+  <tr><td>Heritage</td><td>Direct UNET fork, 10+ years</td><td>Clean-room design, newer</td></tr>
+  <tr><td>Client Prediction</td><td>Limited built-in support</td><td>Built-in prediction + lag compensation</td></tr>
+  <tr><td>Bandwidth Control</td><td>Good (automatic batching)</td><td>Excellent (fine-grained per-object)</td></tr>
+  <tr><td>Community</td><td>Large, well-established</td><td>Smaller but growing fast</td></tr>
+  <tr><td>License</td><td>MIT</td><td>MIT (Pro version available)</td></tr>
+  <tr><td>Best For</td><td>Co-op, small MMOs, general multiplayer</td><td>Action games, competitive multiplayer</td></tr>
+</table>
+
+<p><strong>Pricing:</strong> Both are free and MIT-licensed for commercial use. FishNet has a paid Pro tier with additional features.</p>
+
+<p><strong>Limitations at scale:</strong> Neither Mirror nor FishNet is designed for MMO-scale persistent worlds. They work well for games with rooms of up to a few hundred players, but they do not provide world partitioning, cross-server communication, database integration, or the kind of orchestration you need for thousands of concurrent players in a shared world. For an MMO, you would use Mirror or FishNet as the transport/sync layer within a single zone, then build all the multi-zone architecture yourself on top.</p>
+
+<p><strong>Which of our 18 games use them:</strong> None of the 18 reference games use Mirror or FishNet directly. These libraries are primarily used by indie and mid-tier Unity games. Large-scale MMOs typically use either commercial middleware (Photon) or custom networking stacks.</p>
+
+<div class="callout">
+  <div class="callout-title">For Wompworld</div>
+  <p>If the project uses Unity, Mirror or FishNet could serve as the intra-zone networking layer, but you would still need to build the MMO-scale systems (zone transitions, world partitioning, persistent state, cross-zone communication) yourself. They are not a substitute for a game server framework.</p>
+</div>
+
+<!-- NAKAMA -->
+<h3 id="nakama">Nakama (Heroic Labs)</h3>
+
+<p><strong>What it does:</strong> Nakama is an open-source game server by Heroic Labs that handles the social and operational infrastructure of online games. It provides user accounts, authentication, friends lists, groups/clans, chat, matchmaking, leaderboards, tournaments, notifications, in-app purchase validation, and data storage. It also supports real-time multiplayer with both relayed and server-authoritative models.</p>
+
+<p><strong>How it works:</strong> Nakama is written in Go for performance and can be extended with custom server logic in Go, Lua, or TypeScript/JavaScript. The runtime executes your custom code inside the server process. For real-time multiplayer, Nakama supports authoritative match loops that tick at a configurable rate (up to 30Hz), where the server validates all player input and broadcasts state. The server manages CPU scheduling and memory allocation per match, distributing load across a single instance or a cluster.</p>
+
+<p>The matchmaker is flexible: you can define required, desired, and optional characteristics for both players and matches. In 2025, Heroic Labs added a MatchmakerProcessor hook that gives developers access to the full ticket pool for custom matching logic, plus party listing APIs and matchmaker stats.</p>
+
+<p><strong>Deployment:</strong> Nakama can run on any cloud provider (AWS, Azure, GCP, DigitalOcean) or your own hardware. Heroic Labs also offers a managed cloud service called Heroic Cloud for teams that do not want to run their own infrastructure. Integration with Edgegap provides on-demand low-latency server deployment for the game simulation layer.</p>
+
+<p><strong>Pricing:</strong> The server is licensed under Apache 2.0, so self-hosting is free. Heroic Cloud (managed hosting) has paid tiers. Enterprise licenses with priority support and SLAs are available.</p>
+
+<p><strong>Which of our 18 games use it:</strong> None of the 18 directly, but Nakama is widely used by mid-tier studios for mobile and PC multiplayer games. It handles the same category of problems that PlayFab and EOS solve, just without vendor lock-in.</p>
+
+<div class="callout c-green">
+  <div class="callout-title">When to Use Nakama vs. Custom</div>
+  <p>Nakama excels when you need a proven, self-hostable solution for social features, matchmaking, and lightweight multiplayer. It does not replace a dedicated game server for high-frequency simulation (like naval combat at 20+ Hz tick rates). For Wompworld, Nakama could handle accounts, friends, chat, matchmaking, and leaderboards, while a separate game server handles the actual ship simulation and combat.</p>
+</div>
+
+<!-- COLYSEUS -->
+<h3 id="colyseus">Colyseus</h3>
+
+<p><strong>What it does:</strong> Colyseus is an open-source multiplayer framework for Node.js. It provides a room-based architecture with automatic state synchronization, matchmaking, reconnection handling, and an authoritative server model. If your game server needs are modest and you are comfortable with TypeScript, Colyseus gets you from zero to multiplayer in hours rather than weeks.</p>
+
+<p><strong>How it works:</strong> You define Room classes that contain game logic. Each room has lifecycle methods: <code>onCreate</code>, <code>onJoin</code>, <code>onLeave</code>, <code>onDispose</code>, plus a message handler for client input. You define your game state as a schema object on the server, and Colyseus automatically synchronizes it to all connected clients using binary delta encoding. The transport layer uses WebSockets. Serialization uses a custom binary delta format for state and MessagePack for everything else.</p>
+
+<p>The server is authoritative: game logic runs on the server, clients send inputs, the server processes them and broadcasts the updated state. Colyseus supports client-side prediction patterns where you apply the same movement logic locally for responsiveness, then reconcile when the server's authoritative state arrives.</p>
+
+<p><strong>Scaling:</strong> Colyseus can scale from 10 to 10,000+ concurrent users by adding Redis for cross-process room coordination and load balancers for distributing connections. For larger scale, you would run multiple Colyseus processes behind a reverse proxy.</p>
+
+<p><strong>Client SDKs:</strong> Available for web (JavaScript/TypeScript), Unity (C#), Defold, Haxe, Cocos, and Construct 3.</p>
+
+<p><strong>Pricing:</strong> MIT licensed, free for commercial use.</p>
+
+<p><strong>Which of our 18 games use it:</strong> None. Colyseus is primarily used for web-based multiplayer games, mobile games, and smaller-scale real-time projects. Its Node.js single-threaded model is not suited for the kind of high-frequency physics simulation that an MMO with naval combat requires.</p>
+
+<div class="callout c-amber">
+  <div class="callout-title">Best Fit</div>
+  <p>Colyseus is excellent for web-based games, game jams, prototypes, and projects where development speed matters more than raw server performance. For Wompworld, it is too lightweight. The single-threaded Node.js runtime would bottleneck on the physics, AI, and world simulation that a naval MMO demands.</p>
+</div>
+
+<!-- NETWORKING MIDDLEWARE COMPARISON -->
+<h3>Networking Middleware Comparison</h3>
+
+<table class="proto">
+  <tr><th>Product</th><th>Language</th><th>License</th><th>Auth Server</th><th>Scale Ceiling</th><th>Best For</th></tr>
+  <tr><td>Photon Cloud</td><td>C# (app layer)</td><td>Commercial</td><td>Yes (Fusion)</td><td>50K+ CCU proven</td><td>Session games, large studios</td></tr>
+  <tr><td>Photon Server</td><td>C# (app layer)</td><td>Commercial</td><td>Yes</td><td>Your hardware</td><td>MMOs, full control</td></tr>
+  <tr><td>Mirror</td><td>C#</td><td>MIT</td><td>Yes</td><td>~300 per instance</td><td>Unity co-op, small MMOs</td></tr>
+  <tr><td>FishNet</td><td>C#</td><td>MIT / Pro</td><td>Yes</td><td>~300 per instance</td><td>Unity action games</td></tr>
+  <tr><td>Nakama</td><td>Go / Lua / TS</td><td>Apache 2.0</td><td>Yes (up to 30Hz)</td><td>Cluster-scalable</td><td>Social features, matchmaking</td></tr>
+  <tr><td>Colyseus</td><td>TypeScript</td><td>MIT</td><td>Yes</td><td>~10K CCU</td><td>Web games, prototypes</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 2: BACKEND-AS-A-SERVICE                             -->
+<!-- ============================================================ -->
+
+<h2 id="baas">Backend-as-a-Service</h2>
+<p>These platforms provide pre-built backend services for games: player accounts, matchmaking, leaderboards, economy management, analytics, and sometimes server hosting. They let you skip building commodity backend systems so you can focus on gameplay. The tradeoff is always vendor lock-in vs. development speed.</p>
+
+<!-- SPACETIMEDB -->
+<h3 id="spacetimedb">SpacetimeDB (Clockwork Labs)</h3>
+
+<p>SpacetimeDB deserves a longer treatment because it represents a genuinely different approach to game server architecture. Instead of the traditional stack (game client connects to game server, game server talks to database), SpacetimeDB collapses the game server and database into a single system. Your game logic runs inside the database. Clients connect directly to the database. There is no separate server process.</p>
+
+<h4>The "Database is the Server" Paradigm</h4>
+
+<p>In a traditional multiplayer game, you have three layers: clients, game servers, and databases. The game server sits in the middle, receiving player input from clients, running game logic, reading and writing state to the database, and sending updates back to clients. You write networking code, serialization code, ORM code, persistence code, and synchronization code. You deploy and manage server processes, database clusters, and the plumbing between them.</p>
+
+<p>SpacetimeDB eliminates the middle layer. You write your game logic as a "module" that runs directly inside the database. The module defines tables (your game state) and reducers (your game logic). Clients connect to the database over WebSockets, call reducers to perform actions, and subscribe to queries to receive real-time state updates. The database handles persistence, synchronization, and transport.</p>
+
+<p>This means you do not write networking code (SpacetimeDB handles the WebSocket connections and message routing). You do not write serialization code (SpacetimeDB uses its own binary format, BSATN). You do not write ORM code (your tables are native to the database, accessed directly from your module). You do not write persistence code (the database persists everything automatically via a write-ahead log). You do not deploy servers (you upload your module with <code>spacetime publish</code> and it runs inside the database).</p>
+
+<h4>How Modules Work</h4>
+
+<p>A module is your server-side application compiled to WebAssembly (for Rust, C#, and C++ modules) or bundled as JavaScript (for TypeScript modules). You upload it to a SpacetimeDB instance, and it runs inside the database process. A module contains:</p>
+
+<ul>
+  <li><strong>Tables</strong> - Define your game state as relational tables. Player positions, inventory items, chat messages, terrain data. SpacetimeDB holds all table data in memory for sub-microsecond access and persists it to a write-ahead log (WAL) for durability.</li>
+  <li><strong>Reducers</strong> - Functions that modify game state. When a player wants to move, attack, or craft an item, the client calls a reducer. Reducers execute transactionally: either all changes commit or none do. If a reducer fails (e.g., permission check fails), the entire transaction rolls back. This gives you atomicity for free.</li>
+  <li><strong>Scheduled Reducers</strong> - Reducers that fire on a timer, used for game loops, NPC AI ticks, resource respawn timers, and similar periodic logic.</li>
+</ul>
+
+<p>Modules can be written in Rust, C#, TypeScript, or C++. Rust and C++ modules compile to WebAssembly and run in a sandboxed WASM runtime inside the database. TypeScript modules run in a JavaScript engine. The 2.0 release added Procedure Functions, which let modules make HTTP calls to external APIs from within a reducer.</p>
+
+<h4>BSATN Wire Format</h4>
+
+<p>BSATN (Binary SpacetimeDB Algebraic Type Notation) is SpacetimeDB's binary serialization format. It is used for all data interchange between the database and clients. You never interact with it directly. The client SDKs and the module compilation toolchain handle encoding and decoding automatically. BSATN is a compact, typed binary format designed for the kind of high-frequency, small-message traffic that games produce.</p>
+
+<h4>The Subscription Model</h4>
+
+<p>Clients subscribe to data using SQL queries. Each subscription defines what subset of the database the client cares about. When data matching a subscription changes (because a reducer modified it), the client receives the delta automatically. The client SDK maintains a local cache of subscribed data that can be queried without network round trips.</p>
+
+<p>This is the key insight: you do not write code to decide what to send to which client. You do not build update packets. You do not implement interest management manually. The client says "I care about all players within 500m of me" as a SQL subscription, and SpacetimeDB handles the rest. When a player moves into or out of range, the subscription automatically adds or removes them from the client's local cache.</p>
+
+<p>In SpacetimeDB 2.0, confirmed reads are enabled by default, meaning the server waits until a transaction is confirmed durable before sending updates to clients. Any data a client receives will survive a server restart.</p>
+
+<h4>Client SDKs</h4>
+
+<p>SDKs are available for C# (Unity), C++ (Unreal Engine with Blueprint support), TypeScript (with framework integrations for React, Vue, Angular, and Svelte), and Rust. The SDKs handle WebSocket connections, authentication, subscription management, local caching, and change callbacks. In a Unity game, you subscribe to data, and your UI updates automatically when the data changes.</p>
+
+<h4>BitCraft MMO</h4>
+
+<p>BitCraft Online is the flagship project built on SpacetimeDB, developed by Clockwork Labs (the same company that builds SpacetimeDB). BitCraft is a community sandbox MMORPG with crafting, city-building, exploration, and survival in a single seamless shared world. The entire backend is a single SpacetimeDB module. There are no other servers or services. Everything: chat messages, items, resources, terrain, player locations, all of it is stored, processed, and synchronized by SpacetimeDB. BitCraft launched on Steam alongside SpacetimeDB 1.0 in June 2025.</p>
+
+<h4>Performance</h4>
+
+<p>SpacetimeDB 2.0 claims over 100,000 transactions per second for TypeScript modules and up to 170,000 transactions per second for Rust modules. All data lives in memory for sub-microsecond read access. The WAL provides durability without the latency cost of synchronous disk writes on every transaction.</p>
+
+<h4>License and Pricing</h4>
+
+<p>SpacetimeDB is source-available under the Business Source License 1.1 (BSL). This is not technically open source. It converts to AGPL v3.0 with a linking exception after a set period. The linking exception means you do not have to open-source your own game code; you only have to contribute back changes to SpacetimeDB itself. You can self-host for free. Clockwork Labs also offers Maincloud, their managed hosting service, which uses an "Energy Packs" credit system for pricing.</p>
+
+<div class="info-grid">
+  <div class="info-card c-blue">
+    <h4>What SpacetimeDB Eliminates</h4>
+    <ul>
+      <li>Networking code (WebSocket transport is automatic)</li>
+      <li>Serialization code (BSATN handles it)</li>
+      <li>ORM / database access code (tables are native)</li>
+      <li>Persistence code (WAL handles durability)</li>
+      <li>Server deployment (upload module, done)</li>
+      <li>State synchronization code (subscriptions handle it)</li>
+    </ul>
+  </div>
+  <div class="info-card c-orange">
+    <h4>What SpacetimeDB Does Not Solve</h4>
+    <ul>
+      <li>Client-side rendering and prediction</li>
+      <li>Physics simulation (runs server-side in your module)</li>
+      <li>Asset delivery and patching</li>
+      <li>Voice chat</li>
+      <li>Anti-cheat beyond server authority</li>
+      <li>World partitioning across multiple SpacetimeDB instances</li>
+    </ul>
+  </div>
+</div>
+
+<h4>Traditional Architecture vs. SpacetimeDB</h4>
+
+<table class="proto">
+  <tr><th>Concern</th><th>Traditional Stack</th><th>SpacetimeDB</th></tr>
+  <tr><td>Game Logic</td><td>Runs on game server process</td><td>Runs inside the database as a module</td></tr>
+  <tr><td>Persistence</td><td>Game server writes to separate database</td><td>Tables persist automatically via WAL</td></tr>
+  <tr><td>Networking</td><td>Custom protocol between client and server</td><td>WebSocket with BSATN, handled by SDK</td></tr>
+  <tr><td>State Sync</td><td>Manual: build packets, manage interest</td><td>Automatic: SQL subscriptions + delta sync</td></tr>
+  <tr><td>Deployment</td><td>Deploy server binary + database cluster</td><td><code>spacetime publish</code></td></tr>
+  <tr><td>Scaling</td><td>Add server instances, load balance</td><td>Currently single-instance per module</td></tr>
+  <tr><td>Languages</td><td>Varies (C++, C#, Java, etc.)</td><td>Rust, C#, TypeScript, C++</td></tr>
+</table>
+
+<div class="callout c-purple">
+  <div class="callout-title">When SpacetimeDB Makes Sense vs. When It Does Not</div>
+  <p><strong>Use it when:</strong> You want to move fast with a small team. You are building a game where the server is authoritative and the state model fits cleanly into relational tables. You do not want to deal with server deployment, database management, or writing networking code. The BitCraft model (sandbox MMO with crafting, building, exploration) maps well to SpacetimeDB's strengths.</p>
+  <p><strong>Be cautious when:</strong> You need world partitioning across multiple server instances (SpacetimeDB modules currently run on a single instance). You need sub-frame physics simulation at 60Hz+ with tight deterministic requirements. You need to integrate deeply with existing infrastructure. You want a proven, battle-tested foundation with years of production history at massive scale (SpacetimeDB hit 1.0 in June 2025).</p>
+  <p><strong>For Wompworld:</strong> SpacetimeDB is worth watching closely. The "database is the server" model would eliminate a huge amount of infrastructure work. The subscription model maps well to a naval game where players need real-time updates about nearby ships, projectiles, and world state. The risk is that the technology is young, the single-instance model may not scale to a full-server MMO with thousands of concurrent players, and the BSL license means you depend on Clockwork Labs for the long term. But if the performance claims hold and clustering support matures, this could be the difference between a team of 3 building an MMO backend and a team of 10.</p>
+</div>
+
+<!-- PLAYFAB -->
+<h3 id="playfab">PlayFab (Microsoft Azure)</h3>
+
+<p><strong>What it does:</strong> PlayFab is Microsoft's backend platform for live games, built on Azure. It provides a broad set of managed services: player authentication (cross-platform, including Xbox, Steam, PlayStation, Nintendo, Facebook, Google, and Apple), player profiles, virtual economy (currencies, catalogs, stores, inventory), leaderboards, matchmaking, lobbies, real-time party chat, push notifications, content management, A/B testing, LiveOps event scheduling, analytics, and multiplayer server hosting. It is the Swiss Army knife of game backend services.</p>
+
+<p><strong>How it works:</strong> PlayFab runs as a set of REST APIs on Azure. Your game client or server calls PlayFab APIs to perform backend operations. For multiplayer server hosting, PlayFab provisions and manages dedicated server containers on Azure VMs, handling auto-scaling, region selection, and matchmaking placement. The economy system (Economy v2) is a rebuild on modern Azure infrastructure designed for hundreds of millions of active players with large inventories.</p>
+
+<p><strong>Pricing:</strong> Free in development mode (up to 100,000 users, 10 titles per account). After launch, pricing is consumption-based: you pay per event, per profile read/write, per API call to matchmaking/lobby/economy, per server VM-hour, and per analytics query. The free tier is generous enough for indie prototyping and beta testing. Costs scale with usage, which can become expensive at high DAU if you are not careful about API call frequency.</p>
+
+<p><strong>LiveOps features:</strong> PlayFab's strength is running games as a service. You can schedule timed events (double XP weekends, seasonal content), manage content remotely without client patches, run A/B experiments on economy balancing, segment players for targeted offers, and track engagement metrics in real-time.</p>
+
+<p><strong>Which of our 18 games use it:</strong> <strong>Minecraft</strong> uses PlayFab for its backend services (both games are Microsoft properties). Several of the reference games use Azure infrastructure that integrates with PlayFab's ecosystem.</p>
+
+<div class="callout">
+  <div class="callout-title">For Wompworld</div>
+  <p>PlayFab could handle accounts, authentication, economy management, leaderboards, and LiveOps without building any of those systems from scratch. The free tier covers development and early access. The risk is Azure lock-in and consumption-based pricing that can surprise you at scale. For an indie MMO, the economy and LiveOps features are genuinely useful, but the multiplayer server hosting is designed for session-based games, not persistent worlds.</p>
+</div>
+
+<!-- EOS -->
+<h3 id="eos">Epic Online Services (EOS)</h3>
+
+<p><strong>What it does:</strong> EOS is Epic Games' suite of free, cross-platform backend services. Originally built for Fortnite and then opened to all developers. It provides player authentication (Epic Games accounts plus third-party identity providers), crossplay between platforms and storefronts, lobbies, matchmaking, peer-to-peer and relay networking, voice chat, player sanctions, player reports, anti-cheat (Easy Anti-Cheat, covered separately below), achievements, stats, leaderboards, and title storage.</p>
+
+<p><strong>How it works:</strong> EOS is engine-agnostic and platform-agnostic. You integrate the EOS SDK into your game (available for Unreal, Unity, and custom engines via C). The services communicate with Epic's backend infrastructure. For voice chat, connections are relayed through EOS backend servers with quality-of-service management, multi-region presence, and automatic scaling. For crossplay, EOS links player accounts across Steam, Epic Games Store, PlayStation, Xbox, and Nintendo.</p>
+
+<p><strong>Pricing:</strong> Free. No royalties, no hosting fees, no per-user charges. This is the single biggest differentiator. Epic subsidizes EOS to grow its ecosystem and compete with Steam. You can use any or all services without paying Epic anything.</p>
+
+<p><strong>Which of our 18 games use it:</strong> <strong>Fortnite</strong> is the origin and proving ground for EOS. <strong>Albion Online</strong> and <strong>Ashes of Creation</strong> use Easy Anti-Cheat, which is part of the EOS suite. Multiple AAA and indie titles use EOS for crossplay and matchmaking.</p>
+
+<div class="callout c-green">
+  <div class="callout-title">For Wompworld</div>
+  <p>Hard to argue against free. EOS could provide accounts, crossplay, voice chat, lobbies, matchmaking, and anti-cheat at zero cost. The catches: you are depending on Epic continuing to offer this for free, the SDK integration adds complexity, and you are pulling data through Epic's infrastructure. For an indie project, using EOS for voice chat and anti-cheat alone would save months of development.</p>
+</div>
+
+<!-- GAMELIFT -->
+<h3 id="gamelift">Amazon GameLift (AWS)</h3>
+
+<p><strong>What it does:</strong> GameLift is AWS's managed service for deploying, scaling, and operating dedicated game servers. You upload your game server binary, configure your fleet (instance types, regions, scaling rules), and GameLift handles provisioning, auto-scaling, matchmaking placement, health monitoring, and DDoS protection. It supports up to 100 million concurrent players and 100,000 player adds per second.</p>
+
+<p><strong>How it works:</strong> GameLift runs your game server binary on EC2 instances (or in containers as of recent updates). The auto-scaling algorithm predicts player demand and spins servers up or down to match. Standby servers keep wait times low. FlexMatch is the built-in matchmaking service: you define rule sets (skill-based, latency-based, team composition requirements), and FlexMatch groups players and feeds matches into a game session queue that selects the best available server based on each player's location.</p>
+
+<p><strong>Spot Instances:</strong> GameLift supports Spot Instances at 50-85% savings over on-demand pricing. It uses a proprietary algorithm to optimize placement for low latency, low cost, and minimal Spot interruption rates. Combined with Graviton (ARM) instances for another 20% price-performance improvement, and intelligent auto-scaling, GameLift advertises infrastructure costs as low as $1/month per player.</p>
+
+<p><strong>Pricing:</strong> Pay-as-you-go, billed per second of VM time. Linux instances are roughly half the cost of Windows instances (no licensing fee). FlexMatch is included free with GameLift hosting; standalone FlexMatch (for non-GameLift servers) is billed separately by player packages and matchmaking hours. GameLift supports 68 instance families across 26 regions and 9 Local Zones.</p>
+
+<p><strong>New World and GameLift:</strong> Amazon's own MMO, New World, did not use GameLift. This is important context. New World ran on custom EC2 infrastructure because GameLift is designed for session-based games (matches with a start and end time). MMOs with persistent worlds, continuous simulation, and world partitioning do not fit GameLift's session model. AWS's own documentation now acknowledges this: for large-scale MMOs requiring world partitioning, custom solutions on EC2, ECS, or EKS are a better fit than GameLift.</p>
+
+<p><strong>Which of our 18 games use it:</strong> None of the 18 reference games use GameLift directly (they are mostly persistent-world MMOs). GameLift is used by session-based multiplayer games. <strong>Fortnite</strong> uses AWS infrastructure but through custom EKS deployments, not GameLift.</p>
+
+<div class="callout c-amber">
+  <div class="callout-title">For Wompworld</div>
+  <p>GameLift is not the right fit for a persistent-world MMO. It is built for games where matches start and end. If Wompworld had instanced PvP arenas or session-based game modes in addition to the open world, GameLift could host those instances while the persistent world runs on custom EC2/EKS infrastructure. FlexMatch could still be used as a standalone matchmaker regardless of where your servers run.</p>
+</div>
+
+<!-- MULTIPLAY -->
+<h3 id="multiplay">Multiplay (Unity)</h3>
+
+<p><strong>What it does:</strong> Multiplay was Unity's dedicated server hosting platform. It provided scalable, engine-agnostic game server hosting with multicloud hybrid infrastructure, auto-scaling, zero-downtime patching, QoS-based player placement, matchmaker integration, server health monitoring, and war room launch support. It operated across 70+ data center regions.</p>
+
+<p><strong>Track record:</strong> Multiplay had over 20 years of operational history. It helped Respawn scale Apex Legends from zero to 50 million players in under 24 days, peaking at 2+ million concurrent players. It hosted servers for Rogue Company, Worms Rumble, MARVEL SNAP, and Divine Knockout, among others. Unity claimed 30-40% hosting cost reduction compared to rolling your own.</p>
+
+<p><strong>The catch:</strong> Unity announced the discontinuation of Multiplay support in December 2025. The last feature update shipped in August 2024. Studios using Multiplay are migrating to alternatives like Edgegap, Hathora, AWS GameLift, or self-managed Kubernetes clusters.</p>
+
+<p><strong>Which of our 18 games use it:</strong> None of the 18 directly, though some of the studios behind the reference games used Multiplay for other titles.</p>
+
+<div class="callout c-red">
+  <div class="callout-title">Status: Discontinued</div>
+  <p>Multiplay is shutting down. Do not build new projects on it. If you are evaluating Unity's multiplayer ecosystem, note that the server hosting product is gone while the networking libraries (Netcode for GameObjects, Netcode for Entities) continue to be developed. For dedicated server hosting, look at Edgegap, Hathora, GameLift, or self-managed Kubernetes.</p>
+</div>
+
+<!-- BAAS COMPARISON TABLE -->
+<h3>Backend-as-a-Service Comparison</h3>
+
+<table class="proto">
+  <tr><th>Platform</th><th>Free Tier</th><th>Server Hosting</th><th>Economy</th><th>Matchmaking</th><th>Lock-in Risk</th></tr>
+  <tr><td>SpacetimeDB</td><td>Self-host free</td><td>Built-in (DB is the server)</td><td>Build in module</td><td>Build in module</td><td>Medium (BSL license)</td></tr>
+  <tr><td>PlayFab</td><td>100K users dev mode</td><td>Yes (session-based)</td><td>Full economy system</td><td>Yes</td><td>High (Azure)</td></tr>
+  <tr><td>EOS</td><td>Everything free</td><td>No (just services)</td><td>No</td><td>Yes</td><td>Medium (Epic)</td></tr>
+  <tr><td>GameLift</td><td>Pay-as-you-go</td><td>Yes (session-based)</td><td>No</td><td>FlexMatch</td><td>High (AWS)</td></tr>
+  <tr><td>Multiplay</td><td>N/A (discontinued)</td><td>Was yes</td><td>No</td><td>Unity Matchmaker</td><td>Dead</td></tr>
+</table>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 3: ANTI-CHEAT                                       -->
+<!-- ============================================================ -->
+
+<h2 id="anticheat">Anti-Cheat Systems</h2>
+<p>Anti-cheat in online games is an arms race. Cheaters reverse-engineer game clients, inject code into processes, modify memory, use external tools to read game state, and employ hardware devices to gain unfair advantages. Anti-cheat systems try to detect and prevent all of this. The major players use kernel-level drivers that operate at ring 0 (the highest CPU privilege level) to monitor for tampering that user-mode software cannot see.</p>
+
+<!-- EAC -->
+<h3 id="eac">Easy Anti-Cheat (EAC) / Epic Games</h3>
+
+<p><strong>What it does:</strong> EAC is the most widely deployed kernel-level anti-cheat in PC gaming, protecting over 200 games as of 2025. It was originally developed by Kamu (founded 2006), acquired by Epic Games in 2018, and integrated into the Epic Online Services suite as a free service in 2021.</p>
+
+<p><strong>How it works:</strong> EAC installs a kernel driver that operates at ring 0, the most privileged access level in the CPU. This gives it unrestricted access to system memory, running processes, and hardware configuration. It can monitor memory for unauthorized modifications, detect injected DLLs, scan for known cheat signatures, and analyze hardware fingerprints. The kernel-level access is necessary because modern cheats operate at the same privilege level to hide from user-mode detection. EAC scans continuously while a protected game is running.</p>
+
+<p><strong>Linux / Steam Deck:</strong> In 2021, EAC received native Linux and macOS support as part of the EOS integration. Proton/Wine compatibility was improved in collaboration with Valve for the Steam Deck launch. However, the Linux version runs in user mode (not kernel mode), and game developers must opt in to enable Linux support. Compatibility varies per game.</p>
+
+<p><strong>Pricing:</strong> Free through Epic Online Services. No per-user or per-game fees.</p>
+
+<p><strong>Which of our 18 games use it:</strong> <strong>Fortnite</strong> (Epic's own game, the original testbed). <strong>Ashes of Creation</strong> uses EAC. <strong>Albion Online</strong> used EAC from 2019 to 2023, then switched to BattlEye. <strong>Destiny 2</strong> uses BattlEye, not EAC.</p>
+
+<p><strong>Controversies:</strong> Kernel-level access means EAC has the same privilege level as your operating system and hardware drivers. If the anti-cheat is compromised, attackers have full system access. Past incidents include the Genshin Impact anti-cheat being exploited by ransomware operators in 2022 to disable antivirus software. This is not specific to EAC, but it is the fundamental risk of any kernel-level approach.</p>
+
+<!-- BATTLEYE -->
+<h3 id="battleye">BattlEye</h3>
+
+<p><strong>What it does:</strong> BattlEye is a proprietary kernel-level anti-cheat developed by BattlEye Innovations (Reutlingen, Germany). First released in 2004 for Battlefield Vietnam, it has since been integrated into numerous major multiplayer games.</p>
+
+<p><strong>How it works:</strong> BattlEye describes itself as a "fully proactive kernel-based protection system." It runs both kernel-mode and user-mode scanning. The kernel driver monitors process creation, DLL loading, memory modifications, and system calls. It performs continuous signature scanning against known cheat patterns, detects custom drivers that try to access game memory, and blocks applications that use vulnerable kernel drivers for injection. BattlEye can terminate processes that attempt to hook into the protected game.</p>
+
+<p><strong>A 2014-2015 update added the kernel-mode driver</strong> to strengthen protection. BattlEye has stated the driver is not intended to function as a rootkit, though the access level is identical.</p>
+
+<p><strong>Linux / Steam Deck:</strong> BattlEye supports Proton/Steam Deck, but only in user mode, and only if the game developer explicitly opts in. Many developers have not opted in, which means Linux compatibility is inconsistent even for games that use BattlEye.</p>
+
+<p><strong>Windows 11 issue:</strong> Microsoft's Kernel-mode Hardware-enforced Stack Protection feature in Windows 11 can prevent the BattlEye driver from loading. BattlEye is working with Microsoft on a fix, but as of early 2026, this remains an active compatibility issue.</p>
+
+<p><strong>Which of our 18 games use it:</strong> <strong>Albion Online</strong> switched from EAC to BattlEye in July 2023. <strong>Destiny 2</strong> uses BattlEye. <strong>ARK: Survival Evolved</strong> uses BattlEye. <strong>PlanetSide 2</strong> uses BattlEye. In 2025, Rockstar added BattlEye to GTA Online.</p>
+
+<!-- RICOCHET -->
+<h3 id="ricochet">RICOCHET Anti-Cheat (Activision)</h3>
+
+<p><strong>What it does:</strong> RICOCHET is Activision's proprietary, custom-built anti-cheat system for Call of Duty. Unlike EAC and BattlEye, which are third-party products licensed to many games, RICOCHET was developed internally and is exclusive to the Call of Duty franchise. It operates across multiple layers, making it one of the most comprehensive anti-cheat systems in gaming.</p>
+
+<p><strong>How it works (multi-layer model):</strong></p>
+<ul>
+  <li><strong>Layer 1: TPM 2.0 hardware verification</strong> - A hardware security module built into the CPU or motherboard that verifies the PC's boot process has not been tampered with. TPM 2.0 creates a hardware-backed attestation of system integrity that is difficult to spoof.</li>
+  <li><strong>Layer 2: Secure Boot enforcement</strong> - Ensures only trusted, signed software loads during the Windows boot process. Together with TPM 2.0, this prevents cheats from loading before the operating system starts.</li>
+  <li><strong>Layer 3: Cloud-based attestation</strong> - Added in early 2026, this uses Microsoft Azure Attestation to verify PC integrity remotely before a match begins. Activision calls it the most robust attestation technology in gaming.</li>
+  <li><strong>Layer 4: Kernel-level driver</strong> - A custom kernel driver that monitors processes interacting with Call of Duty while the game runs. It activates when the game launches and deactivates when it closes.</li>
+  <li><strong>Layer 5: Server-side analytics and in-game mitigations</strong> - Backend systems that analyze player behavior patterns, detect statistical anomalies, and apply in-game mitigations. This includes detection of hardware cheat devices like Cronus Zen and XIM Matrix.</li>
+</ul>
+
+<p><strong>TPM 2.0 requirement:</strong> As of Black Ops 6 Season 5 (August 2025), TPM 2.0 and Secure Boot are enforced in a phased rollout. They are required for Black Ops 7 and Warzone. This is controversial because it requires players to enable specific BIOS/UEFI settings, and it completely prevents Linux/SteamOS play.</p>
+
+<p><strong>Which of our 18 games use it:</strong> <strong>Call of Duty: Warzone</strong> is the only reference game using RICOCHET.</p>
+
+<!-- VAC -->
+<h3 id="vac">Valve Anti-Cheat (VAC)</h3>
+
+<p><strong>What it does:</strong> VAC is Valve's automated anti-cheat system, integrated into Steam since 2002. Unlike the kernel-level solutions above, VAC historically operated in user mode, scanning process memory for known cheat signatures while a game is running. It is the oldest continuously operating anti-cheat system in gaming.</p>
+
+<p><strong>How it works:</strong> VAC uses signature-based detection, scanning a player's system memory for patterns that match known cheat programs. It does not scan hard drives or personal files. When a match is found, the account is flagged but not immediately banned. VAC's signature feature is the <strong>delayed ban</strong>: after detection, bans are held for days or weeks before enforcement. This serves two purposes. It prevents cheat developers from quickly identifying which detection method caught them. And it lets the cheat spread through the cheating community before the ban wave hits, catching more users.</p>
+
+<p><strong>VAC Live (2023-2025):</strong> A newer system that provides real-time detection and immediate bans during active gameplay. VAC Live uses machine learning and more sophisticated detection than the original signature-based system.</p>
+
+<p><strong>VACnet:</strong> A deep learning system deployed since 2017 that analyzes player behavior (aim patterns, movement, statistical anomalies) and flags suspicious accounts for review. VACnet does not ban directly; it feeds data into the Overwatch community review system and the VAC detection pipeline.</p>
+
+<p><strong>Trust Factor:</strong> A behavioral scoring system that influences matchmaking quality. Players with high Trust Factor get matched with other high-Trust players; low Trust Factor results in longer queues and more problematic matches. Trust Factor considers account age, game library, play history, report frequency, and VAC/ban history.</p>
+
+<p><strong>Consequences:</strong> VAC bans are permanent and non-negotiable. Banned accounts are publicly marked. Phone-number-linked accounts can trigger cross-account bans. Family Sharing privileges are revoked.</p>
+
+<p><strong>Which of our 18 games use it:</strong> VAC is specific to Steam games. None of the 18 reference games use VAC as their primary anti-cheat (most use EAC or BattlEye), though games on Steam benefit from VAC as a secondary layer.</p>
+
+<!-- ANTI-CHEAT COMPARISON -->
+<h3>Anti-Cheat Comparison</h3>
+
+<table class="proto">
+  <tr><th>System</th><th>Developer</th><th>Access Level</th><th>Detection</th><th>Linux Support</th><th>Cost</th></tr>
+  <tr><td>Easy Anti-Cheat</td><td>Epic Games</td><td>Kernel (ring 0)</td><td>Signature + memory + behavioral</td><td>User-mode via Proton (opt-in)</td><td>Free (EOS)</td></tr>
+  <tr><td>BattlEye</td><td>BattlEye GmbH</td><td>Kernel (ring 0)</td><td>Signature + proactive scanning</td><td>User-mode via Proton (opt-in)</td><td>Commercial license</td></tr>
+  <tr><td>RICOCHET</td><td>Activision</td><td>Kernel + TPM 2.0 + cloud</td><td>5-layer: hardware to behavioral</td><td>None</td><td>CoD-exclusive</td></tr>
+  <tr><td>VAC</td><td>Valve</td><td>User-mode (VAC) + ML (VACnet)</td><td>Signature + ML + behavioral</td><td>Yes (native Steam)</td><td>Free (Steam)</td></tr>
+</table>
+
+<div class="callout">
+  <div class="callout-title">For Wompworld</div>
+  <p>EAC through EOS is the obvious choice for an indie project: it is free, widely deployed, and integrates with the rest of the EOS suite. BattlEye is the alternative if you want a commercial relationship with dedicated support. VAC is automatic if you ship on Steam. Building a custom anti-cheat is not realistic for a small team. The most important anti-cheat measure for an MMO is server authority: if the server validates all actions, the impact of client-side cheating is limited to information leaks (wallhacks, radar) rather than game-breaking exploits (speed hacks, item duplication).</p>
+</div>
+
+
+<!-- ============================================================ -->
+<!--  SECTION 4: INFRASTRUCTURE                                   -->
+<!-- ============================================================ -->
+
+<h2 id="infrastructure">Infrastructure</h2>
+<p>How you host and orchestrate your game servers matters as much as how you write them. The infrastructure layer determines your operational costs, your ability to scale for launch day, your latency to players around the world, and how many 3am pages your ops team gets when something breaks.</p>
+
+<!-- KUBERNETES -->
+<h3 id="k8s">Kubernetes and Docker for Game Servers</h3>
+
+<p><strong>What they do:</strong> Docker packages your game server binary and all its dependencies into a portable container that runs identically across any environment. Kubernetes orchestrates those containers across a cluster of machines, handling scheduling, scaling, health monitoring, networking, and restarts. Together, they let you deploy and manage hundreds or thousands of game server instances without manually provisioning individual machines.</p>
+
+<h4>Why Containers for Game Servers</h4>
+
+<p>Game servers are a natural fit for containers. Each game server instance is a relatively short-lived process (minutes to hours for session-based games, longer for persistent worlds). It needs a fixed set of dependencies. It should be isolated from other instances on the same machine. And you need to spin up many of them quickly when player demand spikes. Docker containers provide lightweight isolation, fast startup (seconds rather than minutes for VMs), consistent environments, and efficient resource utilization through bin-packing (running multiple containers on one machine).</p>
+
+<h4>How Fortnite Uses Kubernetes (EKS)</h4>
+
+<p>Epic Games runs Fortnite on Amazon EKS (Elastic Kubernetes Service). Their architecture is microservices-based: different components of the game backend run as separate containerized services orchestrated by Kubernetes. Key Kubernetes features they use include Horizontal Pod Autoscaling (HPA) for dynamic resource allocation, self-healing through automated pod restarts and rescheduling, rolling updates and canary deployments for seamless version transitions, service discovery and load balancing, and secrets management. Epic monitors the infrastructure with Prometheus, FluentD, InfluxData, and Telegraf.</p>
+
+<h4>Agones and Open Match</h4>
+
+<p>Google developed <strong>Agones</strong>, an open-source Kubernetes extension specifically for game server orchestration. Agones handles game server lifecycle management (allocating, ready, running, shutdown), fleet management (maintaining a pool of ready servers), and fleet autoscaling. AWS published a reference architecture for running Agones and Open Match on EKS, with AWS Global Accelerator for edge entry, Shield for DDoS protection, and CloudWatch for monitoring.</p>
+
+<p><strong>Open Match</strong> is an open-source matchmaking framework (also from Google) that integrates with Agones. It handles the player matching logic, while Agones handles the server allocation.</p>
+
+<h4>Cost Optimization Patterns</h4>
+
+<ul>
+  <li><strong>Spot/Preemptible Instances:</strong> Run game server containers on Spot Instances for up to 90% cost reduction. Containers start fast enough to handle the 2-minute Spot interruption notice gracefully. The game server drains players to another instance before shutdown.</li>
+  <li><strong>Graviton/ARM Instances:</strong> ARM-based processors (AWS Graviton, Azure Arm) deliver up to 40% better price-performance for network-heavy workloads like game servers.</li>
+  <li><strong>Container Packing:</strong> Configure resource limits per container to pack multiple game server instances onto a single machine, maximizing utilization.</li>
+  <li><strong>Serverless Containers:</strong> AWS Fargate and Google Cloud Run abstract away the cluster entirely. You just deploy containers and pay per-second of compute. Good for bursty, session-based workloads.</li>
+</ul>
+
+<div class="info-grid">
+  <div class="info-card c-blue">
+    <h4>When Kubernetes Makes Sense for Games</h4>
+    <ul>
+      <li>Session-based games with variable player counts</li>
+      <li>Games that need rapid horizontal scaling</li>
+      <li>Teams with DevOps expertise or willingness to learn</li>
+      <li>Multi-region deployments requiring automated orchestration</li>
+      <li>Microservices architectures with many independent components</li>
+    </ul>
+  </div>
+  <div class="info-card c-orange">
+    <h4>When Kubernetes Is Overkill</h4>
+    <ul>
+      <li>Single-server persistent worlds (just run on EC2/bare metal)</li>
+      <li>Small teams with no ops experience</li>
+      <li>Prototyping and early development</li>
+      <li>Games with fewer than 1,000 concurrent players</li>
+      <li>Projects where managed services (GameLift, Multiplay) are a better fit</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout c-purple">
+  <div class="callout-title">For Wompworld</div>
+  <p>Kubernetes is the right call if and when the game reaches the scale where you need to run many zone servers across multiple regions with auto-scaling. But it introduces significant operational complexity. For early development and alpha/beta, running game servers directly on a handful of dedicated machines or VMs is simpler and sufficient. Adopt Kubernetes when you actually need the orchestration, not because it sounds good on a tech stack slide.</p>
+</div>
+
+<!-- CLOUD PROVIDERS -->
+<h3 id="cloud-compare">Cloud Providers for Game Hosting</h3>
+
+<p>The three major cloud providers (AWS, Azure, GCP) all want your game hosting dollars. Each has game-specific services, different pricing models, and different strengths. Here is how they compare for multiplayer game hosting as of 2025.</p>
+
+<h4>AWS (Amazon Web Services)</h4>
+
+<p><strong>Market share:</strong> ~29% of the global cloud market (Q3 2025). The largest cloud provider.</p>
+
+<p><strong>Game-specific services:</strong> GameLift (dedicated server hosting + FlexMatch matchmaking), Local Zones (ultra-low latency metro edge data centers), EKS (managed Kubernetes), and a broad game tech blog with reference architectures. AWS also published EKS Blueprints with pre-configured cluster patterns for game workloads.</p>
+
+<p><strong>Latency:</strong> Lowest global average latency of the three providers. Local Zones in cities like Dallas, Atlanta, and Los Angeles reduce ping further. Epic Games worked with AWS to deploy Fortnite's NA-Central region using Local Zones in Texas.</p>
+
+<p><strong>Pricing (bandwidth):</strong> ~$0.09/GB for the first 10 TB egress. Compute pricing is competitive, especially with Graviton (ARM) instances.</p>
+
+<p><strong>Notable games hosted:</strong> Fortnite (EKS), PUBG (partial), New World (EC2, now shutting down).</p>
+
+<h4>Microsoft Azure</h4>
+
+<p><strong>Market share:</strong> ~20% of the global cloud market.</p>
+
+<p><strong>Game-specific services:</strong> PlayFab (the most comprehensive game backend platform), Azure Multiplayer Servers (integrated with PlayFab), and strong integration with Xbox Live services. Azure has the most complete package for game-as-a-service operations.</p>
+
+<p><strong>Latency:</strong> Good with multi-region deployment. Cross-US latency floor around 50-70ms, which stays under 50ms with strategic region placement (East, Central, West).</p>
+
+<p><strong>Pricing (bandwidth):</strong> ~$0.05/GB, the cheapest of the three for bandwidth-heavy games. ARM instances offer the largest price gap between x86 and ARM of any provider (65% savings on-demand).</p>
+
+<p><strong>Notable games hosted:</strong> Minecraft, Halo, Sea of Thieves, PUBG (partial). All Microsoft first-party titles run on Azure.</p>
+
+<h4>Google Cloud Platform (GCP)</h4>
+
+<p><strong>Market share:</strong> ~13% of the global cloud market.</p>
+
+<p><strong>Game-specific services:</strong> Agones (open-source game server orchestration for Kubernetes) and Open Match (open-source matchmaking). GCP's game tools are open-source, which means lower vendor lock-in. You can run Agones and Open Match on any Kubernetes cluster, not just GKE.</p>
+
+<p><strong>Latency:</strong> Excellent private backbone between regions. Fewer total regions than AWS, but the internal network provides low-hop routing. GCP does not have a mainland China region, which is a dealbreaker for games targeting the Chinese market.</p>
+
+<p><strong>Pricing (bandwidth):</strong> ~$0.08-$0.12/GB, the most expensive for bandwidth. Compute pricing is competitive, especially for Spot/preemptible instances.</p>
+
+<p><strong>Notable games hosted:</strong> Apex Legends (primary), Pokemon GO.</p>
+
+<h4>Cloud Provider Comparison</h4>
+
+<table class="proto">
+  <tr><th>Factor</th><th>AWS</th><th>Azure</th><th>GCP</th></tr>
+  <tr><td>Bandwidth Cost</td><td>~$0.09/GB</td><td>~$0.05/GB (cheapest)</td><td>~$0.08-0.12/GB</td></tr>
+  <tr><td>Game Platform</td><td>GameLift + FlexMatch</td><td>PlayFab (most complete)</td><td>Agones + Open Match (OSS)</td></tr>
+  <tr><td>Regions</td><td>30+ (most extensive)</td><td>60+ (most regions, but some are small)</td><td>42 (no mainland China)</td></tr>
+  <tr><td>Vendor Lock-in</td><td>Moderate (GameLift SDK)</td><td>Moderate (PlayFab APIs)</td><td>Low (open-source tools)</td></tr>
+  <tr><td>Latency</td><td>Lowest average + Local Zones</td><td>Good with multi-region</td><td>Excellent backbone, fewer PoPs</td></tr>
+  <tr><td>Spot Savings</td><td>Up to 90%</td><td>Up to 90%</td><td>Up to 80%</td></tr>
+  <tr><td>ARM Support</td><td>Graviton (mature)</td><td>Arm VMs (largest price gap)</td><td>Tau T2A (growing)</td></tr>
+  <tr><td>Notable Games</td><td>Fortnite, New World</td><td>Minecraft, Halo, Sea of Thieves</td><td>Apex Legends, Pokemon GO</td></tr>
+</table>
+
+<div class="callout">
+  <div class="callout-title">For Wompworld</div>
+  <p>For an indie MMO, the choice between cloud providers comes down to: what services do you want to use, and where are your players? If you want PlayFab's LiveOps and economy tools, Azure is the natural fit. If you want the broadest infrastructure with the most game-specific reference architectures, AWS is the default. If you want to avoid vendor lock-in and use open-source orchestration, GCP's Agones/Open Match stack is appealing. For the Wompworld prototype phase, any provider works. Pick based on what managed services you want to lean on, not on raw infrastructure pricing.</p>
+  <p>One practical note: bandwidth costs matter for MMOs. A naval game with hundreds of entities broadcasting position updates generates substantial egress traffic. At scale, Azure's $0.05/GB vs. GCP's $0.12/GB is real money. Budget for bandwidth from day one.</p>
+</div>
+
+<h4>Ballpark Hosting Costs</h4>
+
+<table class="proto">
+  <tr><th>Scale</th><th>Instance Type (approx)</th><th>Monthly Cost (On-Demand)</th><th>Monthly Cost (Spot)</th></tr>
+  <tr><td>100 CCU (prototype)</td><td>c5.large (2 vCPU, 4 GB)</td><td>$75-150</td><td>$15-45</td></tr>
+  <tr><td>1,000 CCU (beta)</td><td>8-10x c5.large or equivalent</td><td>$600-1,500</td><td>$120-450</td></tr>
+  <tr><td>10,000 CCU (launch)</td><td>Cluster with auto-scaling</td><td>$6,000-15,000</td><td>$1,200-4,500</td></tr>
+  <tr><td>100,000 CCU (success)</td><td>Multi-region, custom architecture</td><td>$50,000+</td><td>Varies wildly</td></tr>
+</table>
+
+<p>These are rough estimates for compute only. Add bandwidth, storage, database hosting, CDN, monitoring, and managed services on top. The numbers vary based on game type, tick rate, player density per server, and how efficiently your netcode uses bandwidth. Always run your specific workload through each provider's pricing calculator before committing.</p>
+
+
+<!-- ============================================================ -->
+<!--  SOURCES                                                     -->
+<!-- ============================================================ -->
+
+<h2 id="sources">Sources</h2>
+
+<div class="sources">
+
+  <div class="source-item">
+    <span class="source-type st-article">Article</span>
+    <div class="source-info">
+      <a href="https://davidsalz.de/secrets-of-albion-online-part-1/" target="_blank" rel="noopener">Secrets of Albion Online, Part 1 - David Salz (CTO)</a>
+      <div class="source-desc">Technical deep dive into Albion's Photon Server architecture, C# app layer, and zone-based design by the game's CTO.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-docs">Docs</span>
+    <div class="source-info">
+      <a href="https://spacetimedb.com/docs/intro/what-is-spacetimedb/" target="_blank" rel="noopener">What is SpacetimeDB? - SpacetimeDB Documentation</a>
+      <div class="source-desc">Official documentation explaining the "database is the server" paradigm, modules, reducers, and the subscription model.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-article">Article</span>
+    <div class="source-info">
+      <a href="https://spacetimedb.com/blog/introducing-spacetimedb-1-0" target="_blank" rel="noopener">Introducing SpacetimeDB 1.0 - Clockwork Labs Blog</a>
+      <div class="source-desc">The 1.0 release announcement covering stable APIs, BitCraft launch, and the technology's production readiness.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-article">Article</span>
+    <div class="source-info">
+      <a href="https://clockwork-labs.medium.com/spacetimedb-and-bitcraft-bc957a7faf40" target="_blank" rel="noopener">SpacetimeDB and BitCraft - Clockwork Labs on Medium</a>
+      <div class="source-desc">Detailed explanation of how BitCraft MMO uses SpacetimeDB as its entire backend, including the reducer model and real-time sync.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-docs">Docs</span>
+    <div class="source-info">
+      <a href="https://blog.photonengine.com/multiplayer-pricing-made-simple/" target="_blank" rel="noopener">Multiplayer Pricing Made Simple - Photon Engine Blog</a>
+      <div class="source-desc">Detailed breakdown of Photon's CCU-based pricing tiers, bandwidth bundling, and the Premium Cloud model.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-docs">Docs</span>
+    <div class="source-info">
+      <a href="https://learn.microsoft.com/en-us/gaming/playfab/get-started/what-is-playfab" target="_blank" rel="noopener">What is PlayFab? - Microsoft Learn</a>
+      <div class="source-desc">Official Microsoft documentation covering PlayFab's full service suite, including LiveOps, economy, and server hosting.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-docs">Docs</span>
+    <div class="source-info">
+      <a href="https://onlineservices.epicgames.com/en-US" target="_blank" rel="noopener">Epic Online Services - Official Site</a>
+      <div class="source-desc">Overview of EOS free cross-platform services including voice, anti-cheat, matchmaking, and crossplay.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-article">Article</span>
+    <div class="source-info">
+      <a href="https://aws.amazon.com/blogs/gametech/the-unique-architecture-behind-amazon-games-seamless-mmo-new-world/" target="_blank" rel="noopener">The Unique Architecture behind New World - AWS Game Tech Blog</a>
+      <div class="source-desc">AWS's own writeup of New World's EC2-based architecture and why it did not use GameLift for the persistent MMO world.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-article">Article</span>
+    <div class="source-info">
+      <a href="https://www.simcentric.com/hong-kong-dedicated-server/how-epic-games-uses-kubernetes-to-power-fortnite-servers/" target="_blank" rel="noopener">How Epic Games Uses Kubernetes to Power Fortnite Servers</a>
+      <div class="source-desc">Technical breakdown of Fortnite's EKS-based microservices architecture, including HPA, monitoring, and deployment patterns.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-article">Article</span>
+    <div class="source-info">
+      <a href="https://aws.amazon.com/blogs/gametech/developers-guide-to-operate-game-servers-on-kubernetes-part-1/" target="_blank" rel="noopener">Developer's Guide to Game Servers on Kubernetes - AWS Game Tech Blog</a>
+      <div class="source-desc">AWS reference architecture for running game servers on EKS with Agones and Open Match, including cost optimization with Spot and Graviton.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-article">Article</span>
+    <div class="source-info">
+      <a href="https://www.revolgy.com/insights/blog/aws-azure-or-gcp-huge-comparison-of-cloud-providers-for-the-gaming-industry" target="_blank" rel="noopener">AWS, Azure or GCP? Comparison for the Gaming Industry - Revolgy</a>
+      <div class="source-desc">Detailed comparison of game-specific services, pricing, and regional coverage across the three major cloud providers.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-article">Article</span>
+    <div class="source-info">
+      <a href="https://www.callofduty.com/ricochet" target="_blank" rel="noopener">RICOCHET Anti-Cheat - Call of Duty Official</a>
+      <div class="source-desc">Activision's official documentation of RICOCHET's multi-layer architecture, TPM 2.0 integration, and kernel driver operation.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-wiki">Wiki</span>
+    <div class="source-info">
+      <a href="https://en.wikipedia.org/wiki/Valve_Anti-Cheat" target="_blank" rel="noopener">Valve Anti-Cheat - Wikipedia</a>
+      <div class="source-desc">Comprehensive history and technical overview of VAC, including delayed ban mechanics, VACnet, and enforcement policies.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-docs">Docs</span>
+    <div class="source-info">
+      <a href="https://heroiclabs.com/nakama/" target="_blank" rel="noopener">Nakama Game Server - Heroic Labs</a>
+      <div class="source-desc">Official overview of Nakama's features: matchmaking, multiplayer, social, and extensibility with Go/Lua/TypeScript.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-docs">Docs</span>
+    <div class="source-info">
+      <a href="https://colyseus.io/framework/" target="_blank" rel="noopener">Colyseus Multiplayer Framework</a>
+      <div class="source-desc">Official documentation of Colyseus room-based architecture, state synchronization, and Node.js server model.</div>
+    </div>
+  </div>
+
+  <div class="source-item">
+    <span class="source-type st-docs">Docs</span>
+    <div class="source-info">
+      <a href="https://github.com/MirrorNetworking/Mirror" target="_blank" rel="noopener">Mirror Networking - GitHub</a>
+      <div class="source-desc">Open-source Unity networking library. Feature list, transport options, and usage statistics.</div>
+    </div>
+  </div>
+
+</div>
+
+</div><!-- end .content -->
+
+</body>
+</html>

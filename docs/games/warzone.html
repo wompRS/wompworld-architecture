@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Call of Duty: Warzone - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Call of Duty: Warzone</div>
+  <h1>Call of Duty: Warzone</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Demonware Dedicated Servers</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Battle Royale / Extraction</span>
+  </div>
+  <p class="lead">Activision's battle royale runs on the IW engine with Demonware middleware handling everything from matchmaking to stats to inventory. The game supports 120-150 player lobbies on dedicated servers across 26+ global data centers, with RICOCHET anti-cheat operating at the kernel level and a controversial 20 Hz server tick rate that remains half of what the regular multiplayer offers.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Infinity Ward / Raven</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2020</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~500K (Steam)</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">IW Engine 8.0+</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">20-24 Hz (BR)</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Dedicated + Demonware</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <h2 id="overview">Overview</h2>
+  <p>Call of Duty: Warzone is a free-to-play battle royale that originally launched in March 2020 as a companion to Modern Warfare (2019). It dropped 150 players onto Verdansk, a massive open-world map, in squads of up to four. Players loot weapons, buy equipment at Buy Stations using in-match cash, fight through the Gulag for a second chance, and battle to be the last squad standing as a gas circle closes in.</p>
+  <p>The game runs on a heavily modified version of the <strong>IW engine</strong>, descended from id Tech 3 through years of Infinity Ward iteration. The networking backbone is provided by <strong>Demonware</strong>, an Activision subsidiary based in Dublin that has powered Call of Duty's online infrastructure since 2005. Demonware handles matchmaking, player profiles, statistics, leaderboards, inventory, and state synchronization using their proprietary "State Engine" (C++) and "Matchmaking+" platforms, with core services written in <strong>Erlang and Python</strong>.</p>
+  <p>Warzone's architecture is shaped by several contentious design decisions: a <strong>20 Hz server tick rate</strong> for battle royale (vs. 60 Hz for regular multiplayer), <strong>SBMM (Skill-Based Matchmaking)</strong> that has driven community controversy for years, and the <strong>RICOCHET anti-cheat system</strong> that operates at the kernel level to combat an arms race with cheat developers. The game integrates tightly with each annual Call of Duty release, sharing progression systems, weapon pools, and backend infrastructure.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>IW Engine</h4>
+      <p>A proprietary engine evolved from id Tech 3 (Quake III Arena). Modern versions support photogrammetry-based rendering, real-time ray tracing, and massive open-world maps. The engine handles both the 6v6 multiplayer modes and the 150-player battle royale, with the networking layer adapted to handle radically different player densities.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Demonware Backend</h4>
+      <p>Founded in 2002 in Dublin, acquired by Activision in 2007. Demonware provides the State Engine for netcode, Matchmaking+ for lobby creation, and handles stats, leaderboards, storage, profiles, paintjobs, gunsmith data, and inventory. Their main server infrastructure is written in Erlang and Python, with offices in Dublin, Vancouver, Los Angeles, and Shanghai.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>26+ Server Locations</h4>
+      <p>Dedicated game servers span major cities worldwide: New York, LA, Chicago, Dallas, Miami, Toronto, Montreal in North America; London, Paris, Frankfurt, Amsterdam in Europe; Tokyo, Seoul, Singapore, Mumbai in Asia; Sydney in Oceania; Sao Paulo in South America; plus Middle East servers added in 2024. Warzone and multiplayer servers are kept on separate infrastructure.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>RICOCHET Anti-Cheat</h4>
+      <p>A multi-layer anti-cheat system combining a kernel-level PC driver, server-side machine learning detection, in-game mitigations (Damage Shield, Cloaking, Disarm, Hallucinations), phone verification, hardware bans, and TPM 2.0/Secure Boot verification. The kernel driver only runs while the game is active, unlike always-on alternatives.</p>
+    </div>
+  </div>
+
+  <!-- DIAGRAM -->
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 860 700">
+      <!-- BACKGROUND GROUPS -->
+      <rect x="10" y="10" width="840" height="80" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="35" class="group-label">PLAYERS (120-150 PER MATCH)</text>
+
+      <rect x="10" y="110" width="420" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="135" class="group-label">DEMONWARE SERVICES (DUBLIN / VANCOUVER / LA / SHANGHAI)</text>
+
+      <rect x="450" y="110" width="400" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="470" y="135" class="group-label">AUTHENTICATION &amp; PLATFORM</text>
+
+      <rect x="10" y="230" width="520" height="180" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="255" class="group-label">GAME SERVER CLUSTER (26+ GLOBAL LOCATIONS)</text>
+
+      <rect x="550" y="230" width="300" height="180" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="570" y="255" class="group-label">GAME SYSTEMS</text>
+
+      <rect x="10" y="430" width="520" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="455" class="group-label">DATA &amp; PERSISTENCE</text>
+
+      <rect x="550" y="430" width="300" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="570" y="455" class="group-label">ECONOMY &amp; PROGRESSION</text>
+
+      <rect x="10" y="550" width="840" height="130" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="575" class="group-label">RICOCHET ANTI-CHEAT (MULTI-LAYER)</text>
+
+      <!-- PLAYERS -->
+      <rect x="50" y="45" width="110" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="105" y="67" text-anchor="middle" class="box-label">PC Players</text>
+
+      <rect x="200" y="45" width="130" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="265" y="67" text-anchor="middle" class="box-label">PlayStation</text>
+
+      <rect x="370" y="45" width="110" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="425" y="67" text-anchor="middle" class="box-label">Xbox</text>
+
+      <rect x="520" y="45" width="160" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="600" y="67" text-anchor="middle" class="box-label">Cross-Platform</text>
+
+      <rect x="720" y="45" width="100" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="770" y="67" text-anchor="middle" class="box-label">Spectators</text>
+
+      <!-- DEMONWARE LAYER -->
+      <polygon points="120,145 180,169 120,193 60,169" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="120" y="173" text-anchor="middle" class="box-label">MM+</text>
+
+      <rect x="210" y="147" width="100" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="260" y="167" text-anchor="middle" class="box-label">State Engine</text>
+      <text x="260" y="181" text-anchor="middle" class="box-sub">Erlang / C++</text>
+
+      <rect x="330" y="147" width="80" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="370" y="167" text-anchor="middle" class="box-label">STUN</text>
+      <text x="370" y="181" text-anchor="middle" class="box-sub">NAT Traversal</text>
+
+      <!-- AUTH LAYER -->
+      <rect x="475" y="147" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="545" y="167" text-anchor="middle" class="box-label">Activision ID</text>
+      <text x="545" y="181" text-anchor="middle" class="box-sub">+ PSN / XBL / Steam</text>
+
+      <rect x="640" y="147" width="90" height="44" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="685" y="167" text-anchor="middle" class="box-label">SMS Verify</text>
+      <text x="685" y="181" text-anchor="middle" class="box-sub">Phone Link</text>
+
+      <rect x="750" y="147" width="80" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="790" y="167" text-anchor="middle" class="box-label">Friends</text>
+      <text x="790" y="181" text-anchor="middle" class="box-sub">Party / Chat</text>
+
+      <!-- GAME SERVERS -->
+      <rect x="40" y="280" width="140" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="110" y="300" text-anchor="middle" class="box-label">BR Server</text>
+      <text x="110" y="314" text-anchor="middle" class="box-sub">150 players / 20Hz</text>
+
+      <rect x="200" y="280" width="140" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="270" y="300" text-anchor="middle" class="box-label">MP Server</text>
+      <text x="270" y="314" text-anchor="middle" class="box-sub">6v6-12v12 / 60Hz</text>
+
+      <rect x="360" y="280" width="150" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="435" y="300" text-anchor="middle" class="box-label">Ranked Server</text>
+      <text x="435" y="314" text-anchor="middle" class="box-sub">Dedicated / Anti-Cheat</text>
+
+      <rect x="100" y="360" width="160" height="36" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="180" y="382" text-anchor="middle" class="box-label">Gulag Instance</text>
+
+      <rect x="290" y="360" width="160" height="36" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="370" y="382" text-anchor="middle" class="box-label">Killcam Replay</text>
+
+      <!-- GAME SYSTEMS -->
+      <rect x="575" y="270" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="635" y="290" text-anchor="middle" class="box-label">Buy Station</text>
+      <text x="635" y="304" text-anchor="middle" class="box-sub">In-Match Economy</text>
+
+      <rect x="715" y="270" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="775" y="290" text-anchor="middle" class="box-label">Loadout System</text>
+      <text x="775" y="304" text-anchor="middle" class="box-sub">Gunsmith / Classes</text>
+
+      <rect x="575" y="340" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="635" y="360" text-anchor="middle" class="box-label">Gas Circle</text>
+      <text x="635" y="374" text-anchor="middle" class="box-sub">Zone Progression</text>
+
+      <rect x="715" y="340" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="775" y="360" text-anchor="middle" class="box-label">Contract System</text>
+      <text x="775" y="374" text-anchor="middle" class="box-sub">Bounties / Recon</text>
+
+      <!-- DATA LAYER -->
+      <path d="M60,490 L60,480 Q60,470 80,470 L140,470 Q160,470 160,480 L160,490" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="110" cy="490" rx="50" ry="10" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="110" y="510" text-anchor="middle" class="box-label">Player Profiles</text>
+
+      <path d="M210,490 L210,480 Q210,470 230,470 L290,470 Q310,470 310,480 L310,490" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="260" cy="490" rx="50" ry="10" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="260" y="510" text-anchor="middle" class="box-label">Stats / Leaderboard</text>
+
+      <path d="M360,490 L360,480 Q360,470 380,470 L440,470 Q460,470 460,480 L460,490" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="410" cy="490" rx="50" ry="10" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="410" y="510" text-anchor="middle" class="box-label">Match History</text>
+
+      <!-- ECONOMY -->
+      <rect x="575" y="465" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="635" y="485" text-anchor="middle" class="box-label">CoD Points</text>
+      <text x="635" y="499" text-anchor="middle" class="box-sub">Store / Battle Pass</text>
+
+      <rect x="715" y="465" width="120" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="775" y="485" text-anchor="middle" class="box-label">Inventory Sync</text>
+      <text x="775" y="499" text-anchor="middle" class="box-sub">Cross-Title</text>
+
+      <!-- RICOCHET LAYERS -->
+      <rect x="40" y="590" width="150" height="70" rx="8" fill="var(--surface)" stroke="var(--red)" stroke-width="1.5"/>
+      <text x="115" y="613" text-anchor="middle" class="box-label">Kernel Driver</text>
+      <text x="115" y="627" text-anchor="middle" class="box-sub">Ring 0 / PC Only</text>
+      <text x="115" y="641" text-anchor="middle" class="box-sub">Active during play</text>
+
+      <rect x="210" y="590" width="150" height="70" rx="8" fill="var(--surface)" stroke="var(--red)" stroke-width="1.5"/>
+      <text x="285" y="613" text-anchor="middle" class="box-label">Server-Side ML</text>
+      <text x="285" y="627" text-anchor="middle" class="box-sub">Behavioral analysis</text>
+      <text x="285" y="641" text-anchor="middle" class="box-sub">Aim + movement</text>
+
+      <rect x="380" y="590" width="150" height="70" rx="8" fill="var(--surface)" stroke="var(--red)" stroke-width="1.5"/>
+      <text x="455" y="613" text-anchor="middle" class="box-label">Mitigations</text>
+      <text x="455" y="627" text-anchor="middle" class="box-sub">Damage Shield</text>
+      <text x="455" y="641" text-anchor="middle" class="box-sub">Cloak / Disarm</text>
+
+      <rect x="550" y="590" width="140" height="70" rx="8" fill="var(--surface)" stroke="var(--red)" stroke-width="1.5"/>
+      <text x="620" y="613" text-anchor="middle" class="box-label">TPM 2.0</text>
+      <text x="620" y="627" text-anchor="middle" class="box-sub">Secure Boot</text>
+      <text x="620" y="641" text-anchor="middle" class="box-sub">Hardware verify</text>
+
+      <rect x="710" y="590" width="120" height="70" rx="8" fill="var(--surface)" stroke="var(--red)" stroke-width="1.5"/>
+      <text x="770" y="613" text-anchor="middle" class="box-label">Shadow Lobby</text>
+      <text x="770" y="627" text-anchor="middle" class="box-sub">Flagged players</text>
+      <text x="770" y="641" text-anchor="middle" class="box-sub">Higher latency</text>
+
+      <!-- ARROWS -->
+      <path d="M105,81 L120,145" class="arrow"/>
+      <path d="M265,81 L120,145" class="arrow"/>
+      <text x="160" y="115" class="arrow-label">matchmake</text>
+
+      <path d="M425,81 L545,147" class="arrow"/>
+      <text x="510" y="115" class="arrow-label">auth</text>
+
+      <path d="M120,193 L110,280" class="arrow"/>
+      <text x="90" y="240" class="arrow-label">assign lobby</text>
+
+      <path d="M260,191 L270,280" class="arrow"/>
+      <text x="290" y="240" class="arrow-label">state sync</text>
+
+      <path d="M110,330 L180,360" class="arrow"/>
+      <text x="120" y="350" class="arrow-label">Gulag</text>
+
+      <path d="M270,330 L370,360" class="arrow"/>
+      <text x="340" y="348" class="arrow-label">replay</text>
+
+      <path d="M110,330 L110,470" class="arrow"/>
+      <text x="85" y="420" class="arrow-label">persist</text>
+
+      <path d="M270,330 L260,470" class="arrow"/>
+      <path d="M435,330 L410,470" class="arrow"/>
+
+      <path d="M115,590 L110,330" class="arrow" style="stroke:var(--red);marker-end:none" stroke-dasharray="4 4"/>
+      <path d="M285,590 L270,330" class="arrow" style="stroke:var(--red);marker-end:none" stroke-dasharray="4 4"/>
+    </svg>
+    <div class="diagram-caption">Warzone's architecture: Demonware middleware powers matchmaking and state sync, with RICOCHET providing five layers of anti-cheat protection from hardware to in-game mitigations.</div>
+  </div>
+
+  <!-- INFRASTRUCTURE -->
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Warzone runs entirely on dedicated servers for battle royale modes. Regular 6v6 multiplayer uses a hybrid approach where public matches typically use dedicated servers but private/custom matches may fall back to player-hosted (P2P) sessions. The dedicated server fleet is managed by <strong>Demonware</strong>, operating from data centers across 26+ locations worldwide.</p>
+
+  <h3>Data Center Distribution</h3>
+  <p>Server locations are concentrated in high-population areas. North America has the densest coverage with servers in New York, Los Angeles, Chicago, Dallas, Miami, Toronto, and Montreal. Europe is served from London, Paris, Frankfurt, and Amsterdam. Asia-Pacific has servers in Tokyo, Seoul, Singapore, Mumbai, and Sydney. South America runs from Sao Paulo, and Activision added dedicated Middle East servers in 2024 to improve service for that region and parts of Africa.</p>
+  <p>Warzone and regular multiplayer operate on <strong>separate server infrastructure</strong>. This separation prevents a new multiplayer title launch from degrading Warzone performance and allows independent scaling for each mode's demand patterns.</p>
+
+  <h3>Demonware's Technology Stack</h3>
+  <p>Demonware's core infrastructure runs on <strong>Erlang</strong> for its concurrent networking services and <strong>Python</strong> for tooling and automation. The State Engine provides high-performance state synchronization in C++, handling the netcode that game servers use to keep clients in sync. Matchmaking+ operates as a service layer above the game servers, handling lobby creation, skill evaluation, region routing, and queue management.</p>
+  <p>Demonware also maintains <strong>STUN servers</strong> (Session Traversal Utilities for NAT) across its infrastructure, identified by community packet analysis as hostnames like <code>stun1.us.demonware.net</code>. These handle NAT traversal for edge cases where direct connections between client and server require hole-punching through consumer routers.</p>
+
+  <h3>Lobby Size History</h3>
+  <p>The original Warzone launched with 150-player lobbies, with limited-time modes supporting up to 200. Warzone 2.0 on Al Mazrah controversially reduced this to 100. The count was later increased to 120, and as of recent updates, Raven Software has been intermittently testing 150-player lobbies again for standard Battle Royale playlists.</p>
+
+  <table class="proto">
+    <tr><th>Component</th><th>Technology</th><th>Details</th></tr>
+    <tr><td>Game Engine</td><td>IW Engine 8.0+</td><td>Evolved from id Tech 3; supports photogrammetry, ray tracing, open-world streaming</td></tr>
+    <tr><td>Matchmaking</td><td>Demonware Matchmaking+</td><td>Lobby creation, SBMM, region routing, queue management</td></tr>
+    <tr><td>Netcode</td><td>Demonware State Engine</td><td>C++ state synchronization framework, eliminates per-title netcode reinvention</td></tr>
+    <tr><td>NAT Traversal</td><td>STUN Servers</td><td>Distributed across regions for client-server connection establishment</td></tr>
+    <tr><td>Backend Core</td><td>Erlang / Python</td><td>Concurrent networking services (Erlang), tooling and automation (Python)</td></tr>
+    <tr><td>Anti-Cheat</td><td>RICOCHET</td><td>Kernel driver + server ML + in-game mitigations + TPM/Secure Boot</td></tr>
+    <tr><td>Auth</td><td>Activision ID</td><td>Unified account linking PSN, XBL, Steam, Battle.net credentials</td></tr>
+    <tr><td>Data Centers</td><td>26+ locations</td><td>NA, EU, APAC, SA, ME; separate infra for BR vs. multiplayer</td></tr>
+  </table>
+
+  <!-- NETWORKING -->
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>Warzone uses a server-authoritative networking model where the dedicated server runs the canonical game simulation. Clients send inputs and receive state updates. The IW engine uses a proprietary networking protocol over <strong>UDP</strong> for gameplay traffic.</p>
+
+  <h3>The Tick Rate Problem</h3>
+  <p>The most persistent technical criticism of Warzone is its server tick rate. Regular multiplayer runs at approximately <strong>60 Hz</strong>. Warzone battle royale runs at approximately <strong>20 Hz</strong>, sometimes dipping to lower values during high server load. Custom games and some large-format modes (like Ground War) have been measured as low as <strong>12 Hz</strong>.</p>
+  <p>For context, Valorant runs at 128 Hz, Counter-Strike at 64 Hz, and Fortnite at 30 Hz. At 20 Hz, the server only processes game state updates 20 times per second. The time between updates (50ms) is long enough that players experience noticeable desync, particularly in close-quarters combat. Common symptoms include "super bullets" (multiple damage ticks arriving in a single frame because they were calculated across multiple server ticks but delivered together) and dying behind cover (the attacker's client saw you exposed on a stale server tick).</p>
+  <p>The tick rate is not static. Community analysis has shown that it fluctuates based on server load, with peak-hour tick rates dropping into the 12-16 Hz range on congested servers. The relationship between tick rate and perceived netcode quality is not linear, however. High tick rate with poor interpolation or prediction code can still feel bad, and low tick rate with good prediction can feel acceptable. The community consensus is that Warzone's prediction and interpolation code does not sufficiently compensate for the low base tick rate.</p>
+
+  <div class="callout c-red">
+    <div class="callout-title">Why Not Higher Tick Rate?</div>
+    <p>Processing 150 players with full weapon ballistics, vehicle physics, and destructible environments at 60+ Hz is computationally expensive. Doubling the tick rate roughly doubles the server CPU cost per match, which across Warzone's global fleet of thousands of simultaneous matches translates to significant infrastructure spend. Activision has consistently chosen to keep BR tick rates lower than multiplayer, prioritizing match capacity over simulation fidelity. The community considers this a cost-saving measure rather than a technical necessity.</p>
+  </div>
+
+  <h3>Latency Compensation</h3>
+  <p>The IW engine implements standard latency compensation techniques: client-side prediction for movement, lag compensation (server rewinds to the shooter's perspective when validating hits), and interpolation between server state updates. The "Delta Ping" model attempts to place lobbies on the data center that minimizes the worst-case ping for all players in the lobby, rather than simply connecting everyone to their nearest server. This is a direct consequence of SBMM: tightening skill brackets sometimes requires pulling players from farther-away regions.</p>
+
+  <table class="proto">
+    <tr><th>Metric</th><th>Multiplayer</th><th>Warzone BR</th><th>Custom Games</th></tr>
+    <tr><td>Tick Rate</td><td>~60 Hz</td><td>~20-24 Hz</td><td>~12 Hz</td></tr>
+    <tr><td>Player Count</td><td>6v6 to 12v12</td><td>100-150</td><td>Variable</td></tr>
+    <tr><td>Server Model</td><td>Dedicated (public)</td><td>Dedicated</td><td>P2P or Dedicated</td></tr>
+    <tr><td>Protocol</td><td>UDP</td><td>UDP</td><td>UDP</td></tr>
+    <tr><td>Update Interval</td><td>~16ms</td><td>~50ms</td><td>~83ms</td></tr>
+  </table>
+
+  <!-- DATA -->
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>Demonware manages all persistent player data across the Call of Duty ecosystem. When a player unlocks a weapon, earns a camo, or levels up, Demonware's inventory services ensure that data persists across sessions and platforms. The unified Activision ID system links platform accounts (PSN, Xbox Live, Steam, Battle.net) to a single player profile, enabling cross-platform progression.</p>
+
+  <h3>Cross-Title Integration</h3>
+  <p>Warzone's data model is designed to persist across annual Call of Duty releases. When a new title launches (Modern Warfare III, Black Ops 6), Warzone integrates the new title's weapons, operators, and progression systems. This requires Demonware to maintain backward-compatible inventory schemas that can accommodate items from multiple game generations simultaneously. A weapon unlocked in Modern Warfare 2019 must still be accessible and functional in Warzone alongside weapons from Black Ops 6.</p>
+
+  <h3>Killcam and Final Killcam</h3>
+  <p>The killcam system records a server-side replay of the moments before a player's death. The server maintains a rolling buffer of recent game state, and when a kill occurs, the relevant window of state is packaged and sent to the victim's client for playback. Final killcams (the cinematic kill shown to all players at match end) are similarly generated from server-side state. This replay data is separate from the client-side theater/replay system and is lightweight enough to generate in real-time without impacting server tick performance.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-pink">
+      <h4>Stats &amp; Leaderboards</h4>
+      <p>Demonware tracks per-match statistics (kills, damage, placement, cash earned, Gulag results) and aggregates them into career stats and leaderboards. Stats are scoped per-title and per-mode, with separate tracking for Warzone BR, Ranked Play, and each multiplayer mode. Leaderboard queries hit Demonware's backend directly rather than going through the game server.</p>
+    </div>
+    <div class="info-card c-cyan">
+      <h4>Player Profiles &amp; Gunsmith</h4>
+      <p>Each player's loadout configurations (Gunsmith weapon builds, perk selections, equipment choices) are stored in Demonware's profile service. When a player purchases a loadout drop in-match, the Buy Station sends a request to the profile service to retrieve the player's saved loadout configuration. This is why there's a brief delay between purchasing a loadout drop and the crate actually appearing.</p>
+    </div>
+  </div>
+
+  <!-- SCALING -->
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <p>Warzone's scaling model revolves around two challenges: supporting 150-player matches with acceptable netcode quality, and handling millions of daily active players across a global server fleet.</p>
+
+  <h3>Match-Level Performance</h3>
+  <p>A 150-player lobby represents substantially more server-side work than Fortnite's 100-player matches. Each additional player adds to the replication burden, hit registration calculations, and physics simulation workload. The IW engine handles this through aggressive level-of-detail networking: players far from each other receive reduced update rates, while close-proximity players get priority updates. This is similar in concept to Fortnite's Replication Graph but implemented within the IW engine's proprietary networking layer.</p>
+
+  <h3>Map Streaming</h3>
+  <p>Warzone's open-world maps are massive. Verdansk, Caldera, Al Mazrah, and Urzikstan are all significantly larger than standard 6v6 multiplayer maps. The IW engine streams map data on-demand rather than loading the entire map into memory at match start. An optional "on-demand texture streaming" feature downloads high-resolution textures from Activision's CDN during gameplay, trading internet bandwidth for reduced disk space and VRAM usage. This was particularly problematic during the Caldera launch, where players with slower connections experienced significant texture pop-in.</p>
+  <p>In 2024, Activision open-sourced the Caldera map dataset on GitHub for academic use, providing the geometry, collision volumes, and lighting data (though not textures) for one of the largest game environments ever shipped. The dataset demonstrates the complexity of Warzone's spatial data: millions of geometry elements with relationships between renderable objects, collision shapes, and lighting volumes.</p>
+
+  <h3>SBMM Architecture</h3>
+  <p>Skill-Based Matchmaking is handled by Demonware's Matchmaking+ service. The system evaluates players based on recent performance (community analysis suggests the last 5 matches weigh most heavily), with factors including K/D ratio, win rate, headshot percentage, and movement patterns. Several Activision patents describe matchmaking systems that go beyond simple skill ranking:</p>
+  <ul>
+    <li><strong>Patent US20160005270A1</strong> describes a microtransaction engine that could match players with "marquee players" using premium items to influence purchase decisions</li>
+    <li><strong>Patent US20190091581A1</strong> describes matching based on player behavioral profiles, tracking how players respond to specific scenarios and matching similar playstyles</li>
+    <li>An internal "Deprioritize Skill Test" in 2024 loosened SBMM constraints, revealing that 90% of lower-skill players returned less frequently without protection, while high-skill players were more satisfied</li>
+  </ul>
+  <p>Activision has stated these patents are R&D and not necessarily implemented, but the matchmaking system's behavior closely mirrors the patent descriptions. The SBMM system must balance skill brackets against latency requirements, and tightening skill constraints too aggressively forces the system to match players across wider geographic areas, increasing ping.</p>
+
+  <!-- DEEP DIVES -->
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>The Gulag</h3>
+  <p>The Gulag is a respawn mechanic unique to Warzone. When eliminated for the first time in a match, players are sent to a separate arena for a 1v1 duel. The winner respawns back into the battle royale; the loser's only hope is a teammate buying them back at a Buy Station.</p>
+  <p>Server-side, the Gulag runs as a <strong>sub-instance within the same match server process</strong>. It is not a separate server. The main BR simulation continues while Gulag fights happen in parallel. The Gulag arena exists in the same world space but is isolated so players cannot interact with the main game. When a player dies and enters the Gulag queue, the server tracks their position in the queue and spawns them into the arena when their turn arrives. Spectating other Gulag fights happens through the same server replication channel, with the server sending Gulag arena state to queued players.</p>
+  <p>In Warzone 2.0, the Gulag was reworked into a 2v2 format with random pairing, loot spawns on the ground instead of fixed loadouts, and an AI "Jailer" enemy that both teams could cooperate to defeat for a mutual escape. This significantly increased the Gulag's server-side complexity because the system now had to manage four players, AI pathfinding, loot spawns, and a cooperation detection system within the sub-instance.</p>
+
+  <h3>Buy Station Economy</h3>
+  <p>Warzone's in-match economy is entirely server-authoritative. Cash is tracked per-player on the server. When a player interacts with a Buy Station, the client sends a purchase request and the server validates the player's cash balance before deducting the cost and spawning the purchased item. Loadout drops require a server-side call to retrieve the player's saved loadout configuration from Demonware's profile service.</p>
+  <p>Buy Station pricing has been tuned repeatedly across seasons. Self-revive kits, UAVs, loadout drops, and teammate redeployment costs all shift to change the strategic meta. The server enforces stock limits (some items are limited to 2 purchases per station) and applies perk-based discounts (Hardline provides 25% off). The economy creates a cash flow loop: players earn cash through looting, eliminations, and completing Contracts (bounties, recon missions, supply runs), then spend it on combat advantages and teammate revivals.</p>
+
+  <h3>RICOCHET Anti-Cheat In Depth</h3>
+  <p>RICOCHET is a five-layer anti-cheat system that Activision developed internally starting in 2021:</p>
+  <p><strong>Layer 1: TPM 2.0 and Secure Boot.</strong> The newest layer, added with Black Ops 7 and retroactively applied to Warzone. When the game launches, the system verifies that the PC's Trusted Platform Module reports a clean boot chain. Platform Configuration Registers (PCRs) record the system's startup state, and any modification to the boot process (like disabling Secure Boot to load unsigned drivers) flags the system as untrusted. The TPM also provides a hardware-bound unique identifier that cannot be spoofed, enabling hardware bans that survive OS reinstalls.</p>
+  <p><strong>Layer 2: Kernel Driver.</strong> The RICOCHET kernel driver operates at Ring 0 (the same privilege level as graphics card and OS drivers). It monitors all processes attempting to interact with the Call of Duty game process, detecting unauthorized memory reads/writes, injected DLLs, and hooking attempts. Unlike Valorant's Vanguard, the RICOCHET driver only activates when the game launches and shuts down when the game closes. It is installed as part of the game and removed when the game is uninstalled.</p>
+  <p><strong>Layer 3: Server-Side Machine Learning.</strong> Behavioral analysis models run on the server side, evaluating gameplay telemetry for anomalies: statistically impossible aim accuracy, inhuman reaction times, movement patterns consistent with speed hacks, and damage output that exceeds weapon capabilities. These models flag players for review and feed into the mitigation system.</p>
+  <p><strong>Layer 4: In-Game Mitigations.</strong> Rather than immediately banning detected cheaters, RICOCHET deploys active countermeasures to collect more data while neutralizing the cheater's impact. <strong>Damage Shield</strong> makes legitimate players immune to cheaters' bullets. <strong>Cloaking</strong> makes legitimate players invisible to the cheater. <strong>Disarm</strong> removes the cheater's weapons. <strong>Hallucinations</strong> spawns fake decoy players that only the cheater can see. These mitigations keep the cheater in-game for extended data collection while protecting other players.</p>
+  <p><strong>Layer 5: Account Enforcement.</strong> Ban waves are issued daily and in large batches. Phone verification links accounts to phone numbers (raising the cost of creating throwaway accounts). Shadow lobbies route flagged players into separate matchmaking pools with higher latency and longer queue times. Third-party hardware detection identifies devices like Cronus adapters. Since Black Ops 6 launched, RICOCHET has banned over 228,000 accounts.</p>
+
+  <h3>Audio Occlusion</h3>
+  <p>Warzone's audio system uses a hybrid client-server model. The IW engine performs audio occlusion calculations on the client side using raycasts against the game's geometry to determine which surfaces block or attenuate sound. Footstep audio, gunfire, and vehicle sounds are spatially positioned based on the client's local representation of other players' positions, which means audio accuracy is directly tied to the server's update rate. At 20 Hz, there is up to 50ms of positional staleness in audio cues, which experienced players can notice when trying to pinpoint enemy positions through walls.</p>
+
+  <!-- EVOLUTION -->
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <span class="year">2003-18</span>
+      <span class="desc"><strong>IW Engine lineage begins.</strong> id Tech 3 forks into the first Call of Duty engine. Through 15+ iterations across yearly titles, the engine evolves from a corridor shooter framework into an open-world capable rendering and networking platform. Demonware (acquired 2007) becomes the backbone for all online features.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2019</span>
+      <span class="desc"><strong>Modern Warfare (2019) ships on IW 8.0.</strong> Major engine rewrite with photogrammetry, a new animation system, and 64-player Ground War mode. The engine's ability to handle larger player counts lays the groundwork for Warzone. Battle(non)sense's netcode analysis reveals variable tick rates across modes.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2020</span>
+      <span class="desc"><strong>Warzone launches (March 10).</strong> 150 players on Verdansk. 15 million players in the first 4 days. 50 million within the first month. The Gulag 1v1 respawn mechanic differentiates it from other BRs. SBMM controversy begins immediately. Tick rate measured at 20-24 Hz for BR.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2021</span>
+      <span class="desc"><strong>RICOCHET Anti-Cheat announced (October).</strong> Kernel-level driver deploys first in Asia-Pacific, then globally. Cheating had become an existential problem for Warzone, with content creators and competitive players abandoning the game. Verdansk is replaced by Caldera (Pacific map).</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2022</span>
+      <span class="desc"><strong>Warzone 2.0 launches on Al Mazrah.</strong> New map, 2v2 Gulag, DMZ extraction mode. Player count controversially reduced to 100. RICOCHET adds Damage Shield, Cloaking, and Disarm mitigations. The in-game mitigation philosophy keeps cheaters playing for data collection rather than immediately banning them.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2023</span>
+      <span class="desc"><strong>MW3 integration and Urzikstan map.</strong> Lobby count returns to 120. Activision publishes SBMM research data and conducts the "Deprioritize Skill Test." The Gulag returns to 1v1 with three map variants and dynamic events. Buy Station economy rebalanced toward original Warzone pricing.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2024</span>
+      <span class="desc"><strong>Verdansk returns, Caldera dataset open-sourced.</strong> 150-player lobbies tested. RICOCHET adds Hallucinations mitigation and third-party hardware detection (Cronus). TPM 2.0 and Secure Boot requirements added for Black Ops 7/Warzone. Demonware issues 228,000+ bans post-BO6 launch.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2025</span>
+      <span class="desc"><strong>RICOCHET adds TPM 2.0 hardware identity verification.</strong> Platform Configuration Registers and hardware-bound bans make it significantly harder for repeat offenders to create new accounts. Demonware infrastructure improvements address rubber-banding and packet loss in Ranked Play.</span>
+    </div>
+  </div>
+
+  <!-- SOURCES -->
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://blog.activision.com/call-of-duty/archives/a-look-inside-demonware-the-unsung-heroes-powering-your-online-gaming-experience">A Look Inside Demonware: The Unsung Heroes Powering Your Online Gaming Experience</a>
+        <div class="source-desc">Activision blog post detailing Demonware's role in Call of Duty online infrastructure, covering matchmaking, stats, and networking services.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://en.wikipedia.org/wiki/Demonware">Demonware - Wikipedia</a>
+        <div class="source-desc">Overview of Demonware's history, acquisition by Activision, product lineup (State Engine, Matchmaking+), and technology stack (Erlang, Python).</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.callofduty.com/blog/2021/10/ricochet-anti-cheat-initiative-for-call-of-duty">Announcing RICOCHET: A New Anti-Cheat Initiative for Call of Duty</a>
+        <div class="source-desc">Official Activision announcement of RICOCHET, explaining the kernel-level driver, server-side tools, and privacy architecture.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://patents.google.com/patent/US20160005270A1/en">Patent US20160005270A1: System and Method for Driving Microtransactions in Multiplayer Video Games</a>
+        <div class="source-desc">Activision patent describing matchmaking systems that leverage player skill data to influence purchase decisions.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.dexerto.com/call-of-duty/modern-warfare-network-analysis-troubling-inconsistencies-1289397/">Modern Warfare Network Analysis Reveals Troubling Inconsistencies</a>
+        <div class="source-desc">Dexerto coverage of Battle(non)sense's netcode analysis revealing variable tick rates across game modes (12 Hz to 60 Hz).</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.activision.com/cdn/research/CallofDuty_Matchmaking_Series_2.pdf">Call of Duty Matchmaking Series #2 (Activision Research)</a>
+        <div class="source-desc">Activision's published research on SBMM implementation, including the "Deprioritize Skill Test" results and player retention data.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://github.com/zzVertigo/CodOnline-Disected">CodOnline-Dissected: Call of Duty Online Infrastructure Analysis</a>
+        <div class="source-desc">Community reverse-engineering documentation of Call of Duty's online infrastructure, covering Demonware protocols and STUN server identification.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://netduma.com/blog/call-of-duty-mw3-warzone-server-locations">Ultimate Guide to Call of Duty Server Locations for MW3 and Warzone</a>
+        <div class="source-desc">Netduma's comprehensive mapping of all 26+ Call of Duty server locations worldwide, with data center identification and geolocation.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://github.com/Activision/caldera">Activision/caldera: Caldera Dataset on GitHub</a>
+        <div class="source-desc">Open-source release of the Warzone Caldera map geometry, collision, and lighting data for academic research into real-time rendering.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://www.erlang-factory.com/upload/presentations/395/ErlangandFirst-PersonShooters.pdf">Erlang and First-Person Shooters (Erlang Factory London 2011)</a>
+        <div class="source-desc">Demonware presentation on using Erlang for high-concurrency game server infrastructure, covering their architecture for handling millions of concurrent users.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME NAV -->
+  <div class="game-nav">
+    <a class="prev" href="fortnite.html">
+      <span class="dir">Previous</span>
+      <span class="name">Fortnite</span>
+    </a>
+    <a class="next" href="destiny2.html">
+      <span class="dir">Next</span>
+      <span class="name">Destiny 2</span>
+    </a>
+  </div>
+
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

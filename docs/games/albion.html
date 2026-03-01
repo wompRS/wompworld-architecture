@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Albion Online - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Albion Online</div>
+  <h1>Albion Online</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Single-Shard Cluster</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Sandbox MMORPG</span>
+  </div>
+  <p class="lead">A cross-platform sandbox MMO built on Unity and Photon Server, where every player shares one persistent world. Its single-threaded zone architecture, Apache Cassandra database, and fully player-driven economy make it one of the closest modern analogues to EVE Online's design philosophy, applied to a medieval fantasy setting with full-loot PvP.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Sandbox Interactive</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2017</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~350K DAU (2024)</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">Unity (Client)</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">Event-Driven</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Single Shard</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <h2 id="overview">Overview</h2>
+  <p>Albion Online is built around a principle that CTO David Salz has stated plainly: there is only a single game world shared by all players on all platforms. No separate shards, no separate servers, not even separate instances for different platforms. A player on an Android phone, a player on a Mac, and a player on a Windows PC all exist in the same world, fighting over the same resources, and trading on the same markets.</p>
+  <p>The game world is divided into roughly <strong>600 zones ("clusters")</strong>, each approximately 1x1 km in size. Each cluster is a self-contained simulation running on a game server. When a player crosses a zone boundary, their client disconnects from one game server and reconnects to another, producing a brief loading screen. This is the fundamental unit of Albion's architecture: one cluster, one game server process, one single-threaded simulation.</p>
+  <p>The tech stack is pragmatic rather than bespoke. The client runs on <strong>Unity</strong>, chosen because it publishes to Windows, Mac, Linux, Android, and iOS with minimal per-platform effort. The server backend is written in <strong>C#</strong>, running on the <strong>Photon Server</strong> framework, which provides low-level networking and a C++ core with C# application code on top. The database layer uses <strong>Apache Cassandra</strong> for high-throughput key-value storage and <strong>PostgreSQL</strong> for query-heavy features like the marketplace. Hosting uses bare-metal dedicated machines rather than virtual instances, chosen for guaranteed CPU time and memory.</p>
+  <p>The architecture makes deliberate tradeoffs. Single-threaded cluster simulation means that ZvZ (Zerg vs. Zerg) battles with hundreds of players create genuine performance bottlenecks. There is no Time Dilation system like EVE Online. Instead, Albion uses <strong>cluster queue caps</strong> (currently ~350 players per zone) and has been incrementally optimizing spell processing and network event systems to push those limits higher. The honest reality is that this is the hardest unsolved engineering problem in the game.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Single World, All Platforms</h4>
+      <p>One world for Windows, Mac, Linux, Android, and iOS. No platform-specific servers. Characters transfer seamlessly between devices. This is possible because the client is a thin view layer, and the server has absolute authority over all game logic.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Cluster-Based Zones</h4>
+      <p>~600 zones, each 1x1 km. Each cluster runs as an independent simulation on a game server. Zone transitions produce brief loading screens. A single cluster can contain 300+ players, 500+ monsters, and 10,000+ interactive objects.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Full-Loot PvP</h4>
+      <p>Death in PvP zones means losing your entire inventory to attackers. This design requirement means the server must be absolutely authoritative. Client-side prediction is minimal because cheating in a full-loot game has devastating consequences for victims.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Player-Driven Economy</h4>
+      <p>Nearly every item in the game is crafted by players, in player-built crafting stations, from player-gathered resources. The developers do not sell items. They act only as a central bank exchanging currencies. Local marketplaces with region-specific pricing create trade route opportunities.</p>
+    </div>
+  </div>
+
+  <!-- DIAGRAM -->
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 860 680">
+      <!-- BACKGROUND GROUPS -->
+      <rect x="10" y="10" width="840" height="90" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="35" class="group-label">CLIENT LAYER (UNITY)</text>
+
+      <rect x="10" y="120" width="840" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="145" class="group-label">LOGIN &amp; ROUTING</text>
+
+      <rect x="10" y="240" width="540" height="200" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="265" class="group-label">GAME SERVERS (CLUSTER SIMULATION)</text>
+
+      <rect x="570" y="240" width="280" height="200" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="590" y="265" class="group-label">GLOBAL SERVICES</text>
+
+      <rect x="10" y="460" width="840" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="485" class="group-label">DATABASE &amp; PERSISTENCE</text>
+
+      <rect x="10" y="580" width="840" height="90" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="605" class="group-label">INFRASTRUCTURE &amp; CDN</text>
+
+      <!-- PLAYERS -->
+      <rect x="50" y="45" width="110" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="105" y="67" text-anchor="middle" class="box-label">PC Client</text>
+
+      <rect x="185" y="45" width="110" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="240" y="67" text-anchor="middle" class="box-label">Mac / Linux</text>
+
+      <rect x="320" y="45" width="110" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="375" y="67" text-anchor="middle" class="box-label">Android</text>
+
+      <rect x="455" y="45" width="110" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="510" y="67" text-anchor="middle" class="box-label">iOS</text>
+
+      <rect x="600" y="45" width="170" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="685" y="67" text-anchor="middle" class="box-label">CLI Test Client</text>
+
+      <!-- LOGIN / BACKOFFICE -->
+      <rect x="60" y="155" width="160" height="44" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5" class="box"/>
+      <text x="140" y="174" text-anchor="middle" class="box-label">Login Server</text>
+      <text x="140" y="188" text-anchor="middle" class="box-sub">Authentication</text>
+
+      <!-- BACKOFFICE -->
+      <polygon points="310,155 410,155 430,177 410,199 310,199 290,177" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="360" y="175" text-anchor="middle" class="box-label">BackOffice</text>
+      <text x="360" y="188" text-anchor="middle" class="box-sub">Farm Control</text>
+
+      <!-- CHAT -->
+      <rect x="500" y="155" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="570" y="174" text-anchor="middle" class="box-label">Chat Server</text>
+      <text x="570" y="188" text-anchor="middle" class="box-sub">TCP</text>
+
+      <!-- ANTI CHEAT -->
+      <rect x="670" y="155" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--red)" stroke-width="1.5" class="box"/>
+      <text x="740" y="174" text-anchor="middle" class="box-label">BattlEye</text>
+      <text x="740" y="188" text-anchor="middle" class="box-sub">Anti-Cheat</text>
+
+      <!-- GAME SERVERS (CLUSTERS) -->
+      <rect x="35" y="290" width="145" height="55" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="107" y="311" text-anchor="middle" class="box-label">Game Server 1</text>
+      <text x="107" y="325" text-anchor="middle" class="box-sub">Royal Continent</text>
+      <text x="107" y="337" text-anchor="middle" class="box-sub">~50 clusters</text>
+
+      <rect x="195" y="290" width="145" height="55" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="267" y="311" text-anchor="middle" class="box-label">Game Server 2</text>
+      <text x="267" y="325" text-anchor="middle" class="box-sub">Outlands</text>
+      <text x="267" y="337" text-anchor="middle" class="box-sub">~50 clusters</text>
+
+      <rect x="355" y="290" width="145" height="55" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="427" y="311" text-anchor="middle" class="box-label">Game Server N</text>
+      <text x="427" y="325" text-anchor="middle" class="box-sub">Avalon Roads</text>
+      <text x="427" y="337" text-anchor="middle" class="box-sub">~50 clusters</text>
+
+      <!-- SINGLE THREAD DETAIL -->
+      <rect x="35" y="365" width="230" height="50" rx="8" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1" stroke-dasharray="4 2"/>
+      <text x="150" y="384" text-anchor="middle" class="box-label">Single-Thread Event Queue</text>
+      <text x="150" y="398" text-anchor="middle" class="box-sub">Pathfinding / DB / Log pools</text>
+
+      <!-- INSTANCE SERVERS -->
+      <rect x="290" y="365" width="210" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="395" y="384" text-anchor="middle" class="box-label">Instance Servers</text>
+      <text x="395" y="398" text-anchor="middle" class="box-sub">Islands / Corrupted Dungeons</text>
+
+      <!-- WORLD SERVER -->
+      <rect x="590" y="280" width="240" height="44" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="2" class="box"/>
+      <text x="710" y="299" text-anchor="middle" class="box-label">World Server</text>
+      <text x="710" y="313" text-anchor="middle" class="box-sub">Guilds / GvG / Parties / Global</text>
+
+      <!-- MARKETPLACE -->
+      <rect x="590" y="336" width="240" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="710" y="355" text-anchor="middle" class="box-label">Marketplace Server</text>
+      <text x="710" y="369" text-anchor="middle" class="box-sub">Buy / Sell Orders</text>
+
+      <!-- GOLD MARKET / STATS / RANKING -->
+      <rect x="590" y="392" width="110" height="36" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="645" y="414" text-anchor="middle" class="box-label">Gold Market</text>
+
+      <rect x="710" y="392" width="120" height="36" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="770" y="408" text-anchor="middle" class="box-label">Stats &amp; Rank</text>
+      <text x="770" y="420" text-anchor="middle" class="box-sub">Leaderboards</text>
+
+      <!-- DATABASES -->
+      <ellipse cx="150" cy="490" rx="70" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <rect x="80" y="490" width="140" height="35" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="150" cy="525" rx="70" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="150" y="510" text-anchor="middle" class="box-label">Cassandra</text>
+
+      <ellipse cx="370" cy="490" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <rect x="305" y="490" width="130" height="35" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="370" cy="525" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="370" y="510" text-anchor="middle" class="box-label">PostgreSQL</text>
+
+      <!-- IN-MEMORY -->
+      <rect x="500" y="490" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5" class="box"/>
+      <text x="570" y="509" text-anchor="middle" class="box-label">In-Memory</text>
+      <text x="570" y="523" text-anchor="middle" class="box-sub">Active Player State</text>
+
+      <!-- SECONDARY INDEX CACHE -->
+      <rect x="670" y="490" width="150" height="44" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="745" y="509" text-anchor="middle" class="box-label">Data Handoff</text>
+      <text x="745" y="523" text-anchor="middle" class="box-sub">Zone Transition via DB</text>
+
+      <!-- INFRA -->
+      <rect x="60" y="610" width="170" height="40" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="145" y="627" text-anchor="middle" class="box-label">Bare Metal Hosts</text>
+      <text x="145" y="641" text-anchor="middle" class="box-sub">10x 10-Core Xeon / 32GB</text>
+
+      <rect x="260" y="610" width="150" height="40" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="335" y="627" text-anchor="middle" class="box-label">DDoS Protection</text>
+      <text x="335" y="641" text-anchor="middle" class="box-sub">External Mitigation</text>
+
+      <rect x="440" y="610" width="150" height="40" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="515" y="627" text-anchor="middle" class="box-label">Gcore CDN</text>
+      <text x="515" y="641" text-anchor="middle" class="box-sub">Asset Delivery</text>
+
+      <rect x="620" y="610" width="200" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="720" y="627" text-anchor="middle" class="box-label">Albion Data Project</text>
+      <text x="720" y="641" text-anchor="middle" class="box-sub">Community Market API</text>
+
+      <!-- ARROWS -->
+      <!-- Clients to Login -->
+      <line x1="105" y1="81" x2="140" y2="155" class="arrow"/>
+      <line x1="240" y1="81" x2="140" y2="155" class="arrow"/>
+      <line x1="375" y1="81" x2="140" y2="155" class="arrow"/>
+      <line x1="510" y1="81" x2="200" y2="155" class="arrow"/>
+      <rect x="180" y="108" width="60" height="14" fill="var(--surface)" rx="2"/>
+      <text x="210" y="118" text-anchor="middle" class="arrow-label">Photon</text>
+
+      <!-- Login to BackOffice -->
+      <line x1="220" y1="177" x2="290" y2="177" class="arrow"/>
+
+      <!-- BackOffice to Game Servers -->
+      <line x1="330" y1="199" x2="107" y2="290" class="arrow"/>
+      <line x1="360" y1="199" x2="267" y2="290" class="arrow"/>
+      <line x1="390" y1="199" x2="427" y2="290" class="arrow"/>
+
+      <!-- Game Servers to Cluster detail -->
+      <line x1="107" y1="345" x2="100" y2="365" class="arrow" stroke-dasharray="4 2"/>
+      <line x1="267" y1="345" x2="200" y2="365" class="arrow" stroke-dasharray="4 2"/>
+
+      <!-- Game Servers to World Server -->
+      <line x1="500" y1="317" x2="590" y2="302" class="arrow"/>
+      <rect x="527" y="300" width="36" height="14" fill="var(--surface)" rx="2"/>
+      <text x="545" y="310" text-anchor="middle" class="arrow-label">TCP</text>
+
+      <!-- Game Servers to Marketplace -->
+      <line x1="500" y1="330" x2="590" y2="358" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+
+      <!-- Game Servers to DBs -->
+      <line x1="107" y1="345" x2="150" y2="490" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+      <line x1="267" y1="345" x2="370" y2="490" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+
+      <!-- Marketplace to Postgres -->
+      <line x1="710" y1="380" x2="370" y2="490" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+
+      <!-- In-Memory to Cassandra -->
+      <line x1="500" y1="512" x2="220" y2="510" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+
+      <!-- Clients to Chat -->
+      <line x1="510" y1="81" x2="570" y2="155" class="arrow" stroke="var(--t3)" stroke-width="1"/>
+      <rect x="530" y="108" width="36" height="14" fill="var(--surface)" rx="2"/>
+      <text x="548" y="118" text-anchor="middle" class="arrow-label">TCP</text>
+    </svg>
+    <div class="diagram-caption">Simplified Albion Online architecture based on David Salz's Quo Vadis 2016 talk, dev blog posts, and Photon Engine case study</div>
+  </div>
+
+  <!-- INFRASTRUCTURE -->
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Albion Online runs on <strong>bare-metal dedicated servers</strong> rather than cloud VMs. Sandbox Interactive made this choice to guarantee consistent CPU time and memory, which matters when your game simulation is single-threaded and performance-sensitive. The original hosting used Softlayer (now IBM Cloud), with 8 machines running 10-Core Intel Xeon processors and 32 GB RAM each, targeting approximately 15,000 concurrent users.</p>
+  <p>The server farm is managed by a central <strong>BackOffice Server</strong> that controls startup, shutdown, and provides an API for communicating with the entire farm. It acts as the single point of access for all other servers in the deployment. Sandbox Interactive initially tried hosting across 2 data centers for better ping distribution, but abandoned the multi-datacenter approach due to inter-server disconnects and latency issues between sites.</p>
+  <p>As the game grew (reaching 350,000 daily active users by May 2024 with the Albion Europe launch), the infrastructure has scaled substantially beyond those original 8 machines. The game now operates regional server deployments for Americas, Asia, and Europe, each running as a separate world. Asset delivery uses <strong>Gcore's CDN</strong>, which Sandbox Interactive credits with reducing infrastructure expenses by 40%.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-orange">
+      <h4>Game Servers</h4>
+      <p>Run the cluster simulations. Each game server hosts multiple zones. The game logic per zone is single-threaded, with async thread pools for database I/O, pathfinding, and logging. All incoming player commands enter a synchronized event queue and are processed sequentially.</p>
+    </div>
+    <div class="info-card c-amber">
+      <h4>World Server</h4>
+      <p>The single authority for all cross-server features: parties, guilds, GvG battles, territory ownership, and global events. When a feature needs to coordinate across multiple game servers, the World Server handles it. This is a single point of coordination, not a single point of failure.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Marketplace Server</h4>
+      <p>Handles all buy and sell orders across the game's local marketplaces. Backed by PostgreSQL for complex order matching queries. Prices vary by location, creating economic incentives for trade routes. A separate Gold Market server handles the premium currency exchange.</p>
+    </div>
+    <div class="info-card c-blue">
+      <h4>Chat &amp; Login</h4>
+      <p>The chat server runs on TCP, separate from game traffic. The login server handles authentication and initial routing to a game server. Both communicate with the BackOffice server for farm-wide coordination.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Instance Servers</h4>
+      <p>Player islands, guild islands, and instanced content like Corrupted Dungeons are dynamically created as needed. The World Server coordinates instance creation, while the actual simulation runs on available game server capacity.</p>
+    </div>
+    <div class="info-card c-pink">
+      <h4>Statistics &amp; Ranking</h4>
+      <p>Separate servers handle leaderboard calculations, kill statistics, and seasonal rankings. These are read-heavy workloads that would waste game server CPU if co-located with combat simulation.</p>
+    </div>
+  </div>
+
+  <!-- NETWORKING -->
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>Albion Online uses <strong>Photon Server</strong> as its networking middleware. Photon provides a C++ core with C# application code on top, giving Sandbox Interactive the ability to share code between the Unity client and the server backend. They use Photon at the lowest possible level: only the server framework and the network protocols. Photon also offers a cloud hosting solution, a chat system, and an MMO framework, but Sandbox Interactive chose to use none of those, building their own implementations instead.</p>
+  <p>Most game traffic uses <strong>Photon's reliable UDP protocol</strong>. Movement messages are the exception: they use <strong>unreliable UDP</strong> because a missed movement update is immediately superseded by the next one. Chat and inter-server communication use <strong>TCP</strong> for guaranteed delivery. Message content is mostly simple binary packets, with JSON used only in rare cases.</p>
+  <p>The architecture follows a strict <strong>server-authoritative model</strong>. All game world manipulations happen on the server. The client does validity checks and sometimes prediction, but ultimately sends all requests to the server for final authority. The client is essentially a view layer. Sandbox Interactive even maintains a fully functional <strong>command-line client</strong> (no Unity, no graphics) used for load testing. This proves the point: the game logic is entirely server-side, and the client is just a display.</p>
+
+  <table class="proto">
+    <thead><tr><th>Connection</th><th>Protocol</th><th>Details</th></tr></thead>
+    <tbody>
+      <tr><td>Game Traffic</td><td><code>Reliable UDP</code></td><td>Photon's reliable UDP protocol for all gameplay actions: combat, crafting, inventory, interactions. Guaranteed delivery with ordering.</td></tr>
+      <tr><td>Movement</td><td><code>Unreliable UDP</code></td><td>Player movement updates sent as unreliable UDP. Stale movement data is meaningless since newer updates replace it immediately.</td></tr>
+      <tr><td>Chat</td><td><code>TCP</code></td><td>Dedicated chat server using TCP for reliable message delivery. Separate from game servers to avoid impacting combat performance.</td></tr>
+      <tr><td>Inter-Server</td><td><code>TCP</code></td><td>Communication between game servers, World Server, Marketplace Server, and BackOffice uses TCP for reliable inter-process messaging.</td></tr>
+      <tr><td>Zone Handoff</td><td><code>Via Database</code></td><td>When a player crosses zone boundaries, their state is written to the database by the source server and read by the destination server. This works even when both zones run on the same physical machine.</td></tr>
+      <tr><td>CDN / Assets</td><td><code>HTTPS</code></td><td>Game client assets delivered via Gcore CDN. Patches and updates use standard HTTPS downloads.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- DATA -->
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>Albion uses a dual-database strategy: <strong>Apache Cassandra</strong> for high-throughput game state storage and <strong>PostgreSQL</strong> for query-heavy features that need relational capabilities.</p>
+  <p>Cassandra was chosen because it is a distributed hash table that scales horizontally. You can add server nodes to the Cassandra cluster, and it automatically redistributes the hash space with redundancy. Multiple nodes can fail and the cluster stays operational. Data is retrieved by hash key, with optional secondary indexes on additional columns. It is in-memory as much as possible and optimized for high throughput.</p>
+  <p>The tradeoff is that Cassandra is only <strong>"eventually consistent."</strong> Due to its distributed nature, it is possible to read outdated data. This can be fixed by reading from a quorum of nodes (slower reads) or writing to a quorum (slower writes). Albion Online chose the fast-writes approach: game servers keep player data <strong>in memory</strong> while a player is logged in, and write state to Cassandra frequently but accept that reads might occasionally be stale. This works because the authoritative state lives in the game server's memory, not in the database.</p>
+  <p>PostgreSQL handles the marketplace, where order matching queries need proper relational operators (joins, range queries, sorting by price). Cassandra's key-value model is not suited for these kinds of queries.</p>
+  <p>Zone transitions use the database as a handoff mechanism. When a player moves between zones, the source game server writes their complete state to Cassandra, and the destination game server reads it. This approach works even when both zones happen to run on the same physical machine, keeping the architecture uniform.</p>
+
+  <div class="callout c-red">
+    <div class="callout-title">The Cassandra Incident</div>
+    <p>During a closed alpha test, all player-built structures in the game disappeared. The cause was a Cassandra bug involving secondary index loss. The secondary indexes that tracked building ownership were silently corrupted, and without those indexes, the game could not find the buildings. This is the kind of risk that comes with using bleeding-edge open source technology for game persistence. Sandbox Interactive has since implemented additional safeguards and monitoring, but the incident is a cautionary tale about trusting NoSQL secondary indexes for critical game state.</p>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-card c-pink">
+      <h4>Apache Cassandra</h4>
+      <p>Primary game state storage. Player inventories, character data, building ownership, territory state. Distributed hash table with horizontal scaling. Eventually consistent with fast writes. Originally developed by Facebook, open source under Apache License.</p>
+    </div>
+    <div class="info-card c-blue">
+      <h4>PostgreSQL</h4>
+      <p>Marketplace and Gold Market data. Order matching requires relational queries that Cassandra cannot efficiently handle. Separate database instances for marketplace and gold market to distribute query load.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>In-Memory Game State</h4>
+      <p>While a player is logged in, their authoritative state lives in the game server's memory. The database serves as permanent storage and handoff mechanism. This design means fast-writes to Cassandra are acceptable because the in-memory state is always current.</p>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Zone Transition Handoff</h4>
+      <p>Player crosses zone boundary. Source server writes full player state to Cassandra. Client disconnects and reconnects to destination server. Destination reads state from Cassandra. Brief loading screen covers the transition. Works identically for same-machine and cross-machine transitions.</p>
+    </div>
+  </div>
+
+  <!-- SCALING -->
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <p>Albion's biggest performance challenge is <strong>ZvZ (Zerg vs. Zerg) battles</strong>. When hundreds of players converge in a single zone, the single-threaded game simulation becomes a bottleneck. Unlike EVE Online, which slows time with TiDi, Albion has no mechanism to trade real time for simulation accuracy. Instead, the game uses <strong>cluster queue caps</strong> to hard-limit zone population.</p>
+  <p>When approximately 350 players enter a zone, the zone becomes "cluster queued." The zone is locked, low Item Power (IP) players inside the zone can be kicked out, and higher IP players outside can queue to enter. This is a harsh but effective mechanism: it prevents the simulation from being overwhelmed at the cost of excluding some players from the fight.</p>
+  <p>The underlying problem scales non-linearly. An area-of-effect spell hitting 50 opponents generates over a thousand individual checks per cast (damage calculation, resistance evaluation, buff/debuff application, etc.). With 300+ players casting spells simultaneously, the event queue fills faster than the single thread can drain it. Sandbox Interactive's Technical Director has identified two primary bottlenecks: the <strong>spell processing system</strong> and the <strong>network event system</strong> that broadcasts results to clients.</p>
+
+  <h3>Interest Management</h3>
+  <p>To keep network traffic manageable, Albion uses <strong>spatial hashing</strong> for interest management. All objects in a cluster are placed into a grid of approximately 10x10 meter cells. Each cell maintains a list of objects and fires events when objects enter or leave. Each player has an "Interest Area" consisting of two grid-aligned rectangles: a smaller inner rectangle for detailed updates and a larger outer rectangle for presence awareness. Only objects within a player's Interest Area generate network events for that player. This prevents the server from broadcasting every action to every player in the zone.</p>
+
+  <h3>No Traditional Game Loop</h3>
+  <p>Albion does not use a traditional game loop with a fixed-rate Update() call on every object. Instead, game objects create <strong>timers</strong> when they need periodic processing. A monster creates a recurring AI update timer when a player enters its detection range and deletes the timer when all players leave. A spell creates a timer for its duration. A crafting station creates a timer for the crafting time. This event-driven approach means idle objects consume zero CPU, which is important when a single cluster contains 10,000+ interactive objects but only a fraction are active at any moment.</p>
+
+  <!-- DEEP DIVES -->
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <div class="callout">
+    <div class="callout-title">Single-Threaded By Design</div>
+    <p>The decision to run each cluster's game logic on a single thread is deliberate. Making it multi-threaded would be error-prone and not necessarily more efficient, because the complex interactions between game objects (a spell hitting a player wearing equipment that has passive effects that trigger abilities that affect nearby allies) would require extensive locking. The performance cost of acquiring and releasing locks, plus the debugging cost of deadlocks and race conditions, would likely offset any parallelism gains. Instead, all incoming player commands enter a synchronized event queue and are processed in strict order of arrival. Work that can be offloaded (database operations, pathfinding, logging) goes to separate thread pools that complete asynchronously and post results back to the event queue.</p>
+  </div>
+
+  <div class="callout c-amber">
+    <div class="callout-title">Server Authority in a Full-Loot Game</div>
+    <p>Albion's full-loot PvP rules make server authority non-negotiable. If a player dies in a red or black zone, everything in their inventory is dropped and can be looted by the attacker. A client-side cheat that prevents death or duplicates items would be catastrophic. The server validates every action: movement speed, damage dealt, items in inventory, cooldown timers, and position. The client does basic prediction for responsiveness (showing movement immediately before server confirmation), but any discrepancy is resolved in the server's favor. Sandbox Interactive acknowledges that any information sent to the client can and will be extracted by cheaters, so they restrict what the client knows about to objects on-screen or very close to it.</p>
+  </div>
+
+  <div class="callout c-green">
+    <div class="callout-title">Cross-Platform Architecture</div>
+    <p>The ability to run on five platforms (Windows, Mac, Linux, Android, iOS) comes from two architectural decisions. First, Unity handles the cross-platform rendering and input. Second, and more importantly, the Albion client is structured as a library (a DLL) that communicates with the server. The client mirrors the part of the data model visible to the player and provides a controller interface similar to the server's own. This means the "game" is the server. The client is just a viewport. The command-line test client proves this: you can interact with the full game simulation without any graphics, running through a terminal. Shared C# code between client and server (via Photon) reduces platform-specific bugs.</p>
+  </div>
+
+  <div class="callout c-purple">
+    <div class="callout-title">Guild Territories and Hideouts</div>
+    <p>Guild territories in the Outlands are controlled through GvG combat, managed globally by the World Server. Territory ownership determines access to high-tier resources and provides passive bonuses. Hideouts are persistent guild bases that exist as separate instanced maps within a zone. A guild can have up to 6 hideouts across the world but no more than 1 per zone. Hideouts can only be placed in zones with a watchtower territory in the Outlands, or in Avalonian Rest zones in the Roads of Avalon. They have defense points that protect them from attack, and are invulnerable most of the day. If all defense points are destroyed, the hideout is lost and all contents are destroyed, except items in players' personal banks, which transfer to the nearest public bank (claimable after 4 weeks, with a fee).</p>
+  </div>
+
+  <div class="callout c-red">
+    <div class="callout-title">Anti-Cheat in a Full-Loot World</div>
+    <p>Albion has gone through two anti-cheat solutions. Easy Anti-Cheat (EAC) was added in February 2019 and removed in July 2023. BattlEye replaced it. The community strongly opposes bots and cheaters, and in a full-loot game the stakes are higher than in a conventional MMO. A bot farming high-tier resources in a safe zone devalues the time of legitimate gatherers. A speed hack in PvP means someone loses their entire gear set to a cheater. Sandbox Interactive's position is that banning bots completely is the only viable choice because the line between botting and cheating is too thin to enforce any lesser policy.</p>
+  </div>
+
+  <div class="callout">
+    <div class="callout-title">The DDoS War</div>
+    <p>During early access or beta (the exact timing is partially obscured), Albion Online was hit with sustained DDoS attacks exceeding 60 Gbps for over 4 consecutive weeks. The team describes sleepless nights and an upset community before they secured external mitigation services. This experience informed their infrastructure decisions going forward, including investment in DDoS protection and the eventual partnership with Gcore for CDN and infrastructure services. For an indie studio running a single-shard game, a successful DDoS takes down the entire world for every player, making it a higher-impact attack than against a sharded game where only one shard might go down.</p>
+  </div>
+
+  <!-- EVOLUTION -->
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item"><span class="year">2012</span><span class="desc"><strong>Founded:</strong> Sandbox Interactive founded in Berlin by David Salz and others. Small team begins building an MMO with Unity client and C# server on Photon.</span></div>
+    <div class="timeline-item"><span class="year">2014</span><span class="desc"><strong>Alpha testing:</strong> Hosted on Softlayer bare-metal machines. 8 servers, 10-core Xeon, 32 GB RAM. Cassandra chosen for distributed persistence. The building-disappearance bug caused by Cassandra secondary index corruption.</span></div>
+    <div class="timeline-item"><span class="year">2016</span><span class="desc"><strong>Quo Vadis talk:</strong> David Salz presents "Software Architecture of an MMO" at Quo Vadis conference in Berlin. Detailed public disclosure of tech stack, threading model, database strategy, and design philosophy.</span></div>
+    <div class="timeline-item"><span class="year">2017</span><span class="desc"><strong>Launch (July 17):</strong> Albion Online goes live with a single server for all platforms. Approximately 250,000 players at launch. DDoS attacks exceeding 60 Gbps for 4+ weeks force emergency mitigation purchases.</span></div>
+    <div class="timeline-item"><span class="year">2019</span><span class="desc"><strong>Free-to-play:</strong> Game goes free-to-play in April 2019, massively expanding the player base. Easy Anti-Cheat (EAC) added in February. Mobile (Android) launch.</span></div>
+    <div class="timeline-item"><span class="year">2021</span><span class="desc"><strong>Stillfront acquisition / Hideouts:</strong> Sandbox Interactive acquired by Stillfront Group. Hideout system introduced, adding persistent guild bases with defense mechanics and territory integration. iOS version launched.</span></div>
+    <div class="timeline-item"><span class="year">2023</span><span class="desc"><strong>Albion Asia / BattlEye:</strong> Albion Asia server launches (April), breaking 300,000 DAU. Easy Anti-Cheat replaced by BattlEye (July). ZvZ performance optimization becomes a stated engineering priority.</span></div>
+    <div class="timeline-item"><span class="year">2024</span><span class="desc"><strong>Albion Europe / 350K DAU:</strong> European server launches (April), pushing daily active users past 350,000. Steam peak CCU: 27,227. Ongoing investment in ZvZ spell system and network event optimization. Gcore CDN reduces infrastructure costs by 40%.</span></div>
+  </div>
+
+  <!-- SOURCES -->
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info"><a href="https://davidsalz.de/wp-content/uploads/2016/06/Albion-Online-Quo-Vadis-2016-talk.pdf" target="_blank">Quo Vadis 2016: Software Architecture of an MMO (David Salz)</a><div class="source-desc">The definitive technical talk on Albion's architecture. Covers tech stack, database decisions, threading model, Photon usage, and hosting strategy. PDF slides.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://davidsalz.de/secrets-of-albion-online-part-1/" target="_blank">David Salz: Secrets of Albion Online, Part 1</a><div class="source-desc">CTO blog post expanding on the Quo Vadis talk with additional details on Cassandra, PostgreSQL, event-driven architecture, and the command-line client.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-video">Video</span>
+      <div class="source-info"><a href="https://blog.photonengine.com/albion-online/" target="_blank">Photon Engine: Albion Online - Building a PvP Focused MMO</a><div class="source-desc">Photon Engine case study video covering how Sandbox Interactive uses Photon Server for networking, the reliable/unreliable UDP split, and cross-platform support.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://medium.com/@pillarwheel/game-studies-albion-online-server-farming-1470e79fbeb9" target="_blank">Pillarwheel Studios: Albion Online Server Farming (Game Studies)</a><div class="source-desc">External analysis of Albion's server farm architecture, BackOffice server, and the single-threaded cluster design with async offloading.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info"><a href="https://forum.albiononline.com/index.php/Thread/218858-How-Albion-Online-Tackles-ZvZ-Performance/" target="_blank">Official Forum: How Albion Online Tackles ZvZ Performance</a><div class="source-desc">Developer statement on ZvZ performance challenges, spell system bottlenecks, network event optimization, and the cluster queue system.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://albiononline.com/news/record-player-numbers" target="_blank">Albion Online: Record Player Numbers (2024)</a><div class="source-desc">Official announcement of 350,000+ daily active users following Albion Europe launch. Steam peak of 27,227 concurrent.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info"><a href="https://wiki.albiononline.com/wiki/Hideout" target="_blank">Albion Wiki: Hideouts</a><div class="source-desc">Documentation of hideout mechanics, defense points, placement restrictions, destruction consequences, and territory integration.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info"><a href="https://www.albion-online-data.com/" target="_blank">The Albion Online Data Project</a><div class="source-desc">Community-run market data API that monitors network traffic for real-time price tracking. Over 150K daily market data submissions.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://gcore.com/case-studies/sandbox-interactive-cdn" target="_blank">Gcore Case Study: Sandbox Interactive</a><div class="source-desc">Infrastructure case study covering CDN usage, DDoS protection, and how Gcore reduced Albion's infrastructure expenses by 40%.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info"><a href="https://wiki.albiononline.com/wiki/Easy_Anti-Cheat" target="_blank">Albion Wiki: Easy Anti-Cheat / BattlEye</a><div class="source-desc">History of anti-cheat solutions in Albion Online: EAC added Feb 2019, removed July 2023, replaced by BattlEye.</div></div>
+    </div>
+  </div>
+
+  <!-- GAME NAV -->
+  <div class="game-nav">
+    <a href="eve.html"><span class="dir">Previous</span><span class="name">EVE Online</span></a>
+    <a class="next" href="new-world.html"><span class="dir">Next</span><span class="name">New World</span></a>
+  </div>
+
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<!-- TOC scroll highlight -->
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+
+</body>
+</html>

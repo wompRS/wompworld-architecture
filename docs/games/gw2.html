@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guild Wars 2 - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Guild Wars 2</div>
+  <h1>Guild Wars 2</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Megaserver + Dynamic Events</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Action MMORPG</span>
+  </div>
+  <p class="lead">ArenaNet's custom engine powers a megaserver system that dynamically distributes players across map instances using social-weighted scoring, combined with a cascading dynamic event system and industry-leading zero-downtime deployment technology dating back to 2005.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">ArenaNet</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2012</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~460K (Aug 2013)</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">Custom (C++) + Havok</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">Not publicly disclosed</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Megaserver / Map Instance</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <h2 id="overview">Overview</h2>
+  <p>Guild Wars 2 launched in August 2012 with an architecture that differed significantly from traditional MMO design. Rather than named servers where players permanently reside, GW2 uses two broad regions (NA and EU) with a <strong>megaserver system</strong> that dynamically assigns players to map instances based on a weighted scoring algorithm. You never pick a "server" for PvE; you just enter a map and the system places you in the best-fit instance alongside your friends, guildmates, and players who share your language preference.</p>
+  <p>The engine is a heavily modified version of the proprietary engine ArenaNet built for Guild Wars 1, extended with real-time 3D environments, Havok physics, and a substantially reworked network layer. ArenaNet uses their own custom toolchain for content creation, allowing designers to place events, NPCs, and interactive objects and immediately test them in-engine.</p>
+  <p>GW2's most celebrated technical achievement is its <strong>zero-downtime deployment</strong> system. Since Guild Wars 1 launched in 2005, ArenaNet has been deploying updates (including full expansions) without taking the game offline. The system uses a blue-green deployment strategy where new server instances are spun up, players are gradually migrated as they cross zone boundaries, and old instances are wound down with a countdown timer. ArenaNet reportedly patented this technology for MMO games.</p>
+  <p>The game migrated from on-premise data centers to <strong>AWS</strong> starting in 2017, making it one of the first Windows-based MMOs to go all-in on cloud hosting. Today, the infrastructure runs on a mix of EC2 instance types with CloudFormation deployments, CloudWatch monitoring, Route 53 DNS, and CloudFront CDN.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Megaserver System</h4>
+      <p>Replaces traditional named servers for PvE. Players are assigned to map instances using a scoring algorithm that considers party membership, guild, language, home world, and friends list. Instances spin up and down dynamically based on population. Introduced April 2014.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Dynamic Events</h4>
+      <p>Server-driven events that cascade based on outcomes. If players repel an attack, a counterattack event may spawn. If they fail, a rescue mission triggers instead. Events scale difficulty based on participation history. No quest log needed; just walk into the blue circle.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Zero-Downtime Deployment</h4>
+      <p>Updates deploy through blue-green instance migration. New servers spin up, players transfer as they zone, old instances get a 1-hour shutdown timer. Expansions, Living World updates, and patches all deploy without interrupting active gameplay. Technology dates back to 2005.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Separate Trading Post</h4>
+      <p>The Trading Post runs on its own web infrastructure, rendered in-game via Chromium Embedded Framework (previously Awesomium, then CoherentUI). It has its own backend, API endpoints, and can go down independently of game servers. Shared across all NA and EU worlds.</p>
+    </div>
+  </div>
+
+  <!-- DIAGRAM -->
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 860 660">
+      <!-- BACKGROUND GROUPS -->
+      <rect x="10" y="10" width="840" height="75" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="35" class="group-label">CLIENTS</text>
+
+      <rect x="10" y="105" width="840" height="90" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="128" class="group-label">AUTHENTICATION &amp; ROUTING</text>
+
+      <rect x="10" y="215" width="520" height="185" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="238" class="group-label">MEGASERVER (PVE MAP INSTANCES)</text>
+
+      <rect x="550" y="215" width="300" height="185" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="570" y="238" class="group-label">COMPETITIVE MODES</text>
+
+      <rect x="10" y="420" width="840" height="90" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="443" class="group-label">SHARED SERVICES</text>
+
+      <rect x="10" y="530" width="840" height="115" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="553" class="group-label">DATA &amp; PERSISTENCE (AWS)</text>
+
+      <!-- CLIENTS -->
+      <rect x="100" y="42" width="120" height="30" rx="15" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="160" y="62" text-anchor="middle" class="box-label" font-size="10">Windows Client</text>
+
+      <rect x="250" y="42" width="100" height="30" rx="15" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="300" y="62" text-anchor="middle" class="box-label" font-size="10">Mac Client</text>
+
+      <rect x="380" y="42" width="130" height="30" rx="15" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="445" y="62" text-anchor="middle" class="box-label" font-size="10">Steam Integration</text>
+
+      <rect x="540" y="42" width="130" height="30" rx="15" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="605" y="62" text-anchor="middle" class="box-label" font-size="10">Embedded Browser</text>
+
+      <rect x="700" y="42" width="110" height="30" rx="15" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="755" y="62" text-anchor="middle" class="box-label" font-size="10">API Consumers</text>
+
+      <!-- AUTH -->
+      <rect x="40" y="128" width="190" height="50" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="135" y="150" text-anchor="middle" class="box-label">Portal Server (Auth)</text>
+      <text x="135" y="166" text-anchor="middle" class="box-sub">SSO, friends, messaging, TP auth</text>
+
+      <rect x="260" y="128" width="170" height="50" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="345" y="150" text-anchor="middle" class="box-label">Login Server</text>
+      <text x="345" y="166" text-anchor="middle" class="box-sub">Account validation, token grant</text>
+
+      <polygon points="560,135 610,128 660,135 660,175 610,182 560,175" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="610" y="158" text-anchor="middle" class="box-label" font-size="10">Megaserver Router</text>
+
+      <rect x="700" y="128" width="130" height="50" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="765" y="150" text-anchor="middle" class="box-label">Build Server</text>
+      <text x="765" y="166" text-anchor="middle" class="box-sub">Blue-green deploy</text>
+
+      <!-- MEGASERVER MAP INSTANCES -->
+      <rect x="30" y="258" width="140" height="45" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="100" y="278" text-anchor="middle" class="box-label" font-size="10">Queensdale #1</text>
+      <text x="100" y="293" text-anchor="middle" class="box-sub">Map instance (PvE)</text>
+
+      <rect x="185" y="258" width="140" height="45" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="255" y="278" text-anchor="middle" class="box-label" font-size="10">Queensdale #2</text>
+      <text x="255" y="293" text-anchor="middle" class="box-sub">Map instance (PvE)</text>
+
+      <rect x="340" y="258" width="170" height="45" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="425" y="278" text-anchor="middle" class="box-label" font-size="10">Dragon's Stand Meta</text>
+      <text x="425" y="293" text-anchor="middle" class="box-sub">Map-wide meta event</text>
+
+      <rect x="30" y="318" width="140" height="40" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="100" y="343" text-anchor="middle" class="box-label" font-size="10">Lion's Arch #1</text>
+
+      <rect x="185" y="318" width="140" height="40" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="255" y="343" text-anchor="middle" class="box-label" font-size="10">Lion's Arch #2</text>
+
+      <rect x="340" y="318" width="170" height="40" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="425" y="343" text-anchor="middle" class="box-sub">... N map instances</text>
+
+      <rect x="80" y="368" width="200" height="24" rx="4" fill="none" stroke="var(--amber)" stroke-width="1.5" stroke-dasharray="4 2"/>
+      <text x="180" y="384" text-anchor="middle" class="box-sub" font-size="8">Dynamic Event Controller (per map)</text>
+
+      <!-- COMPETITIVE MODES -->
+      <rect x="575" y="253" width="130" height="42" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="640" y="272" text-anchor="middle" class="box-label" font-size="10">sPvP Arena</text>
+      <text x="640" y="287" text-anchor="middle" class="box-sub">Glicko2 matchmaking</text>
+
+      <rect x="720" y="253" width="120" height="42" rx="8" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="780" y="272" text-anchor="middle" class="box-label" font-size="10">Custom Arena</text>
+      <text x="780" y="287" text-anchor="middle" class="box-sub">Player-hosted</text>
+
+      <rect x="575" y="308" width="130" height="42" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="2"/>
+      <text x="640" y="327" text-anchor="middle" class="box-label" font-size="10">WvW Borderlands</text>
+      <text x="640" y="342" text-anchor="middle" class="box-sub">World Restructuring</text>
+
+      <rect x="720" y="308" width="120" height="42" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="2"/>
+      <text x="780" y="327" text-anchor="middle" class="box-label" font-size="10">WvW Eternal BG</text>
+      <text x="780" y="342" text-anchor="middle" class="box-sub">Shared 4-map set</text>
+
+      <rect x="575" y="363" width="265" height="28" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="707" y="382" text-anchor="middle" class="box-label" font-size="10">Guild Halls &amp; Home Instances</text>
+
+      <!-- SHARED SERVICES -->
+      <rect x="35" y="455" width="130" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="100" y="480" text-anchor="middle" class="box-label" font-size="10">Trading Post (Web)</text>
+
+      <rect x="180" y="455" width="120" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="240" y="480" text-anchor="middle" class="box-label" font-size="10">Guild Server</text>
+
+      <rect x="315" y="455" width="120" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="375" y="480" text-anchor="middle" class="box-label" font-size="10">Chat Server</text>
+
+      <rect x="450" y="455" width="110" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="505" y="480" text-anchor="middle" class="box-label" font-size="10">LFG Server</text>
+
+      <rect x="575" y="455" width="120" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="635" y="480" text-anchor="middle" class="box-label" font-size="10">GW2 API v2</text>
+
+      <rect x="710" y="455" width="125" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="772" y="480" text-anchor="middle" class="box-label" font-size="10">Wizard's Vault</text>
+
+      <!-- DATA LAYER -->
+      <ellipse cx="130" cy="580" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <rect x="65" y="580" width="130" height="25" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="130" cy="605" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="130" y="598" text-anchor="middle" class="box-label" font-size="10">Account DB (Primary)</text>
+
+      <ellipse cx="330" cy="580" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <rect x="265" y="580" width="130" height="25" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="330" cy="605" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="330" y="598" text-anchor="middle" class="box-label" font-size="10">Account DB (Mirror)</text>
+
+      <ellipse cx="530" cy="580" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <rect x="465" y="580" width="130" height="25" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="530" cy="605" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="530" y="598" text-anchor="middle" class="box-label" font-size="10">TP Order Book</text>
+
+      <ellipse cx="720" cy="580" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <rect x="655" y="580" width="130" height="25" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="720" cy="605" rx="65" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="720" y="598" text-anchor="middle" class="box-label" font-size="10">Game Content DB</text>
+
+      <rect x="65" y="625" width="720" height="12" rx="3" fill="none" stroke="var(--line2)" stroke-width="1" stroke-dasharray="4 2"/>
+      <text x="425" y="634" text-anchor="middle" class="box-sub" font-size="7">AWS: EC2 (T3/C5/M5/R5), CloudFormation, CloudWatch, Route 53, CloudFront</text>
+
+      <!-- ARROWS -->
+      <line x1="300" y1="72" x2="135" y2="128" class="arrow"/>
+      <text x="200" y="104" class="arrow-label">auth</text>
+
+      <line x1="135" y1="178" x2="610" y2="135" class="arrow"/>
+      <text x="370" y="150" class="arrow-label">session token</text>
+
+      <line x1="610" y1="182" x2="255" y2="258" class="arrow"/>
+      <text x="410" y="225" class="arrow-label">scored placement</text>
+
+      <line x1="610" y1="182" x2="640" y2="253" class="arrow"/>
+      <text x="635" y="220" class="arrow-label">PvP queue</text>
+
+      <line x1="100" y1="358" x2="100" y2="455" class="arrow"/>
+      <text x="85" y="412" class="arrow-label">buy/sell</text>
+
+      <line x1="100" y1="495" x2="130" y2="578" class="arrow"/>
+      <line x1="130" y1="605" x2="330" y2="605" class="arrow"/>
+      <text x="230" y="620" class="arrow-label">mirror sync</text>
+
+      <line x1="100" y1="495" x2="530" y2="578" class="arrow"/>
+      <text x="310" y="540" class="arrow-label">TP orders</text>
+
+      <line x1="635" y1="495" x2="720" y2="578" class="arrow"/>
+      <text x="690" y="540" class="arrow-label">game data</text>
+    </svg>
+    <div class="diagram-caption">GW2 megaserver architecture: portal auth feeds into scored map placement, with separate Trading Post web infrastructure</div>
+  </div>
+
+  <!-- SERVER INFRASTRUCTURE -->
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Guild Wars 2 runs entirely on <strong>Amazon Web Services</strong>. The migration from on-premise data centers started in September 2017 with the Path of Fire expansion, initially as a hybrid deployment. ArenaNet tested AWS by deploying persistent map instances for the new expansion zones while keeping older content on-premise. After successfully scaling to double their normal active users during the expansion launch, they began migrating the remaining infrastructure.</p>
+  <p>Today, the game uses a variety of EC2 instance types (T3, C5, M5, R5) depending on the workload. Deployments go through <strong>AWS CloudFormation</strong> templates, monitoring runs through <strong>Amazon CloudWatch</strong>, DNS through <strong>Route 53</strong>, and content delivery through <strong>CloudFront</strong>. ArenaNet was reportedly the first Windows-based MMO to go fully cloud-hosted.</p>
+  <p>The original Guild Wars 1 architecture used server clusters with approximately 12 different specialized server types (authentication, guild management, gaming, tournament, chat, etc.), with each type dynamically scaled to match workload. GW2 inherited this distributed service architecture and extended it for persistent open-world gameplay rather than GW1's instanced model.</p>
+
+  <h3>The Portal Server</h3>
+  <p>The <strong>Portal Server</strong> (also called the secure token server) handles authentication and manages services that are not tied to a specific map instance: friend lists, private messaging, and Trading Post authentication. It is the first thing the client connects to and acts as the gateway for all session management. The portal server issues tokens that the client uses to connect to game servers and the Trading Post backend.</p>
+
+  <h3>Database Architecture</h3>
+  <p>ArenaNet uses a <strong>primary-secondary database replication</strong> model. When writing to the database, a message is sent to the primary instance, which then sends the same message to the secondary (mirror) before applying the change to itself. If the primary fails, the secondary automatically takes over. For database upgrades, ArenaNet manually disconnects the primary and secondary, upgrades the secondary, and reconnects them. This approach supports their zero-downtime requirements.</p>
+
+  <table class="proto">
+    <tr><th>Parameter</th><th>Value</th><th>Notes</th></tr>
+    <tr><td>Cloud Provider</td><td>AWS</td><td>First all-in Windows MMO on AWS</td></tr>
+    <tr><td>Compute</td><td>EC2 (T3, C5, M5, R5)</td><td>Workload-specific instance types</td></tr>
+    <tr><td>Deployment</td><td>CloudFormation</td><td>Infrastructure-as-code templates</td></tr>
+    <tr><td>CDN</td><td>CloudFront</td><td>Client patching and content delivery</td></tr>
+    <tr><td>DNS</td><td>Route 53</td><td>Global DNS routing</td></tr>
+    <tr><td>DB Model</td><td>Primary-Secondary</td><td>Automatic failover, manual upgrade</td></tr>
+    <tr><td>Regions</td><td>NA, EU</td><td>Players grouped by region, not named server</td></tr>
+    <tr><td>Downtime Record</td><td>~0 since Aug 2016</td><td>No scheduled downtime for updates</td></tr>
+  </table>
+
+  <!-- NETWORKING -->
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>GW2 uses a custom TCP-based protocol for game communication. The client maintains separate connections to different server types: the portal server for authentication and social features, game servers for map instance communication, and HTTPS connections to the Trading Post web backend.</p>
+  <p>The game's <strong>patching system</strong> is notably efficient. Updates are delivered as thousands of small files rather than monolithic patch downloads. The client supports content streaming, where only starter zones are downloaded initially (if the Content Streaming option is set to "On Demand"), and additional zones are fetched as needed. This keeps the initial install size manageable while allowing the full game to be available without pre-downloading everything.</p>
+
+  <h3>Zero-Downtime Update Process</h3>
+  <p>The update deployment process works through blue-green instance migration:</p>
+  <ol>
+    <li>New server instances running the updated build are spun up alongside existing ones</li>
+    <li>As players zone between maps (cross zone boundaries, enter instances, etc.), they are routed to new-version instances</li>
+    <li>Old instances receive a 1-hour countdown timer notifying players that the instance will close</li>
+    <li>When the timer expires, remaining players are force-migrated to new instances</li>
+    <li>Old instances are shut down</li>
+  </ol>
+  <p>This system has been in use since Guild Wars 1 launched in 2005, though it was simpler then because GW1's content outside towns was fully instanced. For GW2's persistent open world, the process is more complex because it must handle ongoing dynamic events, world boss states, and meta event progress on closing instances. ArenaNet reportedly patented this technology for MMO games.</p>
+
+  <div class="callout c-green">
+    <div class="callout-title">Expansion Launches Without Downtime</div>
+    <p>ArenaNet has launched multiple full expansions (Heart of Thorns, Path of Fire, End of Dragons, Secrets of the Obscure, Janthir Wilds) and five Living World story arcs without any scheduled downtime. Outside of rare unplanned outages, the last actual shutdown was August 23, 2016. This is widely considered the best server uptime record in the MMO industry.</p>
+  </div>
+
+  <!-- DATA & PERSISTENCE -->
+  <h2 id="data">Data &amp; Persistence</h2>
+
+  <h3>The Trading Post</h3>
+  <p>The Trading Post is architecturally distinct from the game servers. It is a <strong>web application</strong> with its own backend infrastructure, rendered inside the game client via an embedded browser. The embedded browser technology has changed three times: <strong>Awesomium</strong> at launch (2012), <strong>CoherentUI</strong> from September 2014, and <strong>Chromium Embedded Framework</strong> since April 2023.</p>
+  <p>Because the Trading Post runs as a separate web service, it can (and does) go down independently of the game. DNS or firewall issues affecting web traffic can break the Trading Post while gameplay continues unaffected. The Trading Post backend authenticates through the portal server's SSO system and maintains its own order book database separate from game account data.</p>
+  <p>The Trading Post is <strong>shared across all NA and EU worlds</strong>. There is no per-server marketplace. When ArenaNet redesigned the Trading Post in 2014, they made a key optimization: the embedded browser now reads item icons, names, and basic data from local game files rather than downloading them from Trading Post servers. This eliminated redundant network requests for data the client already had.</p>
+
+  <h3>Guild Halls and Home Instances</h3>
+  <p>Guild halls are persistent instanced spaces owned by guilds. They maintain decoration state, upgrades, and customizations. Home instances are per-character persistent areas that change based on story progress and account unlocks (gathering nodes, NPCs). Both persist across sessions and are loaded on demand when a player or guild member enters.</p>
+
+  <h3>The GW2 API v2</h3>
+  <p>ArenaNet maintains one of the most comprehensive public APIs in the MMO industry at <code>api.guildwars2.com</code>. The API is RESTful with JSON responses, supports pagination, localization (en, es, de, fr, zh), and schema versioning. Authenticated endpoints use bearer tokens generated from in-game API keys.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>API Rate Limits</h4>
+      <ul>
+        <li>Max burst: 300 requests</li>
+        <li>Refill: 5 tokens/second (300/min)</li>
+        <li>Up to 200 IDs per bulk request</li>
+        <li>429 response when exceeded</li>
+      </ul>
+    </div>
+    <div class="info-card c-green">
+      <h4>Key Endpoint Categories</h4>
+      <ul>
+        <li>Account: characters, bank, inventory, masteries, achievements</li>
+        <li>Commerce: TP listings, transactions, gem exchange</li>
+        <li>WvW: matches, objectives, abilities, ranks</li>
+        <li>PvP: stats, games, standings, seasons</li>
+        <li>Game data: items, recipes, skins, maps, builds</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- SCALING -->
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <p>The megaserver system is GW2's primary scaling mechanism for PvE. When a map has too many players, the system creates additional instances. When population drops, instances are consolidated (players receive a notification and transfer timer). The scoring algorithm ensures that friends, guildmates, and language-matched players tend to end up in the same instance.</p>
+
+  <h3>The Megaserver Scoring Algorithm</h3>
+  <p>When you enter a map, the megaserver evaluates all active instances and scores each one based on weighted factors:</p>
+  <ul>
+    <li><strong>Party membership</strong>: Highest weight. You are placed with party members if their map is not full.</li>
+    <li><strong>Guild</strong>: Second priority. The system looks for maps containing your guild members.</li>
+    <li><strong>Friends list</strong>: Players on your friends list increase a map's score.</li>
+    <li><strong>Language preference</strong>: You tend to be placed with players sharing your language setting.</li>
+    <li><strong>Home world</strong>: Formerly used for WvW affiliation, now relevant mainly for WvW team assignment.</li>
+  </ul>
+  <p>If the highest-scoring map is full, you can manually join a friend or party member's instance by right-clicking their name and selecting "Join in [map name]." This triggers a transfer to their instance if space is available.</p>
+
+  <h3>World Boss Timers and Meta Events</h3>
+  <p>Before the megaserver, world bosses had per-server timers that varied between worlds. The megaserver made this unworkable because instances spin up and down dynamically, making per-instance timers unreliable. The solution was to tie all world boss and meta event spawns to <strong>real-world time clocks</strong>.</p>
+  <p>World bosses now follow fixed rotations: one standard world event begins every 30 minutes, and one low-level event begins at :15 and :45 past each hour. All instances of a given map start the event at the same time. Events that previously lacked failure states or timers received them to keep the schedule on track. Community tools like GW2Timer.com, that_shaman's Timer, and the GW2 Wiki event timer page display these fixed schedules.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-orange">
+      <h4>Standard World Events</h4>
+      <p>Six original world bosses rotate on :00 and :30 marks. Examples: Shadow Behemoth, Fire Elemental, Jungle Wurm, The Shatterer. These events start simultaneously across all map instances in the same region.</p>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Map Meta Events</h4>
+      <p>Expansion zones like Dragon's Stand, Auric Basin, and Tangled Depths have map-wide meta events on longer timers. These multi-stage events require dozens of players and can consume the entire map's population for 30-60 minutes. Meta event rewards drive much of the endgame economy.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Event Cascading</h4>
+      <p>Dynamic events chain based on outcomes. Success and failure both advance the chain in different directions. Event chains cycle through states and eventually reset. The server maintains each chain's position independently per map instance. Chains never permanently lock out content.</p>
+    </div>
+    <div class="info-card c-pink">
+      <h4>Difficulty Scaling</h4>
+      <p>FATEs and dynamic events scale based on the number of participants in previous spawn cycles. More players mean more enemies, higher boss HP, and tougher requirements. This prevents events from being instantly trivialized by large groups while keeping them accessible to smaller parties.</p>
+    </div>
+  </div>
+
+  <!-- DEEP DIVES -->
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>World vs. World: From Named Servers to World Restructuring</h3>
+  <p>WvW is the one game mode where "server identity" still matters, though the system has changed fundamentally over time. At launch, players chose a named home world, and three worlds were matched each week based on Glicko ratings. Population imbalances quickly became a problem: popular worlds snowballed while small ones bled players.</p>
+  <p>In 2016, ArenaNet introduced <strong>Server Linking</strong>, where low-population worlds were paired with high-population "host" worlds to balance WvW matchups. Linked servers were reshuffled every two months. In 2017, the <strong>1-up, 1-down</strong> matchmaking system replaced Glicko: the winning team moves up a tier, the losing team drops down, and the middle team stays.</p>
+  <p>In June 2024, <strong>World Restructuring</strong> replaced the entire named-server system for WvW. Players now choose a "WvW Guild," and the system builds new teams monthly by combining guilds and solo players based on predicted participation and playtime. The goal is balanced populations across all teams. Unguilded active players are automatically assigned. New or inactive players choose a team when they first enter WvW in a given month. A future "Alliances" phase will let guilds formally group together for team assignment.</p>
+
+  <h3>Structured PvP Matchmaking</h3>
+  <p>Structured PvP uses the <strong>Glicko2</strong> matchmaking rating system, chosen over Elo for its inclusion of a Ratings Deviation (RD) metric that measures rating reliability. Players with few games have high RD, meaning their rating changes more dramatically per match. The matchmaker considers rating, rank, party size, profession, ladder position, and dishonor (a penalty for abandoning matches).</p>
+  <p>All PvP equipment is normalized. PvE gear stats do not apply in structured PvP. Players select an amulet, rune set, sigil set, and specialization build from the PvP Build panel. Custom Arenas allow players to configure private matches with custom settings, though arenas expire after 30 days of inactivity.</p>
+
+  <h3>Dynamic Event System Architecture</h3>
+  <p>The dynamic event system was a core design goal from GW2's inception. ArenaNet's Eric Flannum and Colin Johanson presented the system at GDC, and Cameron Dunn covered the technical implementation at GDC Online 2012.</p>
+  <p>Each map zone has a set of potential events with trigger conditions (timers, proximity, pre-event completion, NPC state). The server continuously evaluates these conditions and spawns events when criteria are met. Each event has defined success and failure outcomes that chain into subsequent events. A centaur attack on a settlement, if repelled, might chain into a player counterattack on the centaur camp. If the settlement falls, a rescue mission spawns instead.</p>
+  <p>The event controller runs per-map-instance. When the megaserver creates a new instance, the event state for that map starts fresh (or from a default state). Events scale difficulty based on prior participation data, so a newly spawned instance with fewer players will have easier events than a long-running instance that has seen heavy traffic.</p>
+  <p>During development, ArenaNet used Amazon EC2 to spin up hundreds of thousands of bots for testing event scaling and finding bugs. Amazon reportedly noticed the aggressive usage patterns, and ArenaNet had to rotate between servers to continue their bot testing.</p>
+
+  <h3>Infrastructure Runtime Controls</h3>
+  <p>The GW2 infrastructure includes real-time configuration levers that can modify game behavior without deploying a new build. These controls can adjust dynamic event difficulty, toggle features for exploit prevention, disable problematic systems during crashes, and tweak server parameters. This means ArenaNet can respond to live issues without the overhead of a full deployment cycle, even though deployments themselves require no downtime.</p>
+
+  <!-- EVOLUTION -->
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="year">2005</div>
+      <div class="desc"><strong>Guild Wars 1 launches</strong> with the original zero-downtime update system. All content outside towns is instanced, making the migration pattern simpler. The server cluster architecture uses ~12 specialized server types.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2012</div>
+      <div class="desc"><strong>Guild Wars 2 launches</strong> on August 28. Uses the heavily modified GW1 engine with persistent open-world zones, Havok physics, and dynamic events. Named servers exist for both PvE and WvW. Overflow system handles full maps.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2014</div>
+      <div class="desc"><strong>Megaserver system introduced</strong> (April 15 Feature Pack). Replaces named servers for PvE with the weighted-scoring map instance system. Overflow concept is abolished; all instances have equal standing. World boss timers synchronized to real clocks.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2014</div>
+      <div class="desc"><strong>Trading Post rebuilt</strong> with new embedded browser (CoherentUI), client-side data optimization, and reduced server round-trips. Performance improvements from reading game data locally instead of downloading from TP servers.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2015</div>
+      <div class="desc"><strong>Heart of Thorns expansion</strong>. Introduces gliding (mastery system), guild halls, and map-wide meta events. The complex multi-stage metas in Verdant Brink, Auric Basin, Tangled Depths, and Dragon's Stand push the event system to new complexity levels.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2016</div>
+      <div class="desc"><strong>WvW Server Linking</strong> begins (April). Low-population worlds paired with hosts to balance matchups. Links reshuffled every two months. Last actual server downtime occurs on August 23.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2017</div>
+      <div class="desc"><strong>AWS migration begins</strong> with Path of Fire expansion launch. Hybrid deployment initially, with new expansion maps on AWS and legacy content on-premise. Successfully handles double normal active users during launch.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2017</div>
+      <div class="desc"><strong>Path of Fire expansion</strong>. Introduces mounts with unique movement abilities (server validates mastery unlocks). WvW switches to 1-up, 1-down matchmaking.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2022</div>
+      <div class="desc"><strong>End of Dragons expansion</strong>. Living World content model discontinued in favor of expansion-bundled quarterly releases. Full AWS migration complete. Steam integration launches.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2023</div>
+      <div class="desc"><strong>Embedded browser upgrade</strong> from CoherentUI to Chromium Embedded Framework. Trading Post and in-game books modernized. GW2 API v2 continues receiving new endpoints.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2024</div>
+      <div class="desc"><strong>World Restructuring launches</strong> (June). Named servers deprecated for WvW. Monthly guild-based team assignment replaces server linking. Alliances system planned as Phase 2.</div>
+    </div>
+  </div>
+
+  <!-- SOURCES -->
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.guildwars2.com/en/news/introducing-the-megaserver-system/">Introducing the Megaserver System - ArenaNet</a>
+        <div class="source-desc">Official blog post explaining the megaserver scoring algorithm, social matching, and how map instances are managed</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://aws.amazon.com/blogs/gametech/arenanet-guild-wars-mmorpg-migration/">How ArenaNet moved Guild Wars to the cloud - AWS Blog</a>
+        <div class="source-desc">Detailed account of the GW2 migration to AWS, including EC2 instance types, CloudFormation, and zero-downtime approach</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://gdcvault.com/play/1016640/Guild-Wars-2-Programming-the">GDC: Guild Wars 2 - Programming the Next Generation Online World</a>
+        <div class="source-desc">Cameron Dunn's GDC Online talk on the technical challenges of dynamic events, patching systems, and server architecture</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://gdcvault.com/play/1013691/Designing-Guild-Wars-2-Dynamic">GDC: Designing Guild Wars 2 Dynamic Events</a>
+        <div class="source-desc">Eric Flannum and Colin Johanson's presentation on the design and implementation of the cascading event system</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://wiki.guildwars2.com/wiki/World_Restructuring">World Restructuring - GW2 Wiki</a>
+        <div class="source-desc">Comprehensive documentation of the WvW world restructuring system, guild-based team assignment, and matchmaking</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://wiki.guildwars2.com/wiki/API:2">API:2 - GW2 Wiki</a>
+        <div class="source-desc">Full documentation of the GW2 API v2 endpoints, authentication, pagination, rate limiting, and schema versioning</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.guildwars2.com/en/news/the-megaserver-system-world-bosses-and-events/">The Megaserver System: World Bosses and Events - ArenaNet</a>
+        <div class="source-desc">How world boss timers were synchronized to real-world clocks and events received failure mechanics for the megaserver</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.guildwars2.com/en/news/inside-arenanet-live-game-outage-analysis/">Inside ArenaNet: Live Game Outage Analysis</a>
+        <div class="source-desc">ArenaNet's post-mortem on infrastructure incidents, revealing runtime configuration controls and database architecture</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://wiki.guildwars2.com/wiki/PvP_Matchmaking_Algorithm">PvP Matchmaking Algorithm - GW2 Wiki</a>
+        <div class="source-desc">Details on Glicko2 implementation, ratings deviation, and the metrics used for competitive matchmaking</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://massivelyop.com/2023/04/27/guild-wars-2-improves-trading-post-speed-thanks-to-a-software-upgrade/">GW2 improves Trading Post speed with software upgrade - Massively OP</a>
+        <div class="source-desc">Coverage of the CoherentUI to Chromium Embedded Framework migration and its impact on Trading Post performance</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME NAV -->
+  <div class="game-nav">
+    <a class="prev" href="ffxiv.html">
+      <span class="dir">Previous</span>
+      <span class="name">Final Fantasy XIV</span>
+    </a>
+    <a class="next" href="bdo.html">
+      <span class="dir">Next</span>
+      <span class="name">Black Desert Online</span>
+    </a>
+  </div>
+
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

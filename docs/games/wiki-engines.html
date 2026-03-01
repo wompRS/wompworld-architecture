@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Engines - Technology Wiki | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <a href="wiki-engines.html" style="color:var(--t1);font-weight:700">Engines</a>
+  <a href="wiki-languages.html">Languages</a>
+  <a href="wiki-databases.html">Databases</a>
+  <a href="wiki-networking.html">Networking</a>
+  <a href="wiki-middleware.html">Middleware</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // WIKI</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Wiki / Game Engines</div>
+  <h1>Game Engines for Multiplayer</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Technology Wiki</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Engine Comparison</span>
+  </div>
+  <p class="lead">A technical survey of game engines used in multiplayer and MMO development. Covers commercial engines like Unreal and Unity, open-source options like Godot and O3DE, the lineage of id Tech through modern Call of Duty, purpose-built MMO engines from studios like CCP and Blizzard, and the ForgeLight engine behind PlanetSide 2's record-breaking battles.</p>
+</div>
+
+<div class="content">
+
+  <!-- ================================================================== -->
+  <h2 id="unreal">Unreal Engine</h2>
+
+  <h3>Architecture Overview</h3>
+  <p>Unreal Engine, developed by Epic Games, is the most widely used AAA game engine in the industry. Written in C++ with a visual scripting system called Blueprint, it has powered everything from small indie shooters to massive open-world games. UE5 introduced several landmark systems: <strong>Nanite</strong> (virtualized micropolygon geometry that eliminates manual LOD authoring), <strong>Lumen</strong> (fully dynamic global illumination and reflections using software and hardware ray tracing), <strong>Mass AI</strong> (crowd simulation handling 10,000+ NPCs with individual behaviors), and <strong>Chaos Physics</strong> (a replacement for PhysX that handles destruction, cloth, hair, and ragdolls).</p>
+  <p>The engine structures multiplayer games around a <strong>server-authoritative client-server model</strong>. The server maintains the true game state. Clients send input to the server via Remote Procedure Calls, and the server replicates the resulting state changes back to clients. Actors (the base object class in UE) can be marked for replication, and the engine handles serialization, delta compression, and priority-based bandwidth allocation.</p>
+  <p>UE5's default networking was designed for session-based matches with 64 to 100 players, not for persistent MMO worlds with thousands. Studios building larger-scale projects typically integrate external backend frameworks for horizontal scaling, sharding, and container orchestration through tools like Kubernetes or Agones.</p>
+
+  <h3>Networking Model</h3>
+  <p>Unreal uses a <strong>property replication</strong> system where the server marks certain Actor properties as replicated. When those properties change, the engine serializes the delta and pushes it to relevant clients. Three types of RPCs handle event-driven communication:</p>
+  <ul>
+    <li><strong>Server RPCs</strong> are called by clients and executed on the server. Used for input validation and action requests.</li>
+    <li><strong>Client RPCs</strong> are called by the server and executed on the owning client. Used for player-specific feedback.</li>
+    <li><strong>Multicast RPCs</strong> are called by the server and executed on all connected clients. Used sparingly due to bandwidth cost.</li>
+  </ul>
+  <p>The <strong>Replication Graph</strong> is an optimization plugin that replaced the default actor-by-actor relevancy checks. In standard replication, every replicated actor evaluates every connected client each frame to determine if it should send data. This scales poorly. The Replication Graph groups actors into spatial cells and caches relevancy decisions, dramatically reducing CPU overhead. Epic's own Fortnite Battle Royale uses the Replication Graph to handle 100 connected players and roughly 50,000 replicated actors per match.</p>
+  <p>Movement prediction uses client-side prediction with server reconciliation. The client predicts movement locally for responsiveness, the server validates and corrects when needed, and the client smoothly interpolates to the corrected position.</p>
+
+  <h3>Key Strengths</h3>
+  <ul>
+    <li>Best-in-class rendering pipeline with Nanite, Lumen, and Virtual Shadow Maps</li>
+    <li>Blueprint visual scripting lowers the barrier for non-programmers</li>
+    <li>Mature dedicated server support with built-in replication</li>
+    <li>Massive marketplace of plugins, assets, and community knowledge</li>
+    <li>Cross-platform deployment to PC, consoles, mobile, and VR</li>
+  </ul>
+
+  <h3>Limitations for MMOs</h3>
+  <ul>
+    <li>Replication system was built for match-based games (64-100 players), not persistent worlds</li>
+    <li>Scaling beyond a single server requires significant custom engineering</li>
+    <li>Heavy memory footprint and long compile times for large C++ projects</li>
+    <li>Past Unreal-based MMOs like TERA struggled with large-scale PvP performance</li>
+  </ul>
+
+  <div class="callout">
+    <div class="callout-title">Licensing</div>
+    <p>Free to download and use. A <strong>5% royalty</strong> applies to lifetime gross revenue above $1 million. Revenue from Epic Games Store sales is royalty-free. The "Launch Everywhere with Epic" program reduces the royalty to 3.5% for games that ship on EGS at or before other stores (effective January 2025). Non-game commercial use requires an annual seat license of $1,850.</p>
+  </div>
+
+  <h3>Notable Multiplayer Games</h3>
+  <p><strong>Fortnite</strong> (Epic Games), <strong>PUBG</strong> (Krafton), <strong>Valorant</strong> (Riot, heavily modified UE4), <strong>Rocket League</strong> (Psyonix), <strong>Sea of Thieves</strong> (Rare), <strong>The Finals</strong> (Embark Studios), <strong>Ashes of Creation</strong> (Intrepid Studios, UE5 MMO in development).</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Language</td><td>C++ (engine), Blueprint (visual scripting), Python (editor automation)</td></tr>
+    <tr><td>Net Model</td><td>Server-authoritative client-server with property replication</td></tr>
+    <tr><td>Typical Tick Rate</td><td>30-60 Hz for dedicated servers (configurable)</td></tr>
+    <tr><td>Entity Limits</td><td>~50,000 replicated actors in Fortnite; scales with Replication Graph</td></tr>
+    <tr><td>Platforms</td><td>PC, PS5, Xbox Series, Switch, iOS, Android, VR</td></tr>
+    <tr><td>License Cost</td><td>Free + 5% royalty above $1M (3.5% with EGS parity)</td></tr>
+  </table>
+
+  <!-- ================================================================== -->
+  <h2 id="unity">Unity</h2>
+
+  <h3>Architecture Overview</h3>
+  <p>Unity is the most widely used game engine by project count, powering roughly half of all mobile games and a substantial share of indie and mid-tier PC titles. The engine is written in C++ with gameplay scripting in C#. Unity has been undergoing a major architectural shift from its traditional <strong>GameObject/MonoBehaviour</strong> paradigm to <strong>DOTS (Data-Oriented Technology Stack)</strong>, which includes the Entity Component System (ECS), the Burst compiler for high-performance C#, and the Job System for safe multithreading.</p>
+  <p>For multiplayer, Unity offers two networking solutions that target different use cases. <strong>Netcode for GameObjects (NGO)</strong> uses the familiar MonoBehaviour workflow and targets casual cooperative games with smaller player counts. <strong>Netcode for Entities</strong> is built on top of DOTS/ECS and targets competitive, large-scale multiplayer with server-authoritative prediction, interpolation, and lag compensation.</p>
+  <p>Both networking solutions use the <strong>Unity Transport Package (UTP)</strong> as their underlying transport layer. Unity also provides companion services: Relay (for NAT punchthrough and connectivity), Lobby (matchmaking), and Vivox (voice chat).</p>
+
+  <h3>Networking Model</h3>
+  <p><strong>Netcode for GameObjects</strong> supports both client-authoritative and server-authoritative models. It synchronizes scenes and GameObject data across clients using a host/listen-server model where one client acts as the host. This is the simpler path, well-suited for co-op games with 4-16 players.</p>
+  <p><strong>Netcode for Entities</strong> is strictly server-authoritative with client prediction. It introduces "ghosts" as the network representation of entities, supports automatic delta compression and relevancy, and can strip rendering assets from dedicated server builds. Unity has demonstrated 128+ player cross-platform matches using this system. The entity-based approach allows far more state to be synchronized over the network compared to the GameObject approach.</p>
+  <p>Unity also integrates extensively with third-party networking solutions, most notably <strong>Photon</strong> (by Exit Games), which provides cloud-hosted rooms-based multiplayer with global relay infrastructure. Many Unity multiplayer games ship with Photon rather than Unity's first-party networking.</p>
+
+  <h3>Key Strengths</h3>
+  <ul>
+    <li>Largest ecosystem of tutorials, assets, and community knowledge</li>
+    <li>C# is more accessible than C++ for smaller teams</li>
+    <li>DOTS/ECS provides a path to high-performance server code</li>
+    <li>Strong cross-platform support, particularly for mobile</li>
+    <li>Photon integration provides battle-tested cloud networking</li>
+  </ul>
+
+  <h3>Limitations for MMOs</h3>
+  <ul>
+    <li>DOTS/ECS is still maturing and requires a steep learning curve</li>
+    <li>Netcode for GameObjects was not designed for large player counts</li>
+    <li>No built-in dedicated server hosting (requires third-party services)</li>
+    <li>The 2023 Runtime Fee debacle damaged developer trust significantly</li>
+    <li>Garbage collection pauses in C# can cause frame hitches in server code</li>
+  </ul>
+
+  <div class="callout">
+    <div class="callout-title">Licensing (Post-Runtime Fee)</div>
+    <p>Unity canceled the controversial Runtime Fee in 2024 and reverted to seat-based subscriptions. <strong>Unity Personal</strong> is free for developers earning under $200K/year. <strong>Unity Pro</strong> costs $2,200/year per seat (required above $200K revenue). <strong>Unity Enterprise</strong> costs $4,000/year per seat (required above $25M revenue). No royalties.</p>
+  </div>
+
+  <h3>Notable Multiplayer Games</h3>
+  <p><strong>Escape from Tarkov</strong> (Battlestate Games), <strong>Rust</strong> (Facepunch Studios), <strong>Among Us</strong> (InnerSloth), <strong>Fall Guys</strong> (Mediatonic), <strong>Hearthstone</strong> (Blizzard), <strong>Genshin Impact</strong> (miHoYo), <strong>VRChat</strong> (VRChat Inc.), <strong>Albion Online</strong> (Sandbox Interactive, Unity client with custom Java server).</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Language</td><td>C# (gameplay), C++ (engine runtime)</td></tr>
+    <tr><td>Net Model</td><td>Host/listen-server (NGO) or dedicated server-authoritative (Entities)</td></tr>
+    <tr><td>Typical Tick Rate</td><td>20-60 Hz depending on configuration</td></tr>
+    <tr><td>Entity Limits</td><td>128+ players demonstrated with Netcode for Entities</td></tr>
+    <tr><td>Platforms</td><td>PC, PS5, Xbox Series, Switch, iOS, Android, WebGL, VR</td></tr>
+    <tr><td>License Cost</td><td>Free under $200K; $2,200/seat/yr (Pro); $4,000/seat/yr (Enterprise)</td></tr>
+  </table>
+
+  <!-- ================================================================== -->
+  <h2 id="godot">Godot Engine</h2>
+
+  <h3>Architecture Overview</h3>
+  <p>Godot is a free and open-source game engine released under the MIT license. It supports two scripting languages: <strong>GDScript</strong> (a Python-like language designed for the engine) and <strong>C#</strong> (via Mono/.NET). The engine uses a scene-tree architecture where everything is a node, and games are composed by nesting scenes within scenes.</p>
+  <p>Godot saw a massive surge in adoption after Unity's 2023 Runtime Fee controversy, with contributions doubling and high-profile donations arriving from studios like Re-Logic ($100,000 plus ongoing monthly support). It has produced genuine commercial hits: Brotato sold over 10 million copies, and multiple Godot games have cleared $4-6 million in revenue.</p>
+  <p>The engine is governed by the Godot Foundation, a non-profit entity. There are no fees, no royalties, and no restrictions on commercial use. You own every line of your game's code, and you can modify the engine itself if you need to.</p>
+
+  <h3>Networking Model</h3>
+  <p>Godot provides multiplayer networking at three tiers. The <strong>high-level API</strong> offers RPC functions, the <strong>MultiplayerSpawner</strong> node (for remote object instantiation), and the <strong>MultiplayerSynchronizer</strong> node (for property synchronization). The mid-level <strong>MultiplayerPeer</strong> abstraction provides protocol-agnostic networking. The low-level tier gives direct access to the transport protocol.</p>
+  <p>Three transport backends are available:</p>
+  <ul>
+    <li><strong>ENet</strong> (default): UDP-based with optional reliability and ordered delivery. Good performance for action games. Hard connection cap of 4,095 clients, with practical instability appearing around 1,300 connections due to CPU spikes that cause mass disconnects.</li>
+    <li><strong>WebSocket</strong>: TCP-based, works in web browsers. Higher latency because TCP forces all RPCs to be reliable, making it poorly suited for fast-paced games.</li>
+    <li><strong>WebRTC</strong>: UDP-based peer-to-peer, works in browsers. More complex setup requiring a signaling server, but offers low latency for browser-based games.</li>
+  </ul>
+  <p>Godot 4.0 rewrote the scene replication API to be more user-friendly, and Godot 4.4 (March 2025) introduced Jolt physics integration. Steam networking is supported through GodotSteam, with a full MultiplayerPeer implementation available since GodotSteam 4.16.</p>
+
+  <h3>The "Godot for MMOs" Debate</h3>
+  <p>This comes up constantly in the Godot community, and the honest answer is that Godot was not designed for MMO-scale networking. The ENet backend hits a hard wall at 4,095 connections and becomes unstable well before that. Developers attempting MMO architectures in Godot have found that the server drops all connected clients at once when a mysterious CPU threshold is crossed, rather than degrading gracefully.</p>
+  <p>That said, developers have built zone-based sharding systems on top of Godot, using Nginx to route connections to per-zone server instances. The approach works, but it requires building most of the MMO infrastructure yourself. At that point, Godot is functioning as a client renderer rather than a multiplayer framework, and the networking layer is largely custom code.</p>
+
+  <div class="callout c-green">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>For a project like Wompworld that targets a persistent single-shard ocean world with hundreds or thousands of concurrent players, Godot's networking ceiling is a serious constraint. You would need to build a custom server backend and use Godot purely as a client. The engine is excellent for smaller-scale multiplayer (co-op, small PvP), but it is not an out-of-the-box MMO solution.</p>
+  </div>
+
+  <h3>Notable Multiplayer Games</h3>
+  <p><strong>Brotato</strong> (Blobfish), <strong>Dome Keeper</strong> (Bippinbits), <strong>Cassette Beasts</strong> (Bytten Studio), <strong>Halls of Torment</strong> (Chasing Carrots). Most of these are single-player or local co-op. Large-scale multiplayer titles in Godot remain rare.</p>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Language</td><td>GDScript, C#, C++ (via GDExtension)</td></tr>
+    <tr><td>Net Model</td><td>Peer-to-peer or client-server via MultiplayerPeer abstraction</td></tr>
+    <tr><td>Connection Cap</td><td>4,095 (ENet hard limit); ~1,300 practical before instability</td></tr>
+    <tr><td>Transport</td><td>ENet (UDP), WebSocket (TCP), WebRTC (UDP P2P)</td></tr>
+    <tr><td>Platforms</td><td>PC, Linux, macOS, iOS, Android, Web (HTML5)</td></tr>
+    <tr><td>License Cost</td><td>Free. MIT license. No royalties, no fees, no restrictions.</td></tr>
+  </table>
+
+  <!-- ================================================================== -->
+  <h2 id="cryengine">CryEngine / Lumberyard / O3DE</h2>
+
+  <h3>The Lineage</h3>
+  <p>This is a story of one engine forking into three distinct codebases over two decades. <strong>CryEngine</strong> was created by Crytek in 2002 and gained fame with Far Cry and the Crysis series. In 2015, Amazon licensed CryEngine for a reported $50-70 million and released their modified version as <strong>Amazon Lumberyard</strong> in February 2016. In July 2021, Amazon and the Linux Foundation announced that Lumberyard would become <strong>O3DE (Open 3D Engine)</strong>, an open-source engine under the Apache 2.0 license managed by the Open 3D Foundation.</p>
+  <p>By the time O3DE launched, roughly 70% of the engine had been completely overhauled. CryPhysics was replaced with NVIDIA PhysX. CryNetwork and GridMate were replaced with an entirely new AzNetworking stack. CryRenderer was replaced with the Atom renderer. As Derek Reese of Red Hat put it: O3DE is not CryEngine/Lumberyard, but its own independent engine that continues some of the best features and code from Lumberyard.</p>
+
+  <h3>How Star Citizen Forked It</h3>
+  <p>Cloud Imperium Games began building Star Citizen on CryEngine 3 and internally named their heavily modified version <strong>Star Engine</strong> by September 2016. In December 2016, CIG announced the switch to Amazon Lumberyard, primarily to escape the limitations of <strong>CryNetwork</strong>, CryEngine's built-in networking.</p>
+  <p>Chris Roberts explained the rationale: CryNetwork was a single-server architecture designed for FPS matches, not for a massively online space simulation. Amazon's cloud infrastructure and AWS integration offered a path toward the distributed server mesh that Star Citizen's design requires. CIG preserved all their custom work (64-bit precision, planet tech, local physics grids, zone system, object containers) and swapped only the like-for-like engine foundation from CryEngine to Lumberyard.</p>
+  <p>This move triggered a lawsuit from Crytek in December 2017, alleging copyright infringement and breach of contract. The case was eventually settled.</p>
+
+  <h3>O3DE Networking</h3>
+  <p>O3DE's networking is built in two layers. <strong>AzNetworking</strong> is the low-level transport that focuses on reduced code size, low latency on send/receive, and low message processing overhead. The <strong>Multiplayer Gem</strong> sits on top of AzNetworking and provides entity-based asynchronous networking using event-driven network properties and RPCs for state synchronization.</p>
+  <p>The engine supports dedicated server builds, cloud integration for player authentication and telemetry, and scripting via Lua and Python. Script Canvas provides visual scripting for multiplayer logic.</p>
+
+  <h3>Key Strengths</h3>
+  <ul>
+    <li>O3DE is fully open-source (Apache 2.0) with no fees or royalties</li>
+    <li>Modular architecture lets you include only the components you need</li>
+    <li>Modern Atom renderer with hardware-accelerated ray tracing</li>
+    <li>Backed by major industry partners (AWS, Intel, Huawei, Niantic, Epic, Microsoft, Tencent)</li>
+  </ul>
+
+  <h3>Limitations for MMOs</h3>
+  <ul>
+    <li>Small community and limited ecosystem compared to Unreal or Unity</li>
+    <li>Very few shipped commercial games (MadWorld is the most notable)</li>
+    <li>Documentation is sparse and the learning curve is steep</li>
+    <li>The CryEngine heritage means some subsystems still carry legacy complexity</li>
+    <li>Hiring developers with O3DE experience is extremely difficult</li>
+  </ul>
+
+  <div class="callout c-amber">
+    <div class="callout-title">CryEngine Itself (Current Status)</div>
+    <p>CryEngine continues to exist as a separate product from Crytek, but its relevance has diminished. Crytek shifted to a 5% royalty model on gross revenue above $5,000 per year. The engine powers Hunt: Showdown (Crytek) and was used for Kingdom Come: Deliverance (Warhorse Studios), but new large-scale projects choosing CryEngine are rare. Crytek appears focused primarily on their own games rather than engine licensing.</p>
+  </div>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Language</td><td>C++ (engine), Lua/Python (scripting), Script Canvas (visual)</td></tr>
+    <tr><td>Net Model</td><td>Client-server via AzNetworking + Multiplayer Gem (O3DE)</td></tr>
+    <tr><td>Notable Fork</td><td>Star Engine (Star Citizen), built on CryEngine 3.8 / Lumberyard</td></tr>
+    <tr><td>Platforms</td><td>PC, Linux, macOS, iOS, Android; console via third-party (O3DE)</td></tr>
+    <tr><td>License Cost</td><td>O3DE: Free (Apache 2.0). CryEngine: 5% royalty above $5K/yr.</td></tr>
+  </table>
+
+  <!-- ================================================================== -->
+  <h2 id="custom">Custom Engines</h2>
+
+  <h3>Why Studios Build Their Own</h3>
+  <p>Every major MMO that has survived for more than a decade runs on a custom engine. This is not a coincidence. The unique demands of persistent worlds with thousands of concurrent players, server-authoritative anti-cheat design, specialized world management, and real-time economic simulation make general-purpose engines a poor fit. Veterans of mass PvP games know that you cannot use an FPS engine for an MMORPG without radical modification.</p>
+  <p>The core argument for custom engines comes down to control. A studio building an MMO needs precise authority over the networking stack, memory management, level loading, asset streaming, input synchronization, and server-side simulation. Off-the-shelf engines give you a renderer and a physics engine, but the parts that make an MMO work are exactly the parts you need to build yourself.</p>
+
+  <h3>World of Warcraft (Custom Blizzard Engine)</h3>
+  <p>WoW runs on a custom engine that evolved from the Warcraft III codebase. The engine is written in C++ with Lua handling UI and game logic scripting. It has undergone continuous updates across two decades of expansions, but the fundamental architecture was designed specifically for WoW's needs: zone streaming, raid instancing, auction house infrastructure, and a server-authoritative model that processes combat on the server.</p>
+  <p>The engine is optimized for wide hardware compatibility, which is a deliberate design choice. WoW has always prioritized running well on low-end machines to maximize its addressable player base. The tradeoff is that the engine carries significant legacy code that limits what can be modernized without a ground-up rewrite.</p>
+
+  <h3>EVE Online (Carbon / Stackless Python)</h3>
+  <p>EVE Online is the most architecturally unusual MMO in production. CCP Games chose <strong>Stackless Python</strong> for game logic, which provides lightweight microthreads (tasklets) for handling massive concurrency without the overhead of OS threads. CCP has stated that their commercial success was built on the decision to use Stackless Python as their foundation.</p>
+  <p>The engine runs every player in a single shared universe on one server cluster (Tranquility). Python handles game logic while C++ handles the rendering pipeline and performance-sensitive systems. The tradeoff is that Python's Global Interpreter Lock means each game node is single-threaded, and CCP has spent twenty years engineering around this constraint rather than rewriting the core.</p>
+
+  <h3>RuneScape (RuneTek)</h3>
+  <p>Jagex built the <strong>RuneTek</strong> engine from scratch, now on version 7. The engine's most notable feature is <strong>RuneScript</strong>, a proprietary domain-specific scripting language used for server-side event handling. RuneTek evolved through seven major versions, from the original DeviousMUD graphics engine through the RuneTek 5 rewrite that enabled targeting multiple graphics APIs (DirectX, OpenGL, console hardware) from a single engine.</p>
+  <p>Jagex's founder built the entire engine from the ground up, and it remains one of the clearest examples of how a purpose-built platform can serve a game for decades. The engine handles RuneScape's tile-based world, real-time combat calculations, and a player-driven economy with millions of registered accounts.</p>
+
+  <h3>Guild Wars 2 (ArenaNet Proprietary Engine)</h3>
+  <p>Guild Wars 2 runs on a custom engine that evolved from the Guild Wars 1 codebase. The client is written in C++ and the server runs C++ on Linux. The engine was specifically designed to handle large-scale open-world events (World Bosses, WvW battles with hundreds of players) without trusting the client. As one developer noted, building a correctly server-authoritative engine is genuinely hard to do, and ArenaNet invested heavily in getting it right rather than bolting security onto a third-party engine.</p>
+  <p>The downside is technical debt. GW2's engine uses DirectX 9, which limits it to effectively single-core rendering. Major graphics improvements are unlikely without a complete engine rewrite, which realistically means waiting for a sequel.</p>
+
+  <h3>The Trade-offs</h3>
+
+  <div class="info-grid">
+    <div class="info-card c-green">
+      <h4>Advantages</h4>
+      <ul>
+        <li>Complete control over networking, memory, and performance</li>
+        <li>Tailored server-authoritative design for anti-cheat</li>
+        <li>No royalties or licensing fees to third parties</li>
+        <li>Can build features that off-the-shelf engines cannot support</li>
+        <li>Unique technical capabilities become competitive advantages</li>
+      </ul>
+    </div>
+    <div class="info-card c-red">
+      <h4>Disadvantages</h4>
+      <ul>
+        <li>Enormous upfront cost in time and engineering talent</li>
+        <li>Hiring developers for a proprietary engine is much harder</li>
+        <li>Technical debt accumulates and is nearly impossible to escape</li>
+        <li>Onboarding new team members is slow and expensive</li>
+        <li>Engine migration is a multi-year project, if it happens at all</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout c-purple">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>A custom engine is the right choice for established studios with dedicated engine teams and multi-year timelines. For a team without professional game development experience, building a custom engine would consume the entire development budget before gameplay even begins. The realistic path is choosing an existing engine and building custom networking and server infrastructure on top of it.</p>
+  </div>
+
+  <table class="proto">
+    <tr><th>Game</th><th>Engine</th><th>Language</th><th>Architecture</th></tr>
+    <tr><td>World of Warcraft</td><td>Custom (ex-WC3)</td><td>C++ / Lua</td><td>Sharded worlds, instanced dungeons/raids</td></tr>
+    <tr><td>EVE Online</td><td>Carbon / Trinity</td><td>Stackless Python / C++</td><td>Single-shard universe, node-per-system</td></tr>
+    <tr><td>RuneScape</td><td>RuneTek 7</td><td>Java / RuneScript</td><td>Tile-based, multi-world sharded</td></tr>
+    <tr><td>Guild Wars 2</td><td>Custom (ex-GW1)</td><td>C++</td><td>Megaserver with overflow instances</td></tr>
+    <tr><td>Final Fantasy XIV</td><td>Custom (Crystal Tools derivative)</td><td>C++</td><td>Data center sharding with world visit</td></tr>
+  </table>
+
+  <!-- ================================================================== -->
+  <h2 id="idtech">id Tech Lineage</h2>
+
+  <h3>The Family Tree</h3>
+  <p>The id Tech engine family, created by John Carmack and id Software, is the most influential lineage in FPS history. Every major engine family in competitive shooters traces back to this codebase in some way.</p>
+  <p><strong>id Tech 1</strong> (1993) powered Doom and Doom II using BSP trees for rendering. <strong>id Tech 2</strong> (1996-1997) powered Quake and Quake II, introducing true 3D rendering and the client-server networking model that would define online shooters. Valve licensed id Tech 2 and modified it into <strong>GoldSrc</strong>, the engine behind Half-Life, which later became the Source engine.</p>
+  <p><strong>id Tech 3</strong> (1999) powered Quake III Arena and introduced the snapshot-based networking system that became the industry standard. The server runs the simulation at a fixed tick rate, captures snapshots of the game state, and sends delta-compressed updates to each client over UDP. This architecture was licensed to dozens of studios and directly spawned two major engine families.</p>
+
+  <h3>The Call of Duty Branch (IW Engine)</h3>
+  <p>Infinity Ward used id Tech 3 to build the original Call of Duty in 2003. They then evolved it into the <strong>IW Engine</strong>, which has powered every mainline Call of Duty title since. Each version added substantial features:</p>
+  <ul>
+    <li><strong>IW 3.0</strong> (CoD4: Modern Warfare, 2007): Bullet penetration, improved AI, lighting upgrades, particle system overhaul</li>
+    <li><strong>IW 4.0</strong> (MW2, 2009): Texture streaming technology</li>
+    <li><strong>IW 8.0</strong> (Modern Warfare 2019): Complete overhaul with PBR rendering, photogrammetry, DX12, ray tracing</li>
+  </ul>
+  <p>Infinity Ward's Mark Rubin has stated that there is nothing left in the engine from Quake anymore, as they have rewritten every section. While you can technically say that Modern Warfare uses a heavily modified Quake engine, that description is incredibly reductive after 20+ years of rewrites.</p>
+
+  <h3>The Valve Branch (GoldSrc / Source / Source 2)</h3>
+  <p>Valve derived GoldSrc from id Tech 2 (Quake II engine) for Half-Life (1998). This evolved into the <strong>Source Engine</strong>, which powered Half-Life 2, Counter-Strike: Source, Team Fortress 2, Left 4 Dead, and Dota 2. <strong>Source 2</strong> now powers Counter-Strike 2, Dota 2 (post-Reborn), and Half-Life: Alyx.</p>
+
+  <h3>Tick Rate Heritage</h3>
+  <p>The tick rate conventions of modern shooters trace directly back to the Quake engines:</p>
+
+  <table class="proto">
+    <tr><th>Engine / Game</th><th>Default Tick Rate</th><th>Notes</th></tr>
+    <tr><td>Quake II (id Tech 2)</td><td>10 Hz</td><td>Fixed rate, added noticeable latency even on LAN</td></tr>
+    <tr><td>Quake III Arena (id Tech 3)</td><td>20 Hz (configurable)</td><td>Most servers ran 20-30 Hz via <code>sv_fps</code></td></tr>
+    <tr><td>CoD1/CoD2 (id Tech 3)</td><td>Up to 128 Hz</td><td>Community competitive servers ran at 128 tick</td></tr>
+    <tr><td>CoD: Warzone (IW 8.0)</td><td>20 Hz</td><td>Controversial; upgraded in later titles</td></tr>
+    <tr><td>CoD MWII 6v6 (IW 9.0)</td><td>62-65 Hz</td><td>Improvement over Warzone's 20 Hz</td></tr>
+    <tr><td>CS:GO (Source)</td><td>64 Hz (128 on FACEIT)</td><td>Community long demanded 128 tick matchmaking</td></tr>
+    <tr><td>CS2 (Source 2)</td><td>Sub-tick</td><td>Valve replaced fixed tick rate with sub-tick system</td></tr>
+    <tr><td>Valorant (custom UE4)</td><td>128 Hz</td><td>128 tick was a headline feature at launch</td></tr>
+  </table>
+
+  <h3>id Tech's Own Line (id Tech 4-8)</h3>
+  <p>id Software continued evolving the engine through <strong>id Tech 4</strong> (Doom 3, 2004), <strong>id Tech 5</strong> (Rage, 2011, featuring MegaTexture), <strong>id Tech 6</strong> (Doom 2016, Vulkan rendering), <strong>id Tech 7</strong> (Doom Eternal, 2020, 10x geometry detail over id Tech 6), and <strong>id Tech 8</strong> (Doom: The Dark Ages, May 2025, path tracing and destructible environments). Since Microsoft's acquisition of ZeniMax/Bethesda, id Tech is now Xbox-exclusive and no longer licensed to third parties.</p>
+
+  <div class="callout">
+    <div class="callout-title">Legacy Impact</div>
+    <p>The snapshot-based delta compression networking that id Tech 3 introduced in 1999 is still the foundation of how most competitive shooters synchronize state. When people argue about tick rates in Call of Duty or Counter-Strike, they are debating parameters of an architecture that John Carmack designed for Quake III Arena over 25 years ago.</p>
+  </div>
+
+  <!-- ================================================================== -->
+  <h2 id="forgelight">ForgeLight Engine</h2>
+
+  <h3>Architecture Overview</h3>
+  <p>ForgeLight is a proprietary engine developed by Sony Online Entertainment (now Daybreak Game Company) specifically for massive-scale online games. It was built from the ground up to solve a problem that general-purpose engines could not: running an MMOFPS with thousands of concurrent players in a seamless open world without loading screens.</p>
+  <p>The engine was announced as the platform for all future SOE MMOs, with its biggest technical achievement being the elimination of discrete zones. Previous EverQuest games loaded separate zone files when players crossed boundaries. ForgeLight replaced this with continuous world streaming, real-time radiosity lighting, advanced particle systems, and volumetric fog across 64 km&sup2; continents.</p>
+  <p>ForgeLight was originally single-threaded but was modified to support multithreading for the PlayStation 4 port of PlanetSide 2, which improved PC performance as a side effect. The renderer was upgraded from DirectX 9 to DirectX 11 during PlanetSide 2's lifecycle. Physics uses NVIDIA PhysX, including water buoyancy and projectile drag systems added in post-launch updates.</p>
+
+  <h3>Networking and Scale</h3>
+  <p>ForgeLight's defining feature is its ability to support extreme player density. <strong>PlanetSide 2</strong> supports up to 2,000 concurrent players per continent across open-world combat zones. In 2015, PlanetSide 2 set the Guinness World Record for most players in an online FPS battle, with 1,158 players recorded in a single fight during a sponsored event.</p>
+  <p>The engine uses a server-authoritative model where the server validates all combat interactions, positions, and state changes. The challenge ForgeLight solved was not just handling 2,000 connections, but processing combat calculations, vehicle physics, projectile trajectories, and base capture mechanics for all of those players simultaneously across a seamless map with no instancing.</p>
+
+  <h3>Games Using ForgeLight</h3>
+  <ul>
+    <li><strong>PlanetSide 2</strong> (2012): The engine's flagship title. MMOFPS with three factions fighting over continents. Still running in 2026 under Rogue Planet Games.</li>
+    <li><strong>H1Z1</strong> (2015, later split into H1Z1: Just Survive and H1Z1: King of the Kill): The battle royale that popularized the genre before PUBG and Fortnite took over.</li>
+    <li><strong>EverQuest Next</strong> (canceled 2016): Was planned as the next EverQuest MMO using ForgeLight with voxel-based procedural destruction via Voxel Farm integration. Canceled after SOE was sold and became Daybreak.</li>
+    <li><strong>Landmark</strong> (2016): A voxel building sandbox spun off from EverQuest Next technology. Shut down in 2017.</li>
+    <li><strong>Free Realms</strong> (2009) and <strong>Clone Wars Adventures</strong> (2010): Earlier, lighter SOE titles that used ForgeLight.</li>
+  </ul>
+
+  <h3>Limitations</h3>
+  <ul>
+    <li>Proprietary to Daybreak (now under Enad Global 7). Not available for licensing.</li>
+    <li>Originally single-threaded, and the multithreading retrofit has limits</li>
+    <li>DirectX 11 ceiling means no modern rendering features (ray tracing, mesh shaders)</li>
+    <li>PlanetSide 2's performance issues at large scale are well-documented, with frame rates dropping significantly in large fights</li>
+    <li>Engine development has slowed as Daybreak's resources have been spread thin across multiple studios</li>
+  </ul>
+
+  <div class="callout c-amber">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>ForgeLight is the closest existing engine to what Wompworld needs in terms of player density in a seamless world. PlanetSide 2 proved that thousands of players could fight in real-time across a shared map without instancing. The problem is that ForgeLight is not available for licensing, and the engine's age shows. What ForgeLight demonstrated is that purpose-built engines for massive multiplayer can achieve things general-purpose engines cannot, but you have to build (or license) the technology yourself.</p>
+  </div>
+
+  <table class="proto">
+    <tr><th>Attribute</th><th>Detail</th></tr>
+    <tr><td>Developer</td><td>Sony Online Entertainment / Daybreak Game Company</td></tr>
+    <tr><td>Language</td><td>C++ (proprietary)</td></tr>
+    <tr><td>Net Model</td><td>Server-authoritative client-server</td></tr>
+    <tr><td>Peak Players</td><td>2,000 per continent; 1,158 in a single recorded battle</td></tr>
+    <tr><td>World Size</td><td>64 km&sup2; seamless continents with no loading screens</td></tr>
+    <tr><td>License</td><td>Proprietary. Not available for licensing.</td></tr>
+  </table>
+
+  <!-- ================================================================== -->
+  <h2 id="comparison">Engine Comparison Matrix</h2>
+
+  <p>A side-by-side comparison of the engines covered in this article, focused on the attributes that matter for multiplayer game development.</p>
+
+  <table class="proto">
+    <tr>
+      <th>Engine</th>
+      <th>License</th>
+      <th>Language</th>
+      <th>Net Model</th>
+      <th>MMO Viability</th>
+      <th>Player Scale</th>
+    </tr>
+    <tr>
+      <td>Unreal Engine 5</td>
+      <td>Free + 5% royalty &gt;$1M</td>
+      <td>C++ / Blueprint</td>
+      <td>Server-authoritative replication</td>
+      <td>Moderate (needs custom scaling)</td>
+      <td>~100 (default); more with custom work</td>
+    </tr>
+    <tr>
+      <td>Unity</td>
+      <td>Free / $2,200-$4,000 per seat</td>
+      <td>C#</td>
+      <td>Host or server-authoritative</td>
+      <td>Moderate (DOTS/Entities path)</td>
+      <td>128+ (Entities); 4-16 (NGO)</td>
+    </tr>
+    <tr>
+      <td>Godot</td>
+      <td>Free (MIT)</td>
+      <td>GDScript / C#</td>
+      <td>ENet / WebSocket / WebRTC</td>
+      <td>Low (needs custom server)</td>
+      <td>~1,300 stable (ENet)</td>
+    </tr>
+    <tr>
+      <td>O3DE</td>
+      <td>Free (Apache 2.0)</td>
+      <td>C++ / Lua / Python</td>
+      <td>AzNetworking + Multiplayer Gem</td>
+      <td>Moderate (untested at scale)</td>
+      <td>Unknown (few shipped titles)</td>
+    </tr>
+    <tr>
+      <td>CryEngine</td>
+      <td>Pay-what-you-want + 5%</td>
+      <td>C++ / Lua</td>
+      <td>CryNetwork (legacy)</td>
+      <td>Low (single-server design)</td>
+      <td>FPS-scale (32-64)</td>
+    </tr>
+    <tr>
+      <td>id Tech (current)</td>
+      <td>Not available (Xbox-exclusive)</td>
+      <td>C / C++</td>
+      <td>Snapshot delta compression</td>
+      <td>Not applicable</td>
+      <td>FPS-scale (up to 128 tick)</td>
+    </tr>
+    <tr>
+      <td>IW Engine (CoD)</td>
+      <td>Proprietary (Activision)</td>
+      <td>C++</td>
+      <td>Modified id Tech 3 netcode</td>
+      <td>Not applicable</td>
+      <td>Up to 150 (Warzone)</td>
+    </tr>
+    <tr>
+      <td>ForgeLight</td>
+      <td>Proprietary (Daybreak)</td>
+      <td>C++</td>
+      <td>Server-authoritative MMO</td>
+      <td>High (purpose-built)</td>
+      <td>2,000 per continent</td>
+    </tr>
+    <tr>
+      <td>Custom (WoW, EVE, etc.)</td>
+      <td>N/A (internal)</td>
+      <td>Varies</td>
+      <td>Custom per game</td>
+      <td>Highest (purpose-built)</td>
+      <td>Thousands to tens of thousands</td>
+    </tr>
+  </table>
+
+  <!-- ================================================================== -->
+  <h2 id="takeaways">Key Takeaways for Wompworld</h2>
+
+  <p>Looking at the full landscape of engine options through the lens of a persistent ocean-world MMO:</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Unreal is the Strongest Commercial Option</h4>
+      <p>UE5 has the best rendering pipeline, the most mature dedicated server support, and the largest talent pool. The replication system needs extension for MMO scale, but the Replication Graph provides a proven optimization path. The 5% royalty is the cost of not building your own engine.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Unity is Viable but Risky</h4>
+      <p>Netcode for Entities on DOTS/ECS is architecturally promising for server performance, but DOTS is still maturing. The Runtime Fee debacle created trust issues that Unity is still recovering from. C# is easier to work with than C++, which matters for a small team.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Godot is Wrong for This Scale</h4>
+      <p>Godot's networking ceiling of roughly 1,300 stable connections makes it unsuitable as a full-stack MMO solution. It could work as a client-only renderer with a custom server backend, but at that point you are building your own networking anyway and losing Godot's main advantage (simplicity).</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Custom Engines are Right but Expensive</h4>
+      <p>Every long-lived MMO runs on a custom engine for a reason. The problem is that building a custom engine requires years of development and a team of experienced engine programmers. For a team without game dev experience, this is not the first project to attempt it on.</p>
+    </div>
+  </div>
+
+  <p>The practical reality for a project like Wompworld is that <strong>Unreal Engine 5</strong> with a custom server backend and sharding layer offers the best balance of visual quality, existing tooling, available talent, and extensibility. The alternative is Unity with DOTS, which trades rendering quality for an easier language (C#) and lower upfront complexity. Both will require significant custom networking work to reach MMO scale.</p>
+
+  <!-- ================================================================== -->
+  <h2 id="sources">Sources &amp; References</h2>
+
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info"><a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-overview-for-unreal-engine" target="_blank">Epic Games: Networking Overview for Unreal Engine (UE 5.7)</a><div class="source-desc">Official documentation covering the client-server model, property replication, RPCs, actor roles, and dedicated server architecture in Unreal Engine.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info"><a href="https://dev.epicgames.com/documentation/en-us/unreal-engine/replication-graph-in-unreal-engine" target="_blank">Epic Games: Replication Graph in Unreal Engine</a><div class="source-desc">Documentation on the Replication Graph plugin, including how it scales Fortnite's 50,000 replicated actors across 100 players by caching relevancy decisions.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info"><a href="https://docs.unity3d.com/Packages/com.unity.netcode@latest/" target="_blank">Unity: Netcode for Entities Documentation</a><div class="source-desc">Official documentation for Unity's DOTS-based multiplayer framework, covering ghost synchronization, client prediction, and server-authoritative architecture.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://support.unity.com/hc/en-us/articles/30322080156692-Cancellation-of-the-Runtime-Fee-and-Pricing-Changes" target="_blank">Unity: Cancellation of the Runtime Fee and Pricing Changes</a><div class="source-desc">Unity's official announcement reversing the Runtime Fee and detailing the updated seat-based subscription pricing for Personal, Pro, and Enterprise tiers.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info"><a href="https://docs.godotengine.org/en/stable/tutorials/networking/high_level_multiplayer.html" target="_blank">Godot Engine: High-Level Multiplayer Documentation</a><div class="source-desc">Official documentation covering Godot's MultiplayerPeer abstraction, ENet/WebSocket/WebRTC backends, RPC system, and MultiplayerSpawner/Synchronizer nodes.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info"><a href="https://github.com/godotengine/godot/issues/109187" target="_blank">Godot GitHub Issue #109187: ENet Server Drops All Clients at Connection Threshold</a><div class="source-desc">Bug report documenting the ENet instability around 1,300 connections in Godot 4.4.1, where the server spikes CPU and disconnects all clients simultaneously.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://starcitizen.tools/Star_Engine" target="_blank">Star Citizen Wiki: Star Engine</a><div class="source-desc">Technical history of Star Citizen's engine evolution from CryEngine 3.8 to Lumberyard, including the preservation of custom systems and the CryNetwork replacement.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info"><a href="https://en.wikipedia.org/wiki/Id_Tech" target="_blank">Wikipedia: id Tech Engine Family</a><div class="source-desc">Comprehensive history of id Tech engines from Wolfenstein 3D through id Tech 8, including the derivation of the IW engine and Valve's GoldSrc/Source lineage.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info"><a href="https://en.wikipedia.org/wiki/ForgeLight" target="_blank">Wikipedia: ForgeLight Engine</a><div class="source-desc">Overview of SOE/Daybreak's proprietary engine, covering its use in PlanetSide 2, H1Z1, and the canceled EverQuest Next, including the Guinness World Record for concurrent FPS players.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info"><a href="https://docs.o3de.org/docs/user-guide/networking/" target="_blank">O3DE: Networking Documentation</a><div class="source-desc">Official O3DE documentation covering AzNetworking, the Multiplayer Gem, entity-based state synchronization, and cloud integration capabilities.</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <a href="#unreal">Unreal Engine</a>
+  <a href="#unity">Unity</a>
+  <a href="#godot">Godot</a>
+  <a href="#cryengine">CryEngine / O3DE</a>
+  <a href="#custom">Custom Engines</a>
+  <a href="#idtech">id Tech Lineage</a>
+  <a href="#forgelight">ForgeLight</a>
+  <a href="#comparison">Comparison Matrix</a>
+  <a href="#takeaways">Takeaways</a>
+  <a href="#sources">Sources</a>
+</div>
+
+<!-- TOC scroll highlight -->
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+
+</body>
+</html>

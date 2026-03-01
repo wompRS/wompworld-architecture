@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Citizen - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Star Citizen</div>
+  <h1>Star Citizen</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Server Meshing</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Space Sim MMO</span>
+  </div>
+  <p class="lead">Cloud Imperium Games' ambitious space simulation, built on a heavily modified CryEngine (StarEngine), pioneering server meshing technology to allow hundreds of players to share a persistent universe spanning multiple star systems without instance boundaries.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Cloud Imperium Games</span></div>
+    <div class="key-stat"><span class="label">Alpha Since</span><span class="value">2013</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~500 (live)</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">StarEngine (CryEngine)</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">10-30 Hz (varies)</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Meshed / Sharded</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <h2 id="overview">Overview</h2>
+  <p>Star Citizen's server architecture is arguably the most technically ambitious in the MMO space. Rather than using traditional instancing or zone-based sharding, Cloud Imperium Games (CIG) is building a system where multiple game servers collaborate to simulate a single continuous universe. The key technologies that make this possible are <strong>Object Container Streaming (OCS)</strong>, the <strong>Replication Layer</strong>, <strong>Persistent Entity Streaming (PES)</strong>, and <strong>Server Meshing</strong>.</p>
+  <p>The foundation of all this is the <strong>StarEngine</strong>, CIG's heavily modified fork of CryEngine 3 (later incorporating elements from Amazon Lumberyard). CIG converted the engine to use <strong>64-bit double-precision coordinates</strong>, replacing the standard 32-bit floats that limit most game engines to maps of roughly 8km x 8km. With 64-bit precision, Star Citizen can represent star systems millions of kilometers across with sub-centimeter accuracy.</p>
+  <p>As of Alpha 4.0 (December 2024), static server meshing is live, supporting up to 500 players per shard across two star systems (Stanton and Pyro). Dynamic server meshing, which will allow servers to split and merge in real time based on player density, remains in development.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>64-Bit Coordinate System</h4>
+      <p>CIG spent roughly 8 months converting CryEngine from 32-bit to 64-bit world coordinates. The physics system was refactored alongside positioning. GPU rendering was made camera-relative (since GPUs still work in 32-bit), calculating positions relative to the camera in 32-bit while the CPU tracks the true 64-bit position. This enables game worlds spanning entire star systems.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Object Container Streaming</h4>
+      <p>OCS allows both the client and server to only hold in memory the minimum set of entities required for gameplay. Objects are grouped into "containers" that stream in and out based on player proximity. Client-side OCS shipped in 2018; server-side OCS (S-OCS) followed in late 2019. This was the first required step toward server meshing.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Persistent Entity Streaming</h4>
+      <p>Introduced in patch 3.18, PES allows every dynamic object in a shard to persist even when players leave the area or log out. Dropped items, parked ships, cargo, and wreckage remain in the universe. The state of every entity is stored in the EntityGraph database and streamed back in when players return.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Server Meshing (Static)</h4>
+      <p>Live since Alpha 4.0 (December 2024). Multiple servers collaborate to simulate one shard, with each server responsible for a fixed region of space. Stanton and Pyro each run on separate servers. Players can travel between systems via jump points (a ~2 minute tunnel traversal) without loading screens. Up to 500 players per shard.</p>
+    </div>
+  </div>
+
+  <!-- DIAGRAM -->
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 880 680">
+      <!-- BACKGROUND GROUPS -->
+      <rect x="10" y="10" width="860" height="90" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="35" class="group-label">CLIENTS</text>
+
+      <rect x="10" y="120" width="860" height="110" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="145" class="group-label">GATEWAY &amp; REPLICATION LAYER</text>
+
+      <rect x="10" y="250" width="860" height="170" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="275" class="group-label">DEDICATED GAME SERVERS (DGS)</text>
+
+      <rect x="10" y="440" width="540" height="110" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="465" class="group-label">PERSISTENCE</text>
+
+      <rect x="570" y="440" width="300" height="110" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="590" y="465" class="group-label">ECONOMY SIMULATION</text>
+
+      <rect x="10" y="570" width="860" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="595" class="group-label">AWS INFRASTRUCTURE</text>
+
+      <!-- PLAYERS -->
+      <rect x="80" y="45" width="120" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="140" y="67" text-anchor="middle" class="box-label">Player Client A</text>
+
+      <rect x="260" y="45" width="120" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="320" y="67" text-anchor="middle" class="box-label">Player Client B</text>
+
+      <rect x="440" y="45" width="120" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="500" y="67" text-anchor="middle" class="box-label">Player Client C</text>
+
+      <rect x="640" y="45" width="140" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="710" y="67" text-anchor="middle" class="box-label">Player Client D+</text>
+
+      <!-- GATEWAY -->
+      <polygon points="130,155 180,175 130,195 80,175" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="130" y="179" text-anchor="middle" class="box-label">Gateway</text>
+
+      <!-- REPLICANTS -->
+      <rect x="230" y="150" width="140" height="50" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="300" y="172" text-anchor="middle" class="box-label">Replicant A</text>
+      <text x="300" y="188" text-anchor="middle" class="box-sub">Entity Replication</text>
+
+      <rect x="400" y="150" width="140" height="50" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="470" y="172" text-anchor="middle" class="box-label">Replicant B</text>
+      <text x="470" y="188" text-anchor="middle" class="box-sub">Entity Replication</text>
+
+      <!-- ATLAS -->
+      <rect x="570" y="150" width="120" height="50" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="630" y="172" text-anchor="middle" class="box-label">Atlas</text>
+      <text x="630" y="188" text-anchor="middle" class="box-sub">Authority Mgmt</text>
+
+      <!-- SCRIBE -->
+      <rect x="720" y="150" width="120" height="50" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="780" y="172" text-anchor="middle" class="box-label">Scribe</text>
+      <text x="780" y="188" text-anchor="middle" class="box-sub">State Journaling</text>
+
+      <!-- GAME SERVERS -->
+      <rect x="40" y="290" width="180" height="60" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="130" y="315" text-anchor="middle" class="box-label">DGS: Stanton (Crusader)</text>
+      <text x="130" y="332" text-anchor="middle" class="box-sub">Physics, AI, Game Logic</text>
+
+      <rect x="240" y="290" width="180" height="60" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="330" y="315" text-anchor="middle" class="box-label">DGS: Stanton (Hurston)</text>
+      <text x="330" y="332" text-anchor="middle" class="box-sub">Physics, AI, Game Logic</text>
+
+      <rect x="440" y="290" width="180" height="60" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="530" y="315" text-anchor="middle" class="box-label">DGS: Pyro (Core)</text>
+      <text x="530" y="332" text-anchor="middle" class="box-sub">Physics, AI, Game Logic</text>
+
+      <rect x="640" y="290" width="180" height="60" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="730" y="315" text-anchor="middle" class="box-label">DGS: Pyro (Outer)</text>
+      <text x="730" y="332" text-anchor="middle" class="box-sub">Physics, AI, Game Logic</text>
+
+      <!-- Jump Point visual -->
+      <rect x="340" y="370" width="180" height="36" rx="8" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" stroke-dasharray="4 2" class="box"/>
+      <text x="430" y="392" text-anchor="middle" class="box-label">Jump Point Tunnel</text>
+
+      <!-- PERSISTENCE -->
+      <path d="M60,480 L60,485 Q60,495 95,495 L135,495 Q170,495 170,485 L170,480 L170,515 Q170,525 135,525 L95,525 Q60,525 60,515 Z" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="115" cy="480" rx="55" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="115" y="508" text-anchor="middle" class="box-label">EntityGraph</text>
+
+      <rect x="210" y="480" width="150" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="285" y="500" text-anchor="middle" class="box-label">PES Service</text>
+      <text x="285" y="514" text-anchor="middle" class="box-sub">Persist &amp; Stream</text>
+
+      <rect x="390" y="480" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5" class="box"/>
+      <text x="460" y="500" text-anchor="middle" class="box-label">Account Service</text>
+      <text x="460" y="514" text-anchor="middle" class="box-sub">Auth, Wallet, Rep</text>
+
+      <!-- ECONOMY -->
+      <rect x="600" y="480" width="130" height="44" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="1.5" class="box"/>
+      <text x="665" y="500" text-anchor="middle" class="box-label">Quantum (StarSim)</text>
+      <text x="665" y="514" text-anchor="middle" class="box-sub">Economy Sim</text>
+
+      <rect x="750" y="480" width="100" height="44" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="1.5" class="box"/>
+      <text x="800" y="500" text-anchor="middle" class="box-label">Quanta</text>
+      <text x="800" y="514" text-anchor="middle" class="box-sub">Virtual NPCs</text>
+
+      <!-- AWS Layer -->
+      <rect x="50" y="600" width="160" height="44" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="130" y="622" text-anchor="middle" class="box-label">AWS EC2 Compute</text>
+      <text x="130" y="636" text-anchor="middle" class="box-sub">Multi-Region DCs</text>
+
+      <rect x="240" y="600" width="160" height="44" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="320" y="622" text-anchor="middle" class="box-label">AWS CDN Backbone</text>
+      <text x="320" y="636" text-anchor="middle" class="box-sub">~10% Lower Latency</text>
+
+      <rect x="430" y="600" width="160" height="44" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="510" y="622" text-anchor="middle" class="box-label">AWS Database</text>
+      <text x="510" y="636" text-anchor="middle" class="box-sub">Graph DB Hosting</text>
+
+      <rect x="620" y="600" width="210" height="44" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="725" y="622" text-anchor="middle" class="box-label">Auto-Scaling Groups</text>
+      <text x="725" y="636" text-anchor="middle" class="box-sub">DGS Spin-up / Recovery</text>
+
+      <!-- ARROWS -->
+      <!-- Clients to Gateway -->
+      <line x1="140" y1="81" x2="130" y2="155" class="arrow"/>
+      <line x1="320" y1="81" x2="150" y2="162" class="arrow"/>
+      <text x="200" y="118" class="arrow-label">UDP/TCP</text>
+
+      <!-- Gateway to Replicants -->
+      <line x1="180" y1="175" x2="230" y2="175" class="arrow"/>
+      <text x="200" y="168" class="arrow-label">ROUTE</text>
+
+      <!-- Clients to Replicants (some direct) -->
+      <line x1="500" y1="81" x2="430" y2="150" class="arrow"/>
+      <line x1="710" y1="81" x2="500" y2="150" class="arrow"/>
+
+      <!-- Replicants to DGS -->
+      <line x1="300" y1="200" x2="130" y2="290" class="arrow"/>
+      <line x1="300" y1="200" x2="330" y2="290" class="arrow"/>
+      <line x1="470" y1="200" x2="530" y2="290" class="arrow"/>
+      <line x1="470" y1="200" x2="730" y2="290" class="arrow"/>
+      <text x="180" y="252" class="arrow-label">ENTITY STATE</text>
+      <text x="560" y="252" class="arrow-label">ENTITY STATE</text>
+
+      <!-- Atlas to DGS -->
+      <line x1="630" y1="200" x2="530" y2="290" class="arrow"/>
+      <text x="600" y="240" class="arrow-label">AUTHORITY</text>
+
+      <!-- DGS to Persistence -->
+      <line x1="130" y1="350" x2="115" y2="468" class="arrow"/>
+      <line x1="330" y1="350" x2="285" y2="480" class="arrow"/>
+      <text x="160" y="425" class="arrow-label">PERSIST</text>
+
+      <!-- DGS Jump Point -->
+      <line x1="420" y1="350" x2="420" y2="370" class="arrow" style="marker-end:none"/>
+      <line x1="440" y1="370" x2="440" y2="350" class="arrow" style="marker-end:none"/>
+
+      <!-- PES to EntityGraph -->
+      <line x1="210" y1="502" x2="170" y2="497" class="arrow"/>
+
+      <!-- Quantum to DGS -->
+      <line x1="665" y1="480" x2="600" y2="350" class="arrow"/>
+      <text x="650" y="420" class="arrow-label">PRICES/MISSIONS</text>
+
+    </svg>
+    <div class="diagram-caption">Star Citizen's meshed architecture: Gateway routes clients to Replicants, which coordinate DGS nodes via the Replication Layer, all backed by the EntityGraph database and Quantum economy simulation</div>
+  </div>
+
+  <!-- INFRASTRUCTURE -->
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Star Citizen is hosted entirely on <strong>Amazon Web Services (AWS)</strong>. CIG uses AWS EC2 instances for dedicated game servers (DGS), with servers deployed across multiple AWS regions. One significant benefit of AWS hosting is that inter-server communication uses Amazon's CDN backbone, which provides roughly 10% lower latency compared to routing over the public internet.</p>
+
+  <h3>The Shard Model</h3>
+  <p>A "shard" in Star Citizen terminology is a logical grouping of servers that together simulate one copy of the universe. Before server meshing, each shard was a single DGS that ran the entire Stanton system, limited to about 50-100 players. With static server meshing (Alpha 4.0), a shard consists of multiple DGS nodes, each responsible for a fixed region, supporting up to 500 players total.</p>
+
+  <h3>DGS (Dedicated Game Server) Nodes</h3>
+  <p>Each DGS runs the full game simulation for its assigned region: physics, AI behavior, game logic, vehicle systems, and environmental interactions. DGS nodes do not communicate directly with clients. Instead, the Replication Layer sits between clients and DGS nodes, handling entity replication and state synchronization.</p>
+
+  <h3>Crash Recovery</h3>
+  <p>If a DGS node crashes, the Replication Layer spins up a replacement node. The new node loads entity state from the EntityGraph database and reconnects to the Replication Layer. Client gateways redirect to the new node, and gameplay resumes. Players may experience brief freezing and some position snapping, but the process targets sub-minute recovery. If a Replicant crashes, a similar recovery process occurs. The Gateway layer is even simpler and recovers in seconds.</p>
+
+  <div class="callout c-amber">
+    <div class="callout-title">Server Meshing Load Tests</div>
+    <p>CIG has conducted several large-scale meshing tests. In March 2024, an 800-player test was run. On October 10, 2024 (Star Citizen's birthday), "Meshing Test E" pushed to 1,000 concurrent players and was further stressed to 2,000 to measure stability and identify crash conditions. These tests inform the stability targets for live deployment.</p>
+  </div>
+
+  <!-- NETWORKING -->
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>Star Citizen's networking is built around the Replication Layer, a middleware system that sits between clients and game servers. The Replication Layer is designed to be <strong>event-driven rather than tick-based</strong>. As packets arrive, it processes and forwards them immediately, rather than batching updates on a fixed tick cycle like a traditional game server.</p>
+
+  <h3>The Replication Layer Components</h3>
+  <table class="proto">
+    <thead>
+      <tr><th>Component</th><th>Role</th><th>Crash Impact</th><th>Recovery</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Gateway</td><td>Routes packets between clients and the Replicants they need to talk to</td><td>Client freeze</td><td>Seconds</td></tr>
+      <tr><td>Replicant</td><td>Handles networked entity streaming and state replication between clients and DGS</td><td>Area freeze, snapping</td><td>Under 1 minute</td></tr>
+      <tr><td>Atlas</td><td>Manages entity authority assignments across DGS nodes</td><td>Authority confusion</td><td>Failover to backup</td></tr>
+      <tr><td>Scribe</td><td>Journals state changes for persistence and recovery</td><td>Delayed persistence</td><td>Replay from journal</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Entity Authority</h3>
+  <p>At any given time, exactly one DGS has authority over a given entity. Authority is allocated on a first-come-first-served basis and managed by the Atlas service. When a player moves from one DGS's region to another, authority over that player's entity (and their ship, cargo, etc.) migrates to the new DGS. The Replication Layer handles this handoff seamlessly.</p>
+
+  <h3>Streaming Bubbles</h3>
+  <p>Each connected player has a "streaming bubble" around them. The Replication Layer determines which entities fall within each player's bubble and only sends updates for those entities. Entity hierarchies (like a ship containing players, cargo, and equipment) are treated as streaming groups to ensure a ship always streams in as a complete unit.</p>
+
+  <h3>Tick Rate Challenges</h3>
+  <p>CIG targets 30 Hz for DGS tick rate, but in practice the rate has dropped as low as 10 Hz during high-load scenarios. The primary bottleneck is entity count: a server simulating physics for thousands of entities (including individual pieces of cargo, ship components, weapons, NPCs, and player characters) hits CPU limits faster than a server tracking simple player positions. Server meshing helps by reducing the number of entities per DGS, but entity-dense scenarios like fleet battles still stress individual nodes.</p>
+
+  <div class="callout c-purple">
+    <div class="callout-title">Multicrew Physics Grids</div>
+    <p>Each ship has its own local physics grid. Players walking inside a moving ship experience physics relative to the ship, not the universe. When a player transitions between physics grids (entering or exiting a ship, EVA transitions), the server must reconcile two different reference frames. This was historically a major source of bugs and freezes, especially in version 3.0 where crossing physics grid boundaries could cause multi-second pauses.</p>
+  </div>
+
+  <!-- DATA -->
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>Star Citizen's persistence is handled by the <strong>EntityGraph</strong>, a graph database that stores the state of every network-replicated entity in the universe. EntityGraph evolved from the original "iCache" concept, which was CIG's early design for a central entity cache.</p>
+
+  <h3>EntityGraph Structure</h3>
+  <p>Each entity in EntityGraph is a node with properties: object class, item type, legal owner, physical orientation, and precise 64-bit position within the game world. Relationships between entities are stored as edges (e.g., "this weapon is mounted on this ship hardpoint" or "this cargo box is inside this ship's hold"). When a DGS needs to simulate a region, it queries EntityGraph for all entities in that area, streams them in, and begins simulating.</p>
+
+  <h3>Persistent Entity Streaming (PES)</h3>
+  <p>Before PES, logging out or leaving an area would cause loose objects (dropped items, parked ships) to disappear. PES changed this by persisting every dynamic entity's state back to EntityGraph. Players can now drop items, park ships, and log out, then return later to find everything where they left it. Mission progress (like partially delivered cargo) persists across sessions.</p>
+
+  <h3>The Hybrid Service</h3>
+  <p>Rather than building each Replication Layer microservice (Replicant, Atlas, Scribe, Gateway) as separate deployable services from the start, CIG initially built the "Hybrid" service: a single process containing the logic of all four services plus EntityGraph integration. This reduced the number of moving parts during development and testing. The plan is to split these into independent, separately scalable services over time.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-amber">
+      <h4>Quantum Economy Simulation (StarSim)</h4>
+      <p>Quantum is a background economy simulation that runs millions of lightweight virtual NPCs called "Quanta." Each Quanta has personality traits (morality, aggression), job proficiencies, and makes decisions about what work to do. Quanta simulate mining, trading, piracy, and security work. Their collective behavior drives commodity prices, mission availability, and NPC encounter frequency across the universe.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Probability Volumes</h4>
+      <p>Quantum tracks "probability volumes" rather than individual Quanta positions. Each volume (a region of space, a planet surface area, a station) has statistical probabilities of events occurring. The simulation only resolves to specific NPCs or events when a player looks at a specific location, collapsing the probability into concrete game state.</p>
+    </div>
+    <div class="info-card c-blue">
+      <h4>Ship Component Damage</h4>
+      <p>Each ship has a detailed component hierarchy: power plants, coolers, shield generators, weapons, thrusters, quantum drives, and more. Damage is tracked per-component, with each component having its own health, degradation state, and functional output. All of this state must be replicated across the network and persisted to EntityGraph, adding significant per-entity data overhead.</p>
+    </div>
+    <div class="info-card c-pink">
+      <h4>Odin Visualization Tool</h4>
+      <p>CIG built "Odin," an internal web-based tool for visualizing Quantum simulation data in real time. Odin displays commodity price fluctuations, goods flow between locations, Quanta population distributions, and economic health metrics. It serves as both a development tool and a monitoring dashboard for the live economy.</p>
+    </div>
+  </div>
+
+  <!-- SCALING -->
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <p>Star Citizen's scaling story is the story of server meshing. Before meshing, the entire Stanton system ran on a single server, hard-capped at around 50-100 players. Everything in the 4.x series is about breaking past that limit.</p>
+
+  <h3>Static Server Meshing (Live)</h3>
+  <p>In static meshing, each DGS is assigned a fixed region of space. The assignment does not change based on load. If 400 players crowd into one region, that region's DGS must handle all of them. The mesh structure is: one server per major location (Crusader, Hurston, etc.) plus servers for Pyro's regions. Players cross server boundaries seamlessly as they travel.</p>
+
+  <h3>Dynamic Server Meshing (Planned)</h3>
+  <p>Dynamic meshing will allow server boundaries to shift in real time. If a large group of players gathers at one location, the system will split that region across multiple DGS nodes. If an area empties out, servers merge back together. This requires the Atlas service to continuously monitor load and reassign entity authority on the fly, while the Replication Layer maintains seamless connectivity for clients.</p>
+
+  <h3>Cost Scaling</h3>
+  <p>The computational cost of simulation varies dramatically by scenario. CIG has noted that 100 players in FPS combat are cheaper to simulate than 100 players fighting in single-seater spaceships with missiles and energy weapons. Large multicrew ships with dozens of components, multiple players, NPCs, and cargo are the most expensive entities per-unit. Dynamic meshing will need to account for this variable cost when deciding how to partition servers.</p>
+
+  <table class="proto">
+    <thead>
+      <tr><th>Milestone</th><th>Year</th><th>Players/Shard</th><th>Servers/Shard</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Single Server (Pre-OCS)</td><td>Pre-2018</td><td>~24</td><td>1</td></tr>
+      <tr><td>Client OCS</td><td>2018</td><td>~50</td><td>1</td></tr>
+      <tr><td>Server OCS (S-OCS)</td><td>2019</td><td>~50</td><td>1</td></tr>
+      <tr><td>PES (3.18)</td><td>2023</td><td>~100</td><td>1</td></tr>
+      <tr><td>Static Mesh (4.0)</td><td>2024</td><td>~500</td><td>Multiple (fixed)</td></tr>
+      <tr><td>Dynamic Mesh (target)</td><td>2026+</td><td>1000+</td><td>Multiple (elastic)</td></tr>
+    </tbody>
+  </table>
+
+  <!-- DEEP DIVES -->
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>The 64-Bit Conversion</h3>
+  <p>CIG Technical Director Sean Tracy (a Crytek veteran) led the conversion from 32-bit to 64-bit coordinates. The key insight was that not every engine module needed conversion. The AI module, for instance, has no benefit from 64-bit execution, so it was left operating in 32-bit while receiving 64-bit position data. Physics and positioning were refactored together, since physical simulation at astronomical scales requires the same precision as positioning.</p>
+  <p>The GPU side required a different approach entirely. GPUs operate natively in 32-bit, and converting them to 64-bit would be prohibitively expensive. Instead, CIG implemented <strong>camera-relative rendering</strong>: all positions sent to the GPU are calculated relative to the camera in 32-bit, while the CPU tracks true world positions in 64-bit. This preserves rendering performance while enabling millimeter-accurate positioning across millions of kilometers.</p>
+
+  <h3>The Stanton-Pyro Jump Point</h3>
+  <p>The jump point between Stanton and Pyro is the first inter-system connection in the live game. Traversing the jump tunnel takes approximately 2 minutes and requires active piloting to avoid collisions with tunnel walls and obstacles. From a server architecture perspective, the jump point is where entity authority transfers from a Stanton DGS to a Pyro DGS, coordinated by the Replication Layer. The client experiences seamless travel with no loading screens.</p>
+  <p>Early testing revealed bugs with jump point transitions that initially prevented smooth crossings. A week after the first meshing test, the first successful jump point traversal was achieved, marking a major milestone in proving the meshing architecture worked.</p>
+
+  <h3>How Quantum Works Under the Hood</h3>
+  <p>Quantum was originally written in an unspecified language and later rewritten in C#, yielding a performance improvement of over two orders of magnitude. This was necessary because simulating the Stanton system alone requires a significant number of Quanta to achieve acceptable economic fidelity, and future systems like Pyro, Nyx, and beyond will multiply that requirement.</p>
+  <p>Each Quanta chooses jobs based on a value calculation: base payout multiplied by proficiency multipliers, modified by trait alignment with the job type. A Quanta with high aggression and low morality perceives piracy jobs as more valuable than a law-abiding Quanta would. This creates natural economic diversity without requiring hand-tuned distributions.</p>
+  <p>Tony Zurovec, CIG's director of persistent universe design, described the system as inspired by real quantum mechanics: the simulation tracks probability volumes rather than individual positions, only "collapsing" to specific entities when a player observes them. This allows the simulation to scale to millions of Quanta without tracking millions of individual positions.</p>
+
+  <h3>Network Bind Culling</h3>
+  <p>Before OCS, a predecessor technology called Network Bind Culling was proposed at a 2015 tech summit involving engineers from CIG studios, Illfonic, Behaviour Interactive, and Wormbyte. Development started in May 2015 in Frankfurt and was deployed to the mainline codebase in June 2015. NBC was the first step toward filtering what data each client receives, reducing bandwidth by not sending updates for entities the player cannot interact with.</p>
+
+  <!-- EVOLUTION -->
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="year">2012</div>
+      <div class="desc"><strong>Kickstarter campaign.</strong> CIG begins development on what is then CryEngine 3 with 32-bit coordinates and traditional single-server architecture.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2015</div>
+      <div class="desc"><strong>64-bit conversion completed.</strong> ~8 months of work converts the engine to double-precision coordinates. Network Bind Culling proposed and implemented.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2016</div>
+      <div class="desc"><strong>CIG transitions from CryEngine to Lumberyard.</strong> Amazon's fork of CryEngine provides AWS integration and licensing benefits. Engine is increasingly customized into "StarEngine."</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2018</div>
+      <div class="desc"><strong>Client-Side OCS ships (Alpha 3.3).</strong> First step toward server meshing. Clients can now dynamically stream entities in/out of memory, dramatically reducing RAM usage and improving FPS.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2019</div>
+      <div class="desc"><strong>Server-Side OCS ships (Alpha 3.8).</strong> Servers can now stream entities dynamically, paving the way for multiple servers to each hold a subset of the world.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2023</div>
+      <div class="desc"><strong>Persistent Entity Streaming ships (Alpha 3.18).</strong> EntityGraph database goes live. Every dynamic entity in a shard now persists. Dropped items, parked ships, and cargo survive across sessions.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2024</div>
+      <div class="desc"><strong>Static Server Meshing goes live (Alpha 4.0).</strong> Stanton and Pyro connected via jump points. Up to 500 players per shard across multiple DGS nodes. Replication Layer (Hybrid) deployed.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2024</div>
+      <div class="desc"><strong>Meshing stress tests.</strong> 800-player test in March, 1,000-2,000 player test in October. Testing reveals crash conditions and stability improvements needed for higher player counts.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2025</div>
+      <div class="desc"><strong>CitizenCon: Replication Layer 2.0 and Dynamic Mesh 2.0 announced.</strong> Plans to split the Hybrid into independent microservices and implement dynamic server boundary adjustment. Playability and stability focus declared for 2025.</div>
+    </div>
+  </div>
+
+  <!-- SOURCES -->
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://robertsspaceindustries.com/en/comm-link/transmission/18397-Server-Meshing-And-Persistent-Streaming-Q-A" target="_blank">Server Meshing and Persistent Streaming Q&amp;A - RSI</a>
+        <div class="source-desc">Official CIG Q&amp;A covering the Replication Layer, server meshing phases, and crash recovery</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://starcitizen.tools/Server_meshing" target="_blank">Server Meshing - Star Citizen Wiki</a>
+        <div class="source-desc">Community wiki page with detailed technical breakdown of static and dynamic meshing</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://starcitizen.tools/Persistent_Entity_Streaming" target="_blank">Persistent Entity Streaming - Star Citizen Wiki</a>
+        <div class="source-desc">Technical overview of PES, EntityGraph, and the evolution from iCache</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://sc-server-meshing.info/" target="_blank">Unofficial Road to Dynamic Server Meshing</a>
+        <div class="source-desc">142+ slide community presentation gathering all available information on server meshing in one place</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://gamersnexus.net/gg/2622-star-citizen-sean-tracy-64bit-engine-tech-edge-blending" target="_blank">Sean Tracy on 64-Bit Engine Tech - GamersNexus</a>
+        <div class="source-desc">Interview with CIG Technical Director on the 64-bit conversion, camera-relative rendering, and physics refactoring</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://robertsspaceindustries.com/en/comm-link/transmission/18162-Quantum-Quasar-And-Virtual-AI" target="_blank">Quantum, Quasar, and Virtual AI - RSI</a>
+        <div class="source-desc">Official deep dive into the Quantum economy simulation, Quanta attributes, and the Odin visualization tool</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://starcitizen.tools/Object_Container_Streaming" target="_blank">Object Container Streaming - Star Citizen Wiki</a>
+        <div class="source-desc">Technical breakdown of client-side and server-side OCS implementation</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.mmorpg.com/news/star-citizens-server-meshing-tech-and-pyro-system-go-live-in-first-ever-parallel-40-preview-build-2000133737" target="_blank">Server Meshing and Pyro Go Live - MMORPG.com</a>
+        <div class="source-desc">Coverage of Alpha 4.0 preview launch with static server meshing and the Stanton-Pyro jump point</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://hangarbase.org/news/star-citizen-the-expanded-server-mesh-the-future-of-the-verse-revealed-at-citizencon-2025" target="_blank">The Expanded Server Mesh - CitizenCon 2025 Coverage</a>
+        <div class="source-desc">Replication Layer 2.0, Dynamic Mesh 2.0, and CIG's 2025 roadmap plans</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info">
+        <a href="https://news.ycombinator.com/item?id=37307253" target="_blank">StarCitizen Server Meshing Architecture - Hacker News</a>
+        <div class="source-desc">Technical community discussion of meshing architecture challenges and comparisons</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME NAV -->
+  <div class="game-nav">
+    <a href="bdo.html"><span class="dir">Previous</span><span class="name">Black Desert Online</span></a>
+    <a class="next" href="planetside2.html"><span class="dir">Next</span><span class="name">PlanetSide 2</span></a>
+  </div>
+
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

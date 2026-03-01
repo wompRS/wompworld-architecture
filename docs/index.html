@@ -126,6 +126,11 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
 .final-box h3{font-size:1.15rem;color:var(--t1);margin-bottom:0.75rem}
 .final-box p{font-size:0.95rem;color:var(--t2);line-height:1.85;margin-bottom:0.75rem}
 .final-box strong{color:var(--t1)}
+
+
+/* DEEP DIVE LINK */
+.deep-dive{display:block;text-align:center;margin-top:1rem;padding:0.6rem 1rem;border:1px solid var(--line);border-radius:8px;font-size:0.8rem;font-weight:600;color:var(--t3);text-decoration:none;transition:all 0.15s}
+.deep-dive:hover{color:var(--blue);border-color:var(--blue);background:rgba(37,99,235,0.04)}
 </style>
 </head>
 <body>
@@ -146,6 +151,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
   <a href="#" data-s="time">Timeline</a>
   <a href="#" data-s="risks">Risks</a>
   <a href="#" data-s="verdict">Verdict</a>
+  <a href="games/wiki-engines.html" style="border-left:1px solid var(--line);margin-left:0.5rem;padding-left:1.25rem">Tech Wiki</a>
   <span class="spacer"></span>
   <span class="tag">WOMPWORLD // PRE-PROD</span>
 </nav>
@@ -162,163 +168,270 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
 <!-- WOW -->
 <div class="diagram">
   <div class="diagram-title"><h3>World of Warcraft</h3><span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Sharded Realms</span></div>
-  <div class="diagram-sub">Separate realms with dynamic sharding. 20 years of incremental evolution.</div>
-  <svg class="dia-svg" viewBox="0 0 440 310">
-    <!-- Player -->
-    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
-    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
-    <!-- Auth -->
-    <rect class="box" x="170" y="65" width="100" height="32" fill="var(--card)" stroke="var(--blue)"/>
-    <text class="box-label" x="220" y="85" text-anchor="middle">Battle.net Auth</text>
-    <!-- Realm List -->
-    <rect class="box" x="170" y="120" width="100" height="32" fill="var(--card)" stroke="var(--blue)"/>
-    <text class="box-label" x="220" y="140" text-anchor="middle">Realm List</text>
-    <!-- World Servers -->
-    <rect class="box" x="30" y="180" width="90" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="75" y="197" text-anchor="middle">Zone Server</text>
-    <text class="box-sub" x="75" y="210" text-anchor="middle">Continent A</text>
-    <rect class="box" x="140" y="180" width="90" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="185" y="197" text-anchor="middle">Zone Server</text>
-    <text class="box-sub" x="185" y="210" text-anchor="middle">Continent B</text>
-    <rect class="box" x="250" y="180" width="90" height="40" fill="var(--card)" stroke="var(--purple)"/>
-    <text class="box-label" x="295" y="197" text-anchor="middle">Instance Srv</text>
-    <text class="box-sub" x="295" y="210" text-anchor="middle">Dungeons/Raids</text>
-    <rect class="box" x="355" y="180" width="75" height="40" fill="var(--card)" stroke="var(--green)"/>
-    <text class="box-label" x="392" y="197" text-anchor="middle">Sharding</text>
-    <text class="box-sub" x="392" y="210" text-anchor="middle">Dynamic split</text>
-    <!-- JAM Router -->
-    <rect class="box" x="130" y="245" width="120" height="28" fill="var(--raised)" stroke="var(--line2)"/>
-    <text class="box-sub" x="190" y="263" text-anchor="middle" style="fill:var(--t3)">JAM Routing Layer</text>
-    <!-- DB -->
-    <rect class="box" x="115" y="280" width="60" height="25" fill="var(--card)" stroke="var(--pink)"/>
-    <text class="box-sub" x="145" y="296" text-anchor="middle">Auth DB</text>
-    <rect class="box" x="185" y="280" width="60" height="25" fill="var(--card)" stroke="var(--pink)"/>
-    <text class="box-sub" x="215" y="296" text-anchor="middle">Char DB</text>
-    <rect class="box" x="255" y="280" width="60" height="25" fill="var(--card)" stroke="var(--pink)"/>
-    <text class="box-sub" x="285" y="296" text-anchor="middle">World DB</text>
+  <div class="diagram-sub"><strong>MMORPG</strong> &middot; Separate realms with dynamic sharding. 20 years of incremental evolution.</div>
+  <svg class="dia-svg" viewBox="0 0 440 480">
+    <!-- Player (pill) -->
+    <rect class="box" x="170" y="8" width="100" height="32" rx="16" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="28" text-anchor="middle">Players</text>
+
+    <!-- Auth (blue rect) -->
+    <rect class="box" x="155" y="75" width="130" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="95" text-anchor="middle">Battle.net Auth</text>
+
+    <!-- Realm List (hexagon, blue) -->
+    <polygon points="174,145 286,145 300,163 286,181 174,181 160,163" fill="var(--card)" stroke="var(--blue)" stroke-width="1.5"/>
+    <text class="box-label" x="230" y="167" text-anchor="middle">Realm Selector</text>
+
+    <!-- Zone Server: Eastern Kingdoms (orange) -->
+    <rect class="box" x="15" y="230" width="100" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="65" y="249" text-anchor="middle">Zone Server</text>
+    <text class="box-sub" x="65" y="263" text-anchor="middle">Eastern Kingdoms</text>
+
+    <!-- Zone Server: Kalimdor (orange) -->
+    <rect class="box" x="130" y="230" width="100" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="180" y="249" text-anchor="middle">Zone Server</text>
+    <text class="box-sub" x="180" y="263" text-anchor="middle">Kalimdor</text>
+
+    <!-- Instance Server (orange) -->
+    <rect class="box" x="245" y="230" width="100" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="295" y="249" text-anchor="middle">Instance Server</text>
+    <text class="box-sub" x="295" y="263" text-anchor="middle">Dungeons/Raids</text>
+
+    <!-- Dynamic Sharding (amber, highlighted) -->
+    <rect class="box" x="355" y="230" width="80" height="44" fill="var(--card)" stroke="var(--amber)" stroke-width="2"/>
+    <text class="box-label" x="395" y="249" text-anchor="middle">Sharding</text>
+    <text class="box-sub" x="395" y="263" text-anchor="middle">Overflow splits</text>
+
+    <!-- Lateral: Auction House (dashed purple) -->
+    <rect class="box" x="355" y="145" width="80" height="36" fill="var(--card)" stroke="var(--purple)" stroke-dasharray="6 3" stroke-width="1.5"/>
+    <text class="box-label" x="395" y="160" text-anchor="middle">Auction</text>
+    <text class="box-sub" x="395" y="173" text-anchor="middle">House API</text>
+
+    <!-- JAM Routing Layer (infrastructure) -->
+    <rect class="box" x="80" y="310" width="240" height="30" fill="var(--raised)" stroke="var(--line2)"/>
+    <text class="box-sub" x="200" y="329" text-anchor="middle" style="fill:var(--t3)">JAM Routing Layer</text>
+
+    <!-- DB: Auth DB (cylinder) -->
+    <path d="M75,398 v24 a45,8 0 0,0 90,0 v-24" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <ellipse cx="120" cy="398" rx="45" ry="8" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <text class="box-label" x="120" y="414" text-anchor="middle">Auth DB</text>
+
+    <!-- DB: Character DB (cylinder) -->
+    <path d="M185,398 v24 a45,8 0 0,0 90,0 v-24" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <ellipse cx="230" cy="398" rx="45" ry="8" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <text class="box-label" x="230" y="414" text-anchor="middle">Character DB</text>
+
+    <!-- DB: World DB (cylinder) -->
+    <path d="M295,398 v24 a45,8 0 0,0 90,0 v-24" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <ellipse cx="340" cy="398" rx="45" ry="8" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <text class="box-label" x="340" y="414" text-anchor="middle">World DB</text>
+
     <!-- Arrows -->
-    <line class="arrow" stroke="var(--arrow)" x1="220" y1="37" x2="220" y2="65"/>
-    <line class="arrow" stroke="var(--arrow)" x1="220" y1="97" x2="220" y2="120"/>
-    <line class="arrow" stroke="var(--arrow)" x1="185" y1="152" x2="75" y2="180"/>
-    <line class="arrow" stroke="var(--arrow)" x1="220" y1="152" x2="185" y2="180"/>
-    <line class="arrow" stroke="var(--arrow)" x1="240" y1="152" x2="295" y2="180"/>
-    <line class="arrow" stroke="var(--arrow)" x1="185" y1="220" x2="190" y2="245"/>
-    <line class="arrow" stroke="var(--arrow)" x1="190" y1="273" x2="190" y2="280"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="40" x2="220" y2="75"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="107" x2="220" y2="145"/>
+    <line class="arrow" stroke="var(--arrow)" x1="185" y1="181" x2="65" y2="230"/>
+    <line class="arrow" stroke="var(--arrow)" x1="210" y1="181" x2="180" y2="230"/>
+    <line class="arrow" stroke="var(--arrow)" x1="250" y1="181" x2="295" y2="230"/>
+    <line class="arrow" stroke="var(--arrow)" x1="270" y1="181" x2="395" y2="230"/>
+    <line class="arrow" stroke="var(--arrow)" x1="65" y1="274" x2="140" y2="310"/>
+    <line class="arrow" stroke="var(--arrow)" x1="180" y1="274" x2="190" y2="310"/>
+    <line class="arrow" stroke="var(--arrow)" x1="295" y1="274" x2="250" y2="310"/>
+    <line class="arrow" stroke="var(--arrow)" x1="200" y1="340" x2="120" y2="390"/>
+    <line class="arrow" stroke="var(--arrow)" x1="200" y1="340" x2="230" y2="390"/>
+    <line class="arrow" stroke="var(--arrow)" x1="200" y1="340" x2="340" y2="390"/>
+    <!-- Lateral arrow to Auction House -->
+    <line class="arrow" stroke="var(--arrow)" x1="300" y1="163" x2="355" y2="163"/>
+
+    <!-- Protocol labels with knockout -->
+    <rect fill="var(--surface)" x="193" y="49" width="54" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="59" text-anchor="middle">HTTPS</text>
+
+    <rect fill="var(--surface)" x="200" y="117" width="40" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="127" text-anchor="middle">TCP</text>
+
+    <rect fill="var(--surface)" x="307" y="155" width="40" height="14" rx="3"/>
+    <text class="arrow-label" x="327" y="165" text-anchor="middle">TCP</text>
+
+    <!-- Group labels with knockout -->
+    <rect fill="var(--surface)" x="82" y="213" width="214" height="16" rx="3"/>
+    <text class="group-label" x="189" y="225" text-anchor="middle" fill="var(--muted)">GAME SERVERS (4,000+ LAYERED PER SHARD)</text>
+
+    <rect fill="var(--surface)" x="105" y="370" width="250" height="16" rx="3"/>
+    <text class="group-label" x="230" y="382" text-anchor="middle" fill="var(--muted)">MYSQL / MARIADB CLUSTER</text>
   </svg>
   <div class="stats">
-    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">C++ (proprietary)</span></div>
-    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val">~2.5 Hz (vanilla) to 100+ Hz (modern)</span></div>
-    <div class="stat"><span class="stat-label">Per Realm</span><span class="stat-val">3-5K CCU (est.)</span></div>
-    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">3-way split (Oracle)</span></div>
+    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Custom C++ (Blizzard)</span></div>
+    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val">~16ms (60Hz target)</span></div>
+    <div class="stat"><span class="stat-label">Per Shard</span><span class="stat-val">4,000+ layered</span></div>
+    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">MySQL / MariaDB</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2004</span></div>
   </div>
+  <a class="deep-dive" href="games/wow.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- EVE -->
 <div class="diagram">
   <div class="diagram-title"><h3>EVE Online</h3><span class="badge" style="background:rgba(180,83,9,0.1);color:var(--amber)">True Single Shard</span></div>
-  <div class="diagram-sub">One server, one universe. 1 Hz tick. Slows down instead of splitting up.</div>
-  <svg class="dia-svg" viewBox="0 0 440 290">
-    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
-    <text class="box-label" x="220" y="25" text-anchor="middle">All Players</text>
-    <rect class="box" x="170" y="60" width="100" height="32" fill="var(--card)" stroke="var(--green)"/>
-    <text class="box-label" x="220" y="80" text-anchor="middle">Proxy Nodes</text>
-    <!-- SOL nodes -->
-    <rect class="box" x="20" y="125" width="80" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="60" y="142" text-anchor="middle">SOL Node</text>
-    <text class="box-sub" x="60" y="155" text-anchor="middle">~100 systems</text>
-    <rect class="box" x="115" y="125" width="80" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="155" y="142" text-anchor="middle">SOL Node</text>
-    <text class="box-sub" x="155" y="155" text-anchor="middle">~100 systems</text>
-    <rect class="box" x="210" y="125" width="80" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="250" y="142" text-anchor="middle">SOL Node</text>
-    <text class="box-sub" x="250" y="155" text-anchor="middle">~100 systems</text>
-    <rect class="box" x="305" y="125" width="60" height="40" fill="var(--raised)" stroke="var(--amber)"/>
-    <text class="box-label" x="335" y="142" text-anchor="middle" style="font-size:9px;fill:var(--amber)">JITA</text>
-    <text class="box-sub" x="335" y="155" text-anchor="middle">Dedicated</text>
-    <text class="box-sub" x="407" y="150" text-anchor="middle" style="fill:var(--t3);font-size:14px;letter-spacing:2px">...</text>
-    <!-- Machonet -->
-    <rect class="box" x="130" y="190" width="160" height="28" fill="var(--raised)" stroke="var(--line2)"/>
-    <text class="box-sub" x="210" y="208" text-anchor="middle" style="fill:var(--t3)">Machonet (RPC / IPC)</text>
-    <!-- DB -->
-    <rect class="box" x="110" y="240" width="200" height="40" fill="var(--card)" stroke="var(--pink)"/>
-    <text class="box-label" x="210" y="257" text-anchor="middle">SQL Server 2019</text>
-    <text class="box-sub" x="210" y="270" text-anchor="middle">32 cores, 4TB RAM, active/standby pair</text>
+  <div class="diagram-sub"><strong>Sandbox MMORPG</strong> &middot; One server, one universe. 1 Hz tick. Slows down instead of splitting up.</div>
+  <svg class="dia-svg" viewBox="0 0 440 480">
+    <!-- Player (pill) -->
+    <rect class="box" x="170" y="8" width="100" height="32" rx="16" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="28" text-anchor="middle">All Players</text>
+
+    <!-- Proxy Nodes (blue rect / auth-like entry) -->
+    <rect class="box" x="155" y="75" width="130" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="95" text-anchor="middle">Proxy Nodes</text>
+
+    <!-- SOL Node: Jita (amber highlighted) -->
+    <rect class="box" x="15" y="195" width="100" height="44" fill="var(--card)" stroke="var(--amber)" stroke-width="2"/>
+    <text class="box-label" x="65" y="214" text-anchor="middle" style="fill:var(--amber)">SOL Node</text>
+    <text class="box-sub" x="65" y="228" text-anchor="middle">Jita (dedicated)</text>
+
+    <!-- SOL Node: Amarr (orange) -->
+    <rect class="box" x="130" y="195" width="100" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="180" y="214" text-anchor="middle">SOL Node</text>
+    <text class="box-sub" x="180" y="228" text-anchor="middle">Amarr</text>
+
+    <!-- SOL Node: Dodixie (orange) -->
+    <rect class="box" x="245" y="195" width="100" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="295" y="214" text-anchor="middle">SOL Node</text>
+    <text class="box-sub" x="295" y="228" text-anchor="middle">Dodixie</text>
+
+    <!-- Lateral: Market Service (dashed purple) -->
+    <rect class="box" x="355" y="82" width="80" height="36" fill="var(--card)" stroke="var(--purple)" stroke-dasharray="6 3" stroke-width="1.5"/>
+    <text class="box-label" x="395" y="97" text-anchor="middle">Market</text>
+    <text class="box-sub" x="395" y="110" text-anchor="middle">Service</text>
+
+    <!-- Machonet RPC/IPC (hexagon, green) -->
+    <polygon points="134,300 306,300 320,318 306,336 134,336 120,318" fill="var(--card)" stroke="var(--green)" stroke-width="1.5"/>
+    <text class="box-label" x="220" y="322" text-anchor="middle">Machonet RPC / IPC</text>
+
+    <!-- DB: SQL Server 2019 (cylinder) -->
+    <path d="M130,398 v28 a90,10 0 0,0 180,0 v-28" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <ellipse cx="220" cy="398" rx="90" ry="10" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <text class="box-label" x="220" y="416" text-anchor="middle">SQL Server 2019</text>
+    <text class="box-sub" x="220" y="428" text-anchor="middle">32 cores, 4TB RAM</text>
+
     <!-- Arrows -->
-    <line class="arrow" stroke="var(--arrow)" x1="220" y1="37" x2="220" y2="60"/>
-    <line class="arrow" stroke="var(--arrow)" x1="200" y1="92" x2="60" y2="125"/>
-    <line class="arrow" stroke="var(--arrow)" x1="210" y1="92" x2="155" y2="125"/>
-    <line class="arrow" stroke="var(--arrow)" x1="220" y1="92" x2="250" y2="125"/>
-    <line class="arrow" stroke="var(--arrow)" x1="240" y1="92" x2="335" y2="125"/>
-    <line class="arrow" stroke="var(--arrow)" x1="210" y1="165" x2="210" y2="190"/>
-    <line class="arrow" stroke="var(--arrow)" x1="210" y1="218" x2="210" y2="240"/>
-    <!-- Labels (after arrows for render order) -->
-    <rect x="108" y="103" width="224" height="16" fill="var(--surface)"/>
-    <text class="group-label" x="220" y="115" text-anchor="middle">SOL NODES (170 PROCESSES)</text>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="40" x2="220" y2="75"/>
+    <line class="arrow" stroke="var(--arrow)" x1="185" y1="107" x2="65" y2="195"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="107" x2="180" y2="195"/>
+    <line class="arrow" stroke="var(--arrow)" x1="255" y1="107" x2="295" y2="195"/>
+    <line class="arrow" stroke="var(--arrow)" x1="65" y1="239" x2="170" y2="300"/>
+    <line class="arrow" stroke="var(--arrow)" x1="180" y1="239" x2="200" y2="300"/>
+    <line class="arrow" stroke="var(--arrow)" x1="295" y1="239" x2="260" y2="300"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="336" x2="220" y2="388"/>
+    <!-- Lateral arrow to Market -->
+    <line class="arrow" stroke="var(--arrow)" x1="285" y1="91" x2="355" y2="95"/>
+
+    <!-- Protocol labels with knockout -->
+    <rect fill="var(--surface)" x="196" y="49" width="48" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="59" text-anchor="middle">TCP</text>
+
+    <rect fill="var(--surface)" x="293" y="85" width="54" height="14" rx="3"/>
+    <text class="arrow-label" x="320" y="95" text-anchor="middle">TCP</text>
+
+    <rect fill="var(--surface)" x="196" y="355" width="48" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="365" text-anchor="middle">ODBC</text>
+
+    <!-- Group labels with knockout -->
+    <rect fill="var(--surface)" x="48" y="170" width="264" height="16" rx="3"/>
+    <text class="group-label" x="180" y="182" text-anchor="middle" fill="var(--muted)">~170 SOL PROCESSES, ~100 SYSTEMS EACH</text>
   </svg>
   <div class="stats">
     <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Stackless Python + C++</span></div>
-    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val" style="color:var(--amber)">1 Hz (!)</span></div>
-    <div class="stat"><span class="stat-label">Peak CCU</span><span class="stat-val">65K (2013), ~23K avg recent</span></div>
-    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">MS SQL Server</span></div>
+    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val" style="color:var(--amber)">1 Hz (1s tick)</span></div>
+    <div class="stat"><span class="stat-label">Peak</span><span class="stat-val">65K (single shard)</span></div>
+    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">SQL Server 2019</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2003</span></div>
   </div>
+  <a class="deep-dive" href="games/eve.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- ALBION -->
 <div class="diagram">
   <div class="diagram-title"><h3>Albion Online</h3><span class="badge" style="background:rgba(4,120,87,0.1);color:var(--green)">Single Shard + Photon</span></div>
-  <div class="diagram-sub">Widely studied indie MMO architecture. Unity + Photon + Cassandra.</div>
-  <svg class="dia-svg" viewBox="0 0 440 280">
-    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
-    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
-    <text class="box-sub" x="220" y="2" text-anchor="middle">Unity client (Win/Mac/Linux/iOS/Android)</text>
-    <rect class="box" x="170" y="60" width="100" height="32" fill="var(--card)" stroke="var(--blue)"/>
-    <text class="box-label" x="220" y="80" text-anchor="middle">Login Server</text>
-    <rect class="box" x="310" y="60" width="100" height="32" fill="var(--card)" stroke="var(--green)"/>
-    <text class="box-label" x="360" y="80" text-anchor="middle">World Server</text>
-    <!-- Zone servers -->
-    <rect class="box" x="20" y="125" width="85" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="62" y="142" text-anchor="middle">Zone Srv</text>
-    <text class="box-sub" x="62" y="155" text-anchor="middle">Cluster 1-5</text>
-    <rect class="box" x="115" y="125" width="85" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="157" y="142" text-anchor="middle">Zone Srv</text>
-    <text class="box-sub" x="157" y="155" text-anchor="middle">Cluster 6-10</text>
-    <rect class="box" x="210" y="125" width="85" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="252" y="142" text-anchor="middle">Zone Srv</text>
-    <text class="box-sub" x="252" y="155" text-anchor="middle">Cluster 11-15</text>
-    <text class="box-sub" x="325" y="150" text-anchor="middle" style="fill:var(--t3);font-size:14px;letter-spacing:2px">...</text>
-    <!-- Services -->
-    <rect class="box" x="360" y="125" width="75" height="40" fill="var(--card)" stroke="var(--purple)"/>
-    <text class="box-sub" x="397" y="142" text-anchor="middle">Chat / Market</text>
-    <text class="box-sub" x="397" y="155" text-anchor="middle">BackOffice</text>
-    <!-- DB -->
-    <rect class="box" x="70" y="200" width="140" height="35" fill="var(--card)" stroke="var(--pink)"/>
-    <text class="box-label" x="140" y="215" text-anchor="middle">Apache Cassandra</text>
-    <text class="box-sub" x="140" y="228" text-anchor="middle">Game state (fast writes)</text>
-    <rect class="box" x="230" y="200" width="140" height="35" fill="var(--card)" stroke="var(--pink)"/>
-    <text class="box-label" x="300" y="215" text-anchor="middle">PostgreSQL</text>
-    <text class="box-sub" x="300" y="228" text-anchor="middle">Accounts, marketplace</text>
-    <!-- Note -->
-    <text class="box-sub" x="220" y="260" text-anchor="middle">Zone handoff goes THROUGH database (clean regardless of server)</text>
+  <div class="diagram-sub"><strong>Sandbox MMORPG</strong> &middot; Widely studied indie MMO architecture. Unity + Photon Server.</div>
+  <svg class="dia-svg" viewBox="0 0 440 480">
+    <!-- Player (pill) -->
+    <rect class="box" x="170" y="8" width="100" height="32" rx="16" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="28" text-anchor="middle">Players</text>
+
+    <!-- Login Gateway (blue rect) -->
+    <rect class="box" x="155" y="75" width="130" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="95" text-anchor="middle">Login Gateway</text>
+
+    <!-- Photon Server (hexagon, green) -->
+    <polygon points="164,145 296,145 310,163 296,181 164,181 150,163" fill="var(--card)" stroke="var(--green)" stroke-width="1.5"/>
+    <text class="box-label" x="230" y="167" text-anchor="middle">Photon Server</text>
+
+    <!-- Zone Cluster: Royal Continent (orange) -->
+    <rect class="box" x="15" y="230" width="110" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="70" y="249" text-anchor="middle">Zone Cluster</text>
+    <text class="box-sub" x="70" y="263" text-anchor="middle">Royal Continent</text>
+
+    <!-- Zone Cluster: Black Zone (orange) -->
+    <rect class="box" x="140" y="230" width="110" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="195" y="249" text-anchor="middle">Zone Cluster</text>
+    <text class="box-sub" x="195" y="263" text-anchor="middle">Black Zone</text>
+
+    <!-- Zone Cluster: Hideout Instances (orange) -->
+    <rect class="box" x="265" y="230" width="110" height="44" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="320" y="249" text-anchor="middle">Zone Cluster</text>
+    <text class="box-sub" x="320" y="263" text-anchor="middle">Hideout Instances</text>
+
+    <!-- Lateral: Market / Economy (dashed purple) -->
+    <rect class="box" x="355" y="145" width="80" height="36" fill="var(--card)" stroke="var(--purple)" stroke-dasharray="6 3" stroke-width="1.5"/>
+    <text class="box-label" x="395" y="160" text-anchor="middle">Market /</text>
+    <text class="box-sub" x="395" y="173" text-anchor="middle">Economy</text>
+
+    <!-- DB: SQL Server (cylinder) -->
+    <path d="M70,398 v24 a70,8 0 0,0 140,0 v-24" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <ellipse cx="140" cy="398" rx="70" ry="8" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <text class="box-label" x="140" y="414" text-anchor="middle">SQL Server</text>
+
+    <!-- DB: Redis Cache (cylinder) -->
+    <path d="M250,398 v24 a70,8 0 0,0 140,0 v-24" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <ellipse cx="320" cy="398" rx="70" ry="8" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <text class="box-label" x="320" y="414" text-anchor="middle">Redis Cache</text>
+
     <!-- Arrows -->
-    <line class="arrow" stroke="var(--arrow)" x1="220" y1="37" x2="220" y2="60"/>
-    <line class="arrow" stroke="var(--arrow)" x1="200" y1="92" x2="62" y2="125"/>
-    <line class="arrow" stroke="var(--arrow)" x1="220" y1="92" x2="157" y2="125"/>
-    <line class="arrow" stroke="var(--arrow)" x1="240" y1="92" x2="252" y2="125"/>
-    <line class="arrow" stroke="var(--arrow)" x1="157" y1="165" x2="140" y2="200"/>
-    <line class="arrow" stroke="var(--arrow)" x1="252" y1="165" x2="300" y2="200"/>
-    <!-- Labels (after arrows for render order) -->
-    <rect x="44" y="103" width="232" height="16" fill="var(--surface)"/>
-    <text class="group-label" x="160" y="115" text-anchor="middle">ZONE SERVERS (PHOTON + C#)</text>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="40" x2="220" y2="75"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="107" x2="220" y2="145"/>
+    <line class="arrow" stroke="var(--arrow)" x1="185" y1="181" x2="70" y2="230"/>
+    <line class="arrow" stroke="var(--arrow)" x1="220" y1="181" x2="195" y2="230"/>
+    <line class="arrow" stroke="var(--arrow)" x1="255" y1="181" x2="320" y2="230"/>
+    <line class="arrow" stroke="var(--arrow)" x1="70" y1="274" x2="140" y2="390"/>
+    <line class="arrow" stroke="var(--arrow)" x1="195" y1="274" x2="140" y2="390"/>
+    <line class="arrow" stroke="var(--arrow)" x1="320" y1="274" x2="320" y2="390"/>
+    <!-- Lateral arrow to Market -->
+    <line class="arrow" stroke="var(--arrow)" x1="310" y1="163" x2="355" y2="163"/>
+
+    <!-- Protocol labels with knockout -->
+    <rect fill="var(--surface)" x="193" y="49" width="54" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="59" text-anchor="middle">HTTPS</text>
+
+    <rect fill="var(--surface)" x="200" y="117" width="40" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="127" text-anchor="middle">TCP</text>
+
+    <rect fill="var(--surface)" x="311" y="155" width="36" height="14" rx="3"/>
+    <text class="arrow-label" x="329" y="165" text-anchor="middle">TCP</text>
+
+    <!-- Group labels with knockout -->
+    <rect fill="var(--surface)" x="68" y="213" width="240" height="16" rx="3"/>
+    <text class="group-label" x="188" y="225" text-anchor="middle" fill="var(--muted)">EACH ZONE IS A CLUSTER PROCESS</text>
+
+    <rect fill="var(--surface)" x="120" y="370" width="210" height="16" rx="3"/>
+    <text class="group-label" x="225" y="382" text-anchor="middle" fill="var(--muted)">SQL SERVER + REDIS</text>
   </svg>
   <div class="stats">
-    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Unity + Photon (C#)</span></div>
-    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val">Timer-based (async)</span></div>
-    <div class="stat"><span class="stat-label">Peak DAU</span><span class="stat-val" style="color:var(--green)">350K+ (not CCU)</span></div>
-    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Cassandra + PostgreSQL</span></div>
+    <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Unity + Photon Server</span></div>
+    <div class="stat"><span class="stat-label">Tick</span><span class="stat-val">~20 Hz</span></div>
+    <div class="stat"><span class="stat-label">Peak CCU</span><span class="stat-val" style="color:var(--green)">270K DAU</span></div>
+    <div class="stat"><span class="stat-label">Database</span><span class="stat-val">SQL Server + Redis</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2017</span></div>
   </div>
+  <a class="deep-dive" href="games/albion.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- NEW WORLD -->
@@ -377,6 +490,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">DynamoDB</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2021</span></div>
   </div>
+  <a class="deep-dive" href="games/new-world.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- ARCHEAGE -->
@@ -418,6 +532,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Unknown (MySQL in emu)</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2013 (KR) / 2014 (West)</span></div>
   </div>
+  <a class="deep-dive" href="games/archeage.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- ASHES -->
@@ -468,6 +583,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Undisclosed</span></div>
     <div class="stat"><span class="stat-label">Status</span><span class="stat-val" style="color:var(--red)">Defunct (Jan 2026)</span></div>
   </div>
+  <a class="deep-dive" href="games/ashes.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- ======== PERSISTENT WORLD MMOs ======== -->
@@ -475,54 +591,80 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
 
 <!-- RUNESCAPE -->
 <div class="diagram">
-  <div class="diagram-title"><h3>RuneScape (OSRS)</h3><span class="badge" style="background:rgba(180,83,9,0.1);color:var(--amber)">Tick-Based</span></div>
-  <div class="diagram-sub">600ms game tick. All players on one world type. World-hopping with 5-min cooldown.</div>
-  <svg class="dia-svg" viewBox="0 0 440 330">
-    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
-    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
+  <div class="diagram-title"><h3>RuneScape (OSRS)</h3><span class="badge" style="background:rgba(180,83,9,0.1);color:var(--amber)">Tick-Based Worlds</span></div>
+  <div class="diagram-sub"><strong>MMORPG</strong> &middot; 600ms game tick. ~180 worlds, hop cooldown 5 min. Grand Exchange for cross-world trade.</div>
+  <svg class="dia-svg" viewBox="0 0 440 480">
+    <!-- PLAYER NODE (pill) -->
+    <rect class="box" x="170" y="10" width="100" height="32" rx="16" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="30" text-anchor="middle">Players</text>
 
-    <line class="arrow" x1="220" y1="37" x2="220" y2="60" stroke="var(--arrow)"/>
+    <!-- Arrow: Players -> Login -->
+    <line class="arrow" x1="220" y1="42" x2="220" y2="72" stroke="var(--arrow)"/>
+    <rect fill="var(--surface)" x="198" y="50" width="44" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="60" text-anchor="middle">TCP</text>
 
-    <rect class="box" x="170" y="60" width="100" height="32" fill="var(--card)" stroke="var(--blue)"/>
-    <text class="box-label" x="220" y="80" text-anchor="middle">Login Server</text>
+    <!-- LOGIN SERVER (blue rect) -->
+    <rect class="box" x="165" y="72" width="110" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="92" text-anchor="middle">Login Server</text>
 
-    <line class="arrow" x1="220" y1="92" x2="220" y2="115" stroke="var(--arrow)"/>
+    <!-- Arrow: Login -> World Selector -->
+    <line class="arrow" x1="220" y1="104" x2="220" y2="145" stroke="var(--arrow)"/>
 
-    <rect class="box" x="155" y="115" width="130" height="32" fill="var(--raised)" stroke="var(--purple)"/>
-    <text class="box-label" x="220" y="135" text-anchor="middle">World Select</text>
+    <!-- WORLD SELECTOR (hexagon, amber) -->
+    <polygon points="154,145 286,145 300,163 286,181 154,181 140,163" fill="var(--card)" stroke="var(--amber)" stroke-width="1.5"/>
+    <text class="box-label" x="220" y="167" text-anchor="middle">World Selector</text>
 
-    <line class="arrow" x1="130" y1="147" x2="70" y2="170" stroke="var(--arrow)"/>
-    <line class="arrow" x1="220" y1="147" x2="175" y2="170" stroke="var(--arrow)"/>
-    <line class="arrow" x1="260" y1="147" x2="280" y2="170" stroke="var(--arrow)"/>
-    <line class="arrow" x1="300" y1="147" x2="385" y2="170" stroke="var(--arrow)"/>
+    <!-- Arrows: Selector -> 3 worlds -->
+    <line class="arrow" x1="165" y1="181" x2="75" y2="240" stroke="var(--arrow)"/>
+    <line class="arrow" x1="220" y1="181" x2="220" y2="240" stroke="var(--arrow)"/>
+    <line class="arrow" x1="275" y1="181" x2="365" y2="240" stroke="var(--arrow)"/>
 
-    <rect class="box" x="20" y="170" width="100" height="32" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="70" y="190" text-anchor="middle">World 301</text>
+    <!-- WORLD 301 Members (orange rect) -->
+    <rect class="box" x="20" y="240" width="110" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="75" y="257" text-anchor="middle">World 301</text>
+    <text class="box-sub" x="75" y="270" text-anchor="middle">Members</text>
 
-    <rect class="box" x="125" y="170" width="100" height="32" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="175" y="190" text-anchor="middle">World 302</text>
+    <!-- WORLD 308 F2P (orange rect) -->
+    <rect class="box" x="165" y="240" width="110" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="220" y="257" text-anchor="middle">World 308</text>
+    <text class="box-sub" x="220" y="270" text-anchor="middle">F2P</text>
 
-    <rect class="box" x="230" y="170" width="100" height="32" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="280" y="190" text-anchor="middle">W330 PvP</text>
+    <!-- WORLD 330 PvP (orange rect) -->
+    <rect class="box" x="310" y="240" width="110" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="365" y="257" text-anchor="middle">World 330</text>
+    <text class="box-sub" x="365" y="270" text-anchor="middle">PvP</text>
 
-    <rect class="box" x="345" y="170" width="80" height="32" fill="var(--raised)" stroke="var(--orange)"/>
-    <text class="box-sub" x="385" y="190" text-anchor="middle" style="fill:var(--t3);font-size:14px;letter-spacing:2px">...</text>
+    <!-- Label: ~180 worlds -->
+    <rect fill="var(--surface)" x="120" y="288" width="200" height="16" rx="3"/>
+    <text class="group-label" x="220" y="299" text-anchor="middle" fill="var(--muted)">~180 WORLDS, HOP COOLDOWN 5 MIN</text>
 
-    <rect fill="var(--surface)" x="140" y="210" width="160" height="16" rx="3"/>
-    <text class="group-label" x="220" y="221" text-anchor="middle" fill="var(--muted)">Hop cooldown: 5 min</text>
+    <!-- Arrows: worlds -> Game Engine -->
+    <line class="arrow" x1="75" y1="280" x2="165" y2="325" stroke="var(--arrow)"/>
+    <line class="arrow" x1="220" y1="280" x2="220" y2="325" stroke="var(--arrow)"/>
+    <line class="arrow" x1="365" y1="280" x2="275" y2="325" stroke="var(--arrow)"/>
 
-    <line class="arrow" x1="70" y1="202" x2="150" y2="250" stroke="var(--arrow)"/>
-    <line class="arrow" x1="175" y1="202" x2="200" y2="250" stroke="var(--arrow)"/>
-    <line class="arrow" x1="280" y1="202" x2="240" y2="250" stroke="var(--arrow)"/>
-    <line class="arrow" x1="385" y1="202" x2="290" y2="250" stroke="var(--arrow)"/>
+    <!-- GAME ENGINE (amber highlighted) -->
+    <rect class="box" x="120" y="325" width="200" height="36" fill="var(--card)" stroke="var(--amber)" stroke-width="2"/>
+    <text class="box-label" x="220" y="342" text-anchor="middle">Game Engine</text>
+    <text class="box-sub" x="220" y="354" text-anchor="middle">600ms tick (1.67 Hz)</text>
 
-    <rect class="box" x="130" y="250" width="180" height="32" fill="var(--card)" stroke="var(--amber)"/>
-    <text class="box-label" x="220" y="270" text-anchor="middle">Game Engine (600ms tick)</text>
+    <!-- GRAND EXCHANGE (dashed purple service) lateral -->
+    <rect class="box" x="345" y="325" width="90" height="36" fill="var(--card)" stroke="var(--purple)" stroke-dasharray="6 3" stroke-width="1.5"/>
+    <text class="box-label" x="390" y="340" text-anchor="middle" style="font-size:10px">Grand</text>
+    <text class="box-label" x="390" y="352" text-anchor="middle" style="font-size:10px">Exchange</text>
+    <line class="arrow" x1="320" y1="343" x2="345" y2="343" stroke="var(--arrow)"/>
+    <rect fill="var(--surface)" x="323" y="330" width="18" height="14" rx="3"/>
+    <text class="arrow-label" x="332" y="340" text-anchor="middle">API</text>
 
-    <line class="arrow" x1="220" y1="282" x2="220" y2="300" stroke="var(--arrow)"/>
+    <!-- Arrow: Engine -> MySQL -->
+    <line class="arrow" x1="220" y1="361" x2="220" y2="405" stroke="var(--arrow)"/>
+    <rect fill="var(--surface)" x="198" y="376" width="44" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="386" text-anchor="middle">TCP</text>
 
-    <rect class="box" x="170" y="300" width="100" height="28" fill="var(--card)" stroke="var(--pink)"/>
-    <text class="box-label" x="220" y="318" text-anchor="middle">MySQL</text>
+    <!-- MySQL CYLINDER (pink) -->
+    <path d="M170,418 v32 a50,8 0 0,0 100,0 v-32" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <ellipse cx="220" cy="418" rx="50" ry="8" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <text class="box-label" x="220" y="440" text-anchor="middle">MySQL</text>
   </svg>
   <div class="stats">
     <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Custom Java (Jagex)</span></div>
@@ -531,54 +673,95 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">MySQL</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2001 (RS2 2004)</span></div>
   </div>
+  <a class="deep-dive" href="games/runescape.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- FFXIV -->
 <div class="diagram">
   <div class="diagram-title"><h3>Final Fantasy XIV</h3><span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Lobby + World</span></div>
-  <div class="diagram-sub">Lobby server routes to world clusters. Duty Finder matchmakes across data centers.</div>
-  <svg class="dia-svg" viewBox="0 0 440 340">
-    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
-    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
+  <div class="diagram-sub"><strong>MMORPG</strong> &middot; Lobby server routes to world clusters. Duty Finder matchmakes across data centers. Per-DC, cross-world travel.</div>
+  <svg class="dia-svg" viewBox="0 0 440 500">
+    <!-- PLAYER NODE (pill) -->
+    <rect class="box" x="170" y="10" width="100" height="32" rx="16" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="30" text-anchor="middle">Players</text>
 
-    <line class="arrow" x1="220" y1="37" x2="220" y2="60" stroke="var(--arrow)"/>
+    <!-- Arrow: Players -> Lobby -->
+    <line class="arrow" x1="220" y1="42" x2="220" y2="72" stroke="var(--arrow)"/>
+    <rect fill="var(--surface)" x="198" y="50" width="44" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="60" text-anchor="middle">TCP</text>
 
-    <rect class="box" x="165" y="60" width="110" height="32" fill="var(--card)" stroke="var(--blue)"/>
-    <text class="box-label" x="220" y="80" text-anchor="middle">Lobby Server</text>
+    <!-- LOBBY SERVER (blue rect) -->
+    <rect class="box" x="160" y="72" width="120" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="92" text-anchor="middle">Lobby Server</text>
 
-    <line class="arrow" x1="220" y1="92" x2="220" y2="115" stroke="var(--arrow)"/>
+    <!-- Arrow: Lobby -> DC Router -->
+    <line class="arrow" x1="220" y1="104" x2="220" y2="145" stroke="var(--arrow)"/>
 
-    <rect class="box" x="140" y="115" width="160" height="32" fill="var(--raised)" stroke="var(--purple)"/>
-    <text class="box-label" x="220" y="135" text-anchor="middle">Data Center</text>
+    <!-- DATA CENTER ROUTER (hexagon, purple) -->
+    <polygon points="154,145 286,145 300,163 286,181 154,181 140,163" fill="var(--card)" stroke="var(--purple)" stroke-width="1.5"/>
+    <text class="box-label" x="220" y="167" text-anchor="middle">DC Router</text>
 
-    <line class="arrow" x1="160" y1="147" x2="90" y2="170" stroke="var(--arrow)"/>
-    <line class="arrow" x1="220" y1="147" x2="220" y2="170" stroke="var(--arrow)"/>
-    <line class="arrow" x1="280" y1="147" x2="365" y2="170" stroke="var(--arrow)"/>
+    <!-- Left branch arrows: DC Router -> World Servers -->
+    <line class="arrow" x1="165" y1="181" x2="70" y2="240" stroke="var(--arrow)"/>
+    <line class="arrow" x1="195" y1="181" x2="175" y2="240" stroke="var(--arrow)"/>
+    <line class="arrow" x1="220" y1="181" x2="270" y2="240" stroke="var(--arrow)"/>
 
-    <rect class="box" x="30" y="170" width="120" height="32" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="90" y="190" text-anchor="middle">Excalibur</text>
+    <!-- Right branch arrow: DC Router -> Duty Finder -->
+    <line class="arrow" x1="275" y1="181" x2="370" y2="230" stroke="var(--arrow)"/>
 
-    <rect class="box" x="160" y="170" width="120" height="32" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="220" y="190" text-anchor="middle">Balmung</text>
+    <!-- WORLD SERVER: Excalibur (orange rect) -->
+    <rect class="box" x="15" y="240" width="110" height="32" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="70" y="260" text-anchor="middle">Excalibur</text>
 
-    <rect class="box" x="290" y="170" width="140" height="40" fill="var(--card)" stroke="var(--green)"/>
-    <text class="box-label" x="360" y="187" text-anchor="middle">Duty Finder</text>
-    <text class="box-sub" x="360" y="200" text-anchor="middle">Cross-DC matching</text>
+    <!-- WORLD SERVER: Balmung (orange rect) -->
+    <rect class="box" x="130" y="240" width="100" height="32" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="180" y="260" text-anchor="middle">Balmung</text>
 
-    <rect fill="var(--surface)" x="100" y="210" width="170" height="16" rx="3"/>
-    <text class="group-label" x="185" y="221" text-anchor="middle" fill="var(--muted)">World Servers</text>
+    <!-- WORLD SERVER: Mateus (orange rect) -->
+    <rect class="box" x="235" y="240" width="100" height="32" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="285" y="260" text-anchor="middle">Mateus</text>
 
-    <line class="arrow" x1="360" y1="210" x2="360" y2="240" stroke="var(--arrow)"/>
+    <!-- World Servers label -->
+    <rect fill="var(--surface)" x="70" y="280" width="210" height="16" rx="3"/>
+    <text class="group-label" x="175" y="291" text-anchor="middle" fill="var(--muted)">PER-DC, CROSS-WORLD TRAVEL</text>
 
-    <rect class="box" x="300" y="240" width="120" height="32" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="360" y="260" text-anchor="middle">Instance Servers</text>
+    <!-- DUTY FINDER (hexagon, green) -->
+    <polygon points="354,230 416,230 430,248 416,266 354,266 340,248" fill="var(--card)" stroke="var(--green)" stroke-width="1.5"/>
+    <text class="box-label" x="385" y="252" text-anchor="middle" style="font-size:10px">Duty Finder</text>
 
-    <line class="arrow" x1="90" y1="202" x2="160" y2="290" stroke="var(--arrow)"/>
-    <line class="arrow" x1="220" y1="202" x2="190" y2="290" stroke="var(--arrow)"/>
-    <line class="arrow" x1="360" y1="272" x2="260" y2="290" stroke="var(--arrow)"/>
+    <!-- Arrows: Duty Finder -> Instance servers -->
+    <line class="arrow" x1="365" y1="266" x2="340" y2="310" stroke="var(--arrow)"/>
+    <line class="arrow" x1="400" y1="266" x2="400" y2="310" stroke="var(--arrow)"/>
 
-    <rect class="box" x="130" y="290" width="160" height="32" fill="var(--card)" stroke="var(--pink)"/>
-    <text class="box-label" x="210" y="310" text-anchor="middle">PostgreSQL</text>
+    <!-- INSTANCE SERVER: Dungeons (orange rect) -->
+    <rect class="box" x="290" y="310" width="100" height="32" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="340" y="330" text-anchor="middle">Dungeons</text>
+
+    <!-- INSTANCE SERVER: Raids (orange rect) -->
+    <rect class="box" x="395" y="310" width="40" height="32" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="415" y="330" text-anchor="middle" style="font-size:10px">Raids</text>
+
+    <!-- MARKET BOARD (dashed purple service) lateral -->
+    <rect class="box" x="5" y="310" width="90" height="32" fill="var(--card)" stroke="var(--purple)" stroke-dasharray="6 3" stroke-width="1.5"/>
+    <text class="box-label" x="50" y="326" text-anchor="middle" style="font-size:10px">Market Board</text>
+    <line class="arrow" x1="70" y1="272" x2="50" y2="310" stroke="var(--arrow)"/>
+    <rect fill="var(--surface)" x="42" y="284" width="18" height="14" rx="3"/>
+    <text class="arrow-label" x="51" y="294" text-anchor="middle">API</text>
+
+    <!-- Arrows: World servers + Instances -> PostgreSQL -->
+    <line class="arrow" x1="70" y1="272" x2="170" y2="395" stroke="var(--arrow)"/>
+    <line class="arrow" x1="180" y1="272" x2="200" y2="395" stroke="var(--arrow)"/>
+    <line class="arrow" x1="285" y1="272" x2="230" y2="395" stroke="var(--arrow)"/>
+    <line class="arrow" x1="340" y1="342" x2="260" y2="395" stroke="var(--arrow)"/>
+
+    <!-- Protocol label on DB arrows -->
+    <rect fill="var(--surface)" x="198" y="370" width="44" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="380" text-anchor="middle">TCP</text>
+
+    <!-- PostgreSQL CYLINDER (pink) -->
+    <path d="M170,408 v32 a50,8 0 0,0 100,0 v-32" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <ellipse cx="220" cy="408" rx="50" ry="8" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <text class="box-label" x="220" y="430" text-anchor="middle">PostgreSQL</text>
   </svg>
   <div class="stats">
     <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Custom C++ (Crystal Tools)</span></div>
@@ -587,56 +770,85 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">PostgreSQL</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2013 (ARR)</span></div>
   </div>
+  <a class="deep-dive" href="games/ffxiv.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- GUILD WARS 2 -->
 <div class="diagram">
   <div class="diagram-title"><h3>Guild Wars 2</h3><span class="badge" style="background:rgba(4,120,87,0.1);color:var(--green)">Megaserver</span></div>
-  <div class="diagram-sub">Dynamic map instances. Overflow maps spin up and merge based on population. No realm selection.</div>
-  <svg class="dia-svg" viewBox="0 0 440 330">
-    <rect class="box" x="170" y="5" width="100" height="32" fill="var(--card)" stroke="var(--cyan)"/>
-    <text class="box-label" x="220" y="25" text-anchor="middle">Players</text>
+  <div class="diagram-sub"><strong>MMORPG</strong> &middot; Dynamic map instances. Overflow maps spin up and merge based on population. No realm selection.</div>
+  <svg class="dia-svg" viewBox="0 0 440 490">
+    <!-- PLAYER NODE (pill) -->
+    <rect class="box" x="170" y="10" width="100" height="32" rx="16" fill="var(--card)" stroke="var(--cyan)"/>
+    <text class="box-label" x="220" y="30" text-anchor="middle">Players</text>
 
-    <line class="arrow" x1="220" y1="37" x2="220" y2="60" stroke="var(--arrow)"/>
+    <!-- Arrow: Players -> Login -->
+    <line class="arrow" x1="220" y1="42" x2="220" y2="72" stroke="var(--arrow)"/>
+    <rect fill="var(--surface)" x="198" y="50" width="44" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="60" text-anchor="middle">TCP</text>
 
-    <rect class="box" x="170" y="60" width="100" height="32" fill="var(--card)" stroke="var(--blue)"/>
-    <text class="box-label" x="220" y="80" text-anchor="middle">Login / Auth</text>
+    <!-- LOGIN / AUTH (blue rect) -->
+    <rect class="box" x="165" y="72" width="110" height="32" fill="var(--card)" stroke="var(--blue)"/>
+    <text class="box-label" x="220" y="92" text-anchor="middle">Login / Auth</text>
 
-    <line class="arrow" x1="220" y1="92" x2="220" y2="115" stroke="var(--arrow)"/>
+    <!-- Arrow: Login -> Megaserver Router -->
+    <line class="arrow" x1="220" y1="104" x2="220" y2="145" stroke="var(--arrow)"/>
 
-    <rect class="box" x="130" y="115" width="180" height="32" fill="var(--card)" stroke="var(--green)"/>
-    <text class="box-label" x="220" y="135" text-anchor="middle">Megaserver Router</text>
+    <!-- MEGASERVER ROUTER (hexagon, green) -->
+    <polygon points="154,145 286,145 300,163 286,181 154,181 140,163" fill="var(--card)" stroke="var(--green)" stroke-width="1.5"/>
+    <text class="box-label" x="220" y="167" text-anchor="middle">Megaserver Router</text>
 
-    <line class="arrow" x1="140" y1="147" x2="70" y2="170" stroke="var(--arrow)"/>
-    <line class="arrow" x1="220" y1="147" x2="220" y2="170" stroke="var(--arrow)"/>
-    <line class="arrow" x1="300" y1="147" x2="370" y2="170" stroke="var(--arrow)"/>
+    <!-- Arrows: Router -> 3 map instances -->
+    <line class="arrow" x1="165" y1="181" x2="70" y2="240" stroke="var(--arrow)"/>
+    <line class="arrow" x1="220" y1="181" x2="220" y2="240" stroke="var(--arrow)"/>
+    <line class="arrow" x1="275" y1="181" x2="370" y2="240" stroke="var(--arrow)"/>
 
-    <rect class="box" x="15" y="170" width="110" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="70" y="187" text-anchor="middle">Lion's Arch #1</text>
-    <text class="box-sub" x="70" y="200" text-anchor="middle">Map Instance</text>
+    <!-- Lion's Arch #1 (orange rect, Map Instance) -->
+    <rect class="box" x="15" y="240" width="110" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="70" y="257" text-anchor="middle">Lion's Arch #1</text>
+    <text class="box-sub" x="70" y="270" text-anchor="middle">Map Instance</text>
 
-    <rect class="box" x="165" y="170" width="110" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="220" y="187" text-anchor="middle">Lion's Arch #2</text>
-    <text class="box-sub" x="220" y="200" text-anchor="middle">Overflow</text>
+    <!-- Lion's Arch #2 (orange rect, Overflow) -->
+    <rect class="box" x="165" y="240" width="110" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="220" y="257" text-anchor="middle">Lion's Arch #2</text>
+    <text class="box-sub" x="220" y="270" text-anchor="middle">Overflow</text>
 
-    <rect class="box" x="315" y="170" width="110" height="40" fill="var(--card)" stroke="var(--orange)"/>
-    <text class="box-label" x="370" y="187" text-anchor="middle">WvW Border</text>
-    <text class="box-sub" x="370" y="200" text-anchor="middle">Matchup Instance</text>
+    <!-- WvW Borderlands (orange rect, Matchup Instance) -->
+    <rect class="box" x="315" y="240" width="110" height="40" fill="var(--card)" stroke="var(--orange)"/>
+    <text class="box-label" x="370" y="257" text-anchor="middle" style="font-size:10px">WvW Borderlands</text>
+    <text class="box-sub" x="370" y="270" text-anchor="middle">Matchup Instance</text>
 
-    <rect fill="var(--surface)" x="115" y="218" width="210" height="16" rx="3"/>
-    <text class="group-label" x="220" y="229" text-anchor="middle" fill="var(--muted)">Spin up / merge by population</text>
+    <!-- Label: spin up / merge -->
+    <rect fill="var(--surface)" x="105" y="288" width="230" height="16" rx="3"/>
+    <text class="group-label" x="220" y="299" text-anchor="middle" fill="var(--muted)">SPIN UP / MERGE BY POPULATION</text>
 
-    <line class="arrow" x1="70" y1="210" x2="70" y2="255" stroke="var(--arrow)"/>
-    <line class="arrow" x1="220" y1="210" x2="220" y2="255" stroke="var(--arrow)"/>
-    <line class="arrow" x1="370" y1="210" x2="370" y2="255" stroke="var(--arrow)"/>
+    <!-- TRADING POST (dashed purple service) lateral -->
+    <rect class="box" x="345" y="325" width="90" height="36" fill="var(--card)" stroke="var(--purple)" stroke-dasharray="6 3" stroke-width="1.5"/>
+    <text class="box-label" x="390" y="340" text-anchor="middle" style="font-size:10px">Trading</text>
+    <text class="box-label" x="390" y="352" text-anchor="middle" style="font-size:10px">Post</text>
+    <line class="arrow" x1="320" y1="343" x2="345" y2="343" stroke="var(--arrow)"/>
+    <rect fill="var(--surface)" x="323" y="330" width="18" height="14" rx="3"/>
+    <text class="arrow-label" x="332" y="340" text-anchor="middle">API</text>
 
-    <rect class="box" x="110" y="255" width="220" height="32" fill="var(--card)" stroke="var(--green)"/>
-    <text class="box-label" x="220" y="275" text-anchor="middle">Dynamic Event System</text>
+    <!-- Arrows: map instances -> Dynamic Event System -->
+    <line class="arrow" x1="70" y1="280" x2="145" y2="325" stroke="var(--arrow)"/>
+    <line class="arrow" x1="220" y1="280" x2="220" y2="325" stroke="var(--arrow)"/>
+    <line class="arrow" x1="370" y1="280" x2="295" y2="325" stroke="var(--arrow)"/>
 
-    <line class="arrow" x1="220" y1="287" x2="220" y2="305" stroke="var(--arrow)"/>
+    <!-- DYNAMIC EVENT SYSTEM (green rect) -->
+    <rect class="box" x="120" y="325" width="200" height="36" fill="var(--card)" stroke="var(--green)"/>
+    <text class="box-label" x="220" y="342" text-anchor="middle">Dynamic Event System</text>
+    <text class="box-sub" x="220" y="354" text-anchor="middle">World boss chains, meta events</text>
 
-    <rect class="box" x="170" y="305" width="100" height="24" fill="var(--card)" stroke="var(--pink)"/>
-    <text class="box-label" x="220" y="321" text-anchor="middle">Database</text>
+    <!-- Arrow: Event System -> Database -->
+    <line class="arrow" x1="220" y1="361" x2="220" y2="405" stroke="var(--arrow)"/>
+    <rect fill="var(--surface)" x="198" y="376" width="44" height="14" rx="3"/>
+    <text class="arrow-label" x="220" y="386" text-anchor="middle">TCP</text>
+
+    <!-- Database CYLINDER (pink) -->
+    <path d="M170,418 v32 a50,8 0 0,0 100,0 v-32" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <ellipse cx="220" cy="418" rx="50" ry="8" fill="var(--card)" stroke="var(--pink)" stroke-width="1.5"/>
+    <text class="box-label" x="220" y="440" text-anchor="middle">Database</text>
   </svg>
   <div class="stats">
     <div class="stat"><span class="stat-label">Engine</span><span class="stat-val">Custom C++ (ArenaNet)</span></div>
@@ -645,6 +857,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Undisclosed</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2012</span></div>
   </div>
+  <a class="deep-dive" href="games/gw2.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- BDO -->
@@ -705,6 +918,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Undisclosed</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2015 (KR)</span></div>
   </div>
+  <a class="deep-dive" href="games/bdo.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- STAR CITIZEN -->
@@ -761,6 +975,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">ArangoDB (graph)</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2012 (dev start)</span></div>
   </div>
+  <a class="deep-dive" href="games/star-citizen.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- PLANETSIDE 2 -->
@@ -816,6 +1031,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Undisclosed</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2012</span></div>
   </div>
+  <a class="deep-dive" href="games/planetside2.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- ======== SESSION / MATCH-BASED ======== -->
@@ -872,6 +1088,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Peak CCU</span><span class="stat-val">14.5M (platform)</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2017</span></div>
   </div>
+  <a class="deep-dive" href="games/fortnite.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- CALL OF DUTY WARZONE -->
@@ -925,6 +1142,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">MySQL (Vitess)</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2020</span></div>
   </div>
+  <a class="deep-dive" href="games/warzone.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- DESTINY 2 -->
@@ -988,6 +1206,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">SQLite manifest + live API</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2017</span></div>
   </div>
+  <a class="deep-dive" href="games/destiny2.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- ======== PLATFORMS / SANDBOX ======== -->
@@ -1048,6 +1267,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Peak CCU</span><span class="stat-val">47.4M (platform)</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2006</span></div>
   </div>
+  <a class="deep-dive" href="games/roblox.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- MINECRAFT -->
@@ -1112,6 +1332,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">Flat files (Anvil) / LevelDB</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2010 (SMP)</span></div>
   </div>
+  <a class="deep-dive" href="games/minecraft.html">Deep Dive &rarr;</a>
 </div>
 
 <!-- SECOND LIFE -->
@@ -1180,6 +1401,7 @@ table.comp tr:hover td{background:rgba(0,0,0,0.02)}
     <div class="stat"><span class="stat-label">Database</span><span class="stat-val">MySQL</span></div>
     <div class="stat"><span class="stat-label">Since</span><span class="stat-val">2003</span></div>
   </div>
+  <a class="deep-dive" href="games/second-life.html">Deep Dive &rarr;</a>
 </div>
 
 

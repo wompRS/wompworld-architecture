@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Second Life - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Second Life</div>
+  <h1>Second Life</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Region-Grid</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Virtual World / UGC</span>
+  </div>
+  <p class="lead">A persistent virtual world where every 256x256 meter region runs as a dedicated server process, backed by partitioned MySQL databases, a real-currency economy (Linden Dollars), and a server-side scripting language (LSL). Fully migrated from on-premises data centers to AWS in 2021 after 17 years of bare-metal operations.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Linden Lab</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2003</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~60K (2020 pandemic)</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">Custom (C++)</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">45 FPS (sim)</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Region-Per-Process / AWS</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <h2 id="overview">Overview</h2>
+  <p>Second Life is one of the oldest continuously running virtual worlds, launched in 2003 and still operational in 2026. It uses a fundamentally different architecture than most online games: every 256x256 meter patch of virtual land (called a "region" or "sim") runs as a dedicated server process. The collection of all these regions forms "the grid," a contiguous virtual continent where players (called "residents") can walk, fly, or teleport between regions.</p>
+  <p>At its peak around 2007, Second Life had over 1.1 million monthly active users and was the subject of intense media hype. Concurrency peaked during the COVID-19 pandemic at roughly 60,000 simultaneous users. As of late 2024, the platform has about 500,000 monthly active users and daily concurrency averaging between 34,000 and 50,000.</p>
+  <p>What makes Second Life architecturally distinctive is that nearly all content is user-created and runs server-side. The scripting language (LSL, Linden Scripting Language) executes on the simulator process, not the client. The economy uses a real-currency-backed token (Linden Dollars, L$) with a floating exchange rate. Users retain copyright on their creations, and the platform includes basic DRM through a permissions system. The entire grid completed migration from Linden Lab's own data centers to Amazon Web Services in January 2021.</p>
+  <p>The architecture reflects design decisions from 2001-2003 that have been incrementally upgraded for over two decades. Some of these decisions, like tying one region to one process and using UDP for inter-simulator communication, have created persistent problems (region crossing lag, for example) that are deeply embedded in the system's DNA.</p>
+
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 800 720">
+      <!-- RESIDENTS -->
+      <rect x="300" y="10" width="200" height="36" rx="16" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="400" y="33" text-anchor="middle" class="box-label">Residents (~50K CCU)</text>
+
+      <!-- LOGIN SERVER -->
+      <rect x="310" y="80" width="180" height="40" rx="8" fill="none" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="400" y="98" text-anchor="middle" class="box-label">Login Server (CGI)</text>
+      <text x="400" y="112" text-anchor="middle" class="box-sub">login.agni.lindenlab.com</text>
+
+      <!-- SPACE SERVER -->
+      <rect x="90" y="80" width="160" height="40" rx="8" fill="none" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="170" y="98" text-anchor="middle" class="box-label">Space Server</text>
+      <text x="170" y="112" text-anchor="middle" class="box-sub">Grid Routing</text>
+
+      <!-- VOICE -->
+      <rect x="560" y="80" width="160" height="40" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="640" y="98" text-anchor="middle" class="box-label">Voice (WebRTC)</text>
+      <text x="640" y="112" text-anchor="middle" class="box-sub">ex-Vivox, migrating</text>
+
+      <!-- SIMULATOR GRID -->
+      <rect x="40" y="165" width="720" height="180" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="60" y="185" class="group-label">SIMULATOR GRID (~31,000 REGIONS ON AWS)</text>
+
+      <rect x="60" y="200" width="100" height="60" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="110" y="220" text-anchor="middle" class="box-label">Sim Process</text>
+      <text x="110" y="234" text-anchor="middle" class="box-sub">Region A</text>
+      <text x="110" y="248" text-anchor="middle" class="box-sub">256x256m</text>
+
+      <rect x="175" y="200" width="100" height="60" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="225" y="220" text-anchor="middle" class="box-label">Sim Process</text>
+      <text x="225" y="234" text-anchor="middle" class="box-sub">Region B</text>
+      <text x="225" y="248" text-anchor="middle" class="box-sub">256x256m</text>
+
+      <rect x="290" y="200" width="100" height="60" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="340" y="220" text-anchor="middle" class="box-label">Sim Process</text>
+      <text x="340" y="234" text-anchor="middle" class="box-sub">Region C</text>
+      <text x="340" y="248" text-anchor="middle" class="box-sub">256x256m</text>
+
+      <rect x="405" y="200" width="100" height="60" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="455" y="220" text-anchor="middle" class="box-label">Sim Process</text>
+      <text x="455" y="234" text-anchor="middle" class="box-sub">Region D</text>
+      <text x="455" y="248" text-anchor="middle" class="box-sub">256x256m</text>
+
+      <rect x="520" y="200" width="100" height="60" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="570" y="230" text-anchor="middle" class="box-sub">+ ~31,000</text>
+
+      <!-- LSL ENGINE inside sim -->
+      <rect x="640" y="200" width="100" height="60" rx="8" fill="none" stroke="var(--amber)" stroke-width="1.5"/>
+      <text x="690" y="220" text-anchor="middle" class="box-label">LSL VM</text>
+      <text x="690" y="234" text-anchor="middle" class="box-sub">Script Engine</text>
+      <text x="690" y="248" text-anchor="middle" class="box-sub">Per-Sim</text>
+
+      <!-- HAVOK -->
+      <rect x="60" y="280" width="160" height="30" rx="6" fill="none" stroke="var(--amber)" stroke-width="1"/>
+      <text x="140" y="300" text-anchor="middle" class="box-sub">Havok 2011.2 Physics (per sim)</text>
+
+      <!-- UDP circuits between sims -->
+      <line x1="160" y1="230" x2="175" y2="230" class="arrow" style="marker-end:none"/>
+      <line x1="275" y1="230" x2="290" y2="230" class="arrow" style="marker-end:none"/>
+      <line x1="390" y1="230" x2="405" y2="230" class="arrow" style="marker-end:none"/>
+      <text x="400" y="330" text-anchor="middle" class="box-sub">Adjacent sims communicate via UDP circuits for region crossing handoff</text>
+
+      <!-- BACKBONE / PRESENCE -->
+      <rect x="40" y="385" width="340" height="75" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="60" y="405" class="group-label">BACKBONE SERVICES</text>
+
+      <rect x="60" y="415" width="100" height="32" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="110" y="436" text-anchor="middle" class="box-label">Presence</text>
+
+      <rect x="170" y="415" width="100" height="32" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="220" y="436" text-anchor="middle" class="box-label">Inventory</text>
+
+      <rect x="280" y="415" width="80" height="32" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="320" y="436" text-anchor="middle" class="box-label">Search</text>
+
+      <!-- ECONOMY / MARKETPLACE -->
+      <rect x="420" y="385" width="340" height="75" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="440" y="405" class="group-label">ECONOMY &amp; MARKETPLACE</text>
+
+      <rect x="440" y="415" width="100" height="32" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="490" y="436" text-anchor="middle" class="box-label">LindeX</text>
+
+      <rect x="550" y="415" width="100" height="32" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="600" y="436" text-anchor="middle" class="box-label">Marketplace</text>
+
+      <rect x="660" y="415" width="80" height="32" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="700" y="436" text-anchor="middle" class="box-label">L$ Ledger</text>
+
+      <!-- DATA LAYER -->
+      <rect x="40" y="500" width="720" height="100" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="60" y="518" class="group-label">DATA LAYER (PARTITIONED MySQL ON AWS)</text>
+
+      <ellipse cx="140" cy="545" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M85,545 L85,575 Q85,590 140,590 Q195,590 195,575 L195,545" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="140" y="570" text-anchor="middle" class="box-label">User DB</text>
+      <text x="140" y="583" text-anchor="middle" class="box-sub">Profiles, Auth</text>
+
+      <ellipse cx="300" cy="545" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M245,545 L245,575 Q245,590 300,590 Q355,590 355,575 L355,545" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="300" y="570" text-anchor="middle" class="box-label">Inventory DB</text>
+      <text x="300" y="583" text-anchor="middle" class="box-sub">UUID-Partitioned</text>
+
+      <ellipse cx="470" cy="545" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M415,545 L415,575 Q415,590 470,590 Q525,590 525,575 L525,545" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="470" y="570" text-anchor="middle" class="box-label">Asset Store</text>
+      <text x="470" y="583" text-anchor="middle" class="box-sub">Textures, Meshes</text>
+
+      <ellipse cx="640" cy="545" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M585,545 L585,575 Q585,590 640,590 Q695,590 695,575 L695,545" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="640" y="570" text-anchor="middle" class="box-label">Region DB</text>
+      <text x="640" y="583" text-anchor="middle" class="box-sub">Objects, Terrain</text>
+
+      <!-- CDN -->
+      <rect x="300" y="630" width="200" height="40" rx="8" fill="none" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="400" y="648" text-anchor="middle" class="box-label">CDN (Asset Delivery)</text>
+      <text x="400" y="662" text-anchor="middle" class="box-sub">Textures, Meshes, Audio</text>
+
+      <!-- ARROWS -->
+      <line x1="400" y1="46" x2="400" y2="80" class="arrow"/>
+      <rect x="374" y="55" width="52" height="14" fill="var(--surface)"/><text x="400" y="65" text-anchor="middle" class="arrow-label">HTTPS</text>
+
+      <line x1="400" y1="120" x2="400" y2="165" class="arrow"/>
+      <rect x="370" y="135" width="60" height="14" fill="var(--surface)"/><text x="400" y="145" text-anchor="middle" class="arrow-label">Assign</text>
+
+      <line x1="170" y1="120" x2="170" y2="165" class="arrow"/>
+      <rect x="140" y="135" width="60" height="14" fill="var(--surface)"/><text x="170" y="145" text-anchor="middle" class="arrow-label">Register</text>
+
+      <line x1="400" y1="46" x2="640" y2="80" class="arrow"/>
+      <rect x="504" y="52" width="42" height="14" fill="var(--surface)"/><text x="525" y="62" text-anchor="middle" class="arrow-label">SIP</text>
+
+      <line x1="400" y1="345" x2="400" y2="385" class="arrow"/>
+      <rect x="371" y="358" width="58" height="14" fill="var(--surface)"/><text x="400" y="368" text-anchor="middle" class="arrow-label">Internal</text>
+
+      <line x1="210" y1="460" x2="210" y2="500" class="arrow"/>
+      <line x1="590" y1="460" x2="590" y2="500" class="arrow"/>
+
+      <line x1="470" y1="600" x2="400" y2="630" class="arrow"/>
+      <rect x="414" y="608" width="42" height="14" fill="var(--surface)"/><text x="435" y="618" text-anchor="middle" class="arrow-label">CDN</text>
+    </svg>
+    <div class="diagram-caption">Second Life grid architecture: login server, Space Server routing, per-region simulator processes, Backbone services, partitioned MySQL databases, and CDN asset delivery. All running on AWS.</div>
+  </div>
+
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Second Life uses a client-server-server architecture. The viewer (client) connects to a simulator process that holds the canonical state for one 256x256 meter region. As the player moves through the world, their connection is handed off from one simulator to the next. Backend services (inventory, presence, search) run as separate processes that the simulators call into.</p>
+
+  <h3>Simulator (Sim) Processes</h3>
+  <p>The simulator is the primary Second Life server process, written in C++. Each simulator instance is responsible for exactly one region. It stores object state (every prim, mesh, and scripted object in the region), land parcel state (ownership, permissions, access lists), and terrain heightmap state. It handles collision detection, runs the Havok physics engine, and executes all LSL scripts attached to objects in the region.</p>
+  <p>The simulator targets 45 frames per second. If it cannot maintain that rate, it applies time dilation rather than dropping frames. The sim continues to tick at 45 fps from the server's perspective, but in-world time slows down. A sim running at 50% time dilation is effectively simulating the world at half speed. Players experience this as sluggish movement and slow script execution.</p>
+  <p>Historically, Linden Lab ran 4 simulator processes per physical server (one per CPU core) on "Class 4" hardware: Debian Linux boxes with 2 dual-core CPUs. Earlier hardware classes ran fewer sims per machine. When a resident purchases a private island, they get dedicated use of a simulator process. Linden Lab moves sims between physical hosts for maintenance or after crashes, but residents do not control placement.</p>
+
+  <h3>Space Server and Routing</h3>
+  <p>The Space Server maintains the grid coordinate system. When a simulator starts up, it registers its grid (x, y) position with the Space Server. When a simulator needs to know about its neighbors (for region crossing), it queries the Space Server to find which process is running the adjacent region. This routing layer is what makes the grid feel like a contiguous world rather than isolated rooms.</p>
+
+  <h3>Login Server</h3>
+  <p>The login server is a CGI script running on <code>login.agni.lindenlab.com</code>. When a resident logs in, it verifies credentials, determines the target region (home location, last location, or a specified URL), finds the simulator process running that region, verifies the user is allowed to connect there, alerts the simulator to expect the connection, and tells the viewer where to connect. The login server is a single point of entry that then hands the client off to the appropriate sim.</p>
+
+  <h3>Data Server</h3>
+  <p>The Data Server handles all connections to the backend databases: the central user database, log database, inventory database(s), and search database(s). It performs queries on behalf of simulator processes, abstracting the database layer away from the sim code.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-orange">
+      <h4>Simulator Process</h4>
+      <ul>
+        <li>C++ process, one per 256x256m region</li>
+        <li>45 fps target with time dilation fallback</li>
+        <li>Runs Havok 2011.2 physics engine</li>
+        <li>Hosts LSL script VM for all region objects</li>
+        <li>~31,000 total regions on the grid</li>
+      </ul>
+    </div>
+    <div class="info-card c-blue">
+      <h4>Routing Layer</h4>
+      <ul>
+        <li>Space Server: grid coordinate registry</li>
+        <li>Login Server: CGI-based authentication and region assignment</li>
+        <li>Data Server: database abstraction for sims</li>
+        <li>UDP circuits between adjacent simulators</li>
+      </ul>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Backbone Services</h4>
+      <ul>
+        <li>Presence (Python service): online status and location tracking</li>
+        <li>Inventory management (UUID-partitioned)</li>
+        <li>Search indexing and queries</li>
+        <li>Many services migrated from custom C++ to web services</li>
+      </ul>
+    </div>
+    <div class="info-card c-green">
+      <h4>AWS Migration (Completed 2021)</h4>
+      <ul>
+        <li>Previously: 2,000+ servers in SF and Dallas co-los</li>
+        <li>Now: entire grid runs on AWS</li>
+        <li>Removes hardware procurement burden</li>
+        <li>Newer hardware than legacy on-premises fleet</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>Second Life networking predates many modern game networking conventions. The simulator communicates with clients and other simulators using a UDP-based "circuit" system.</p>
+
+  <h3>UDP Circuits</h3>
+  <p>A "circuit" in Second Life terminology is a UDP network connection maintained between two endpoints. Circuits are established between the viewer and its current simulator, and between adjacent simulators that share a border. When a player is near a region boundary, their viewer maintains connections to multiple simulators simultaneously, receiving object and terrain data from neighboring regions to provide a seamless view across borders.</p>
+  <p>The server does not trust the client. All state changes must be validated server-side. It is architecturally impossible to impersonate another account or spoof another client's identity, as all access requires a login token that establishes identity and permissions.</p>
+
+  <h3>Region Crossing: The Oldest Bug</h3>
+  <p>Region crossings are Second Life's most notorious technical problem. When an avatar or a physical vehicle moves from one region to another, the following happens: the source sim packages up the avatar (or object) state, sends it to the destination sim via the UDP circuit, the destination sim instantiates the avatar, and the viewer switches its primary connection to the new sim. This handoff takes time, and during the transition, the avatar may appear frozen, teleport to unexpected locations, or lose attached objects.</p>
+  <p>This has been described as the oldest known bug in the Second Life codebase. Unlike a cell phone handoff (which can happen in milliseconds), a sim crossing involves serializing complex object hierarchies with scripts, physics state, and attachments. The problem is structural: each region is a fully independent process with its own state, so crossing a boundary is more like a mini-teleport than a smooth transition.</p>
+
+  <h3>Voice Chat: Vivox to WebRTC</h3>
+  <p>Voice chat in Second Life originally used Vivox technology based on SIP/RTP protocols. The voice data bypassed the viewer entirely: an external daemon (SLVoice.exe) handled the audio streams, communicating with Vivox's servers independently. The source code for this daemon was never available due to contractual obligations between Linden Lab and Vivox.</p>
+  <p>Second Life is currently transitioning from Vivox to WebRTC, a free and open-source real-time communication standard. The migration is incomplete, meaning some regions run WebRTC voice and others still run Vivox. Voice does not work across region boundaries when the two regions use different voice backends. Transitioning through a WebRTC region, then a Vivox region, then back to WebRTC can break voice transmission entirely until the user reconnects.</p>
+
+  <table class="proto">
+    <tr><th>Connection</th><th>Protocol</th><th>Notes</th></tr>
+    <tr><td>Viewer to Sim</td><td><code>UDP (Circuit)</code></td><td>Object state, avatar position, terrain data, script events</td></tr>
+    <tr><td>Sim to Sim</td><td><code>UDP (Circuit)</code></td><td>Adjacent region communication, border crossing handoff</td></tr>
+    <tr><td>Viewer to Login</td><td><code>HTTPS</code></td><td>CGI-based authentication, region assignment</td></tr>
+    <tr><td>Sim to Data Server</td><td><code>Internal</code></td><td>Database queries for inventory, user data, search</td></tr>
+    <tr><td>Voice (Legacy)</td><td><code>SIP/RTP</code></td><td>Vivox voice through external SLVoice daemon</td></tr>
+    <tr><td>Voice (New)</td><td><code>WebRTC</code></td><td>Browser-standard real-time voice, migration in progress</td></tr>
+    <tr><td>Asset Delivery</td><td><code>HTTP/CDN</code></td><td>Textures, meshes, audio fetched via CDN with local caching</td></tr>
+  </table>
+
+  <div class="callout c-red">
+    <div class="callout-title">Region Crossing Lag</div>
+    <p>The region crossing problem has been present since Second Life's earliest days and has never been fully solved. It affects walking, flying, sailing, and driving across region boundaries. Vehicles are particularly vulnerable because they carry physics state, attached scripts, and passenger avatars that all need to transfer atomically. The migration to AWS improved sim performance but did not fundamentally change the crossing architecture, because the problem is in the region-per-process model itself, not the hardware.</p>
+  </div>
+
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>Second Life uses MySQL as its primary database, running on Debian Linux (historically on-premises, now on AWS). Rather than building one monolithic database, Linden Lab uses a data partitioning strategy based on UUIDs. Almost everything in Second Life has a 128-bit UUID: every user, every object, every texture, every inventory item. This makes partitioning straightforward because UUIDs distribute uniformly across database shards.</p>
+
+  <h3>Database Architecture</h3>
+  <p>The databases are divided by function: user databases store profiles and authentication data, inventory databases store player-owned items (partitioned by user UUID), asset databases store the actual content (textures, meshes, sounds), region databases store object placement and terrain for each sim, and log/search databases handle analytics and in-world search indexing. The Data Server process handles all queries on behalf of simulators, with Squid caching layers between the queries and MySQL to reduce database load.</p>
+
+  <h3>Asset System</h3>
+  <p>Every piece of content in Second Life (textures, meshes, animations, sounds, scripts) is stored as an asset with a UUID. When a resident uploads a texture, the viewer converts it to JPEG 2000 format and uploads it to the asset server. The asset is then delivered to other residents' viewers through a CDN. The viewer maintains a local texture cache (LLTextureCache) so frequently seen content does not need to be re-downloaded.</p>
+  <p>Mesh uploads go through a validation process called Mesh Asset Validation (MAV) that checks for malformed geometry, excessive polygon counts, and physics shape complexity. Each mesh upload has a Linden Dollar cost determined by the model's complexity, though Premium Plus members can upload for free.</p>
+
+  <h3>Linden Dollar Economy</h3>
+  <p>The Linden Dollar (L$) is Second Life's internal currency. It has a floating exchange rate on the LindeX exchange, historically hovering between L$240 and L$270 per US dollar. Residents buy L$ through the viewer or the LindeX website, and can sell L$ back for real money. In 2013, Linden Lab reported over $3.2 billion in cumulative transaction volume over 10 years, with an average of 1.2 million daily transactions.</p>
+  <p>The economy is fully user-driven. Residents buy and sell virtual goods (buildings, vehicles, clothing, furniture), services (custom content creation, land management), and land itself. The Marketplace is an external web-based storefront with over 2.1 million listed items. Because Linden Lab operates the currency exchange, they have ultimate authority over the economy, and changes to exchange rates, fees, or policies have real financial consequences for residents who depend on Second Life income.</p>
+
+  <h3>Permissions and DRM</h3>
+  <p>Second Life includes a built-in permissions system for user-created content. Each object has flags controlling whether it can be copied, modified, or transferred. A creator can sell a "no copy, no modify, transfer" item (the buyer gets one copy they cannot duplicate or alter but can resell) or a "copy, no transfer" item (the buyer can make copies for personal use but cannot give them away). This is basic DRM enforced by the server. It does not prevent screen capture or external copying, but it controls in-world distribution.</p>
+
+  <div class="info-grid">
+    <div class="info-card full c-amber">
+      <h4>Content Pipeline</h4>
+      <p>Residents create content in external tools (Blender, Photoshop, etc.) and upload to Second Life. <strong>Textures:</strong> TGA/PNG/BMP accepted, internally converted to JPEG 2000. Max resolution 1024px (standard) or 2048px (high-res). <strong>Meshes:</strong> COLLADA (.dae) format, validated through MAV, with automatic LOD generation and physics shape extraction. <strong>Scripts:</strong> Written in LSL (or the new SLua beta), compiled to bytecode on the server, executed in the simulator's VM. All assets get a UUID and are stored in the asset database, delivered to viewers via CDN.</p>
+    </div>
+  </div>
+
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <h3>The Region-Per-Process Constraint</h3>
+  <p>Second Life's fundamental scaling unit is the region. Each 256x256m region is one process. You cannot split a region across multiple processes or merge multiple regions into one process. This means a region's capacity is limited by what one CPU core can simulate. If 80 avatars with complex attachments and hundreds of scripted objects converge on a single region, that region's sim will hit time dilation regardless of how powerful the underlying hardware is.</p>
+  <p>Historically, Linden Lab ran 4 sims per physical server. On AWS, the mapping between sim processes and virtual hardware is more flexible, but the one-sim-one-process constraint remains. The AWS migration gave sims access to newer, faster CPUs than the aging on-premises hardware, which improved baseline performance, but it did not change the architecture.</p>
+
+  <h3>Time Dilation</h3>
+  <p>When a sim cannot maintain its 45 fps target, it reduces the simulation rate rather than dropping frames. A sim at 0.5 time dilation is running at half speed: avatars move at half pace, scripts execute half as many instructions per real-time second, and physics objects move in slow motion. This preserves determinism (all events still happen in the correct order) but makes the world feel sluggish. Residents monitor time dilation as a health indicator for any region they visit.</p>
+
+  <h3>Script Performance</h3>
+  <p>Every LSL script in a region shares the sim's processing budget. A region with thousands of scripted objects (common in shopping areas and clubs) will perform worse than a region with minimal scripting. Script time is reported in the sim statistics: if scripts are consuming more than 50% of frame time, the region will struggle. Poorly optimized scripts (tight loops, excessive timer events, heavy use of llSensor) are a constant source of performance problems.</p>
+  <p>Because LSL executes server-side, there is no way for a resident to run computations on their own hardware to offload the sim. Every scripted door, every animated texture, every particle emitter consumes server-side resources. This is the opposite of the client-side scripting model used by most modern game engines.</p>
+
+  <h3>Concurrency Trends</h3>
+  <p>Second Life's peak concurrency has been on a gradual decline. The all-time high was during the COVID-19 pandemic in 2020, when daily peak concurrency stayed around 60,000. By 2024, the highest recorded concurrency was 53,016 (February 2024). The platform has not exceeded 50,000 since early 2024. Monthly active users sit around 500,000 as of late 2024, down from over 1 million in 2007.</p>
+
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>LSL (Linden Scripting Language)</h3>
+  <p>LSL is a state-and-event-driven language with C-like syntax. Every script has one or more states, and each state contains event handlers. When an event occurs (a touch, a collision, a timer tick, an incoming message), the corresponding handler executes. Scripts transition between states using the <code>state</code> keyword. A door script might have an "open" state and a "closed" state, with touch events triggering transitions between them.</p>
+  <p>LSL is strongly typed and compiles to bytecode that runs in a virtual machine on the simulator. The original LSL1 was BASIC-based and used during the alpha phase (when the platform was called LindenWorld). LSL2, the current version, was written by Cory Linden sometime after 2002 and has been extended by many developers since then. Scripts communicate with each other through <code>llSay</code>/<code>llListen</code> (chat channels), <code>llMessageLinked</code> (within an object), and HTTP requests (external communication).</p>
+  <p>Linden Lab is now beta-testing SLua, a Luau-based scripting language that will eventually complement (not replace) LSL. SLua brings modern language features like proper string manipulation, closures, and better performance. Existing LSL scripts continue to work everywhere, and no viewer changes are needed to interact with SLua-powered content.</p>
+
+  <h3>Havok Physics Integration</h3>
+  <p>Second Life uses the Havok physics engine (currently version 2011.2, previously Havok 4 since April 2008). All physics calculations happen server-side in the simulator process. Havok simulates gravity, collisions, friction, and constraints for all physical objects in a region.</p>
+  <p>To conserve processing power, Havok freezes stable objects. If an object rests on the floor and does not move beyond a minimal threshold for about two seconds, physics calculations are disabled for that object. It remains frozen until another actively physical object collides with it. This optimization is critical because a region might contain thousands of objects, but only a handful are moving at any given time.</p>
+  <p>Havok is a commercial product that Linden Lab licensed for several hundred thousand dollars. This dependency means that if Linden Lab ever wanted to open-source the simulator, Havok could not be included. While open-source physics engines exist, Second Life's deep integration with Havok makes substitution effectively impossible without rewriting the physics layer.</p>
+
+  <h3>OpenSimulator Comparison</h3>
+  <p>OpenSimulator (OpenSim) is an open-source project founded in 2007 that implements a compatible server for Second Life viewers. It is written in C# (running on Mono) and licensed under BSD. OpenSim grids allow cross-grid visits through the Hypergrid protocol. The main advantages over official Second Life are dramatically lower land costs (often 10x more land for 10x less money), custom user management, larger region sizes, and features like personal backups.</p>
+  <p>However, OpenSim lacks Second Life's built-in DRM permissions system, which means creators who rely on copy/modify/transfer protections cannot port their business models to OpenSim. OpenSim's proposed architecture moves asset control from grid owners to content owners to enable cross-world asset migration, but this is still evolving.</p>
+
+  <h3>Sansar: The Failed Successor</h3>
+  <p>In 2017, Linden Lab launched Sansar, a VR-focused virtual world intended as Second Life's next-generation replacement. Sansar was built cloud-native on AWS, using Amazon ECS (Elastic Container Service) for nearly all backend services. Unlike Second Life's region grid, Sansar used instanced "experiences" that spun up on demand.</p>
+  <p>Uptake was low. Linden Lab halted Sansar development in 2020 to refocus on Second Life. The rights to Sansar's assets were sold to Wookey Search Technologies. However, the work on Sansar was not wasted from an infrastructure perspective: the lessons learned about running on AWS directly informed Second Life's own cloud migration, which began shortly after Sansar's launch and completed in January 2021.</p>
+
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <span class="year">2001</span>
+      <span class="desc"><strong>LindenWorld alpha.</strong> The platform begins as a physics sandbox. LSL1 (BASIC-based) is the first scripting language. Architecture based on per-region server processes from the start.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2003</span>
+      <span class="desc"><strong>Second Life public launch.</strong> LSL2 (C-like syntax) replaces LSL1. The grid runs on Class 2 servers (1 CPU, 1 sim per box) in San Francisco and Dallas co-location facilities.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2006</span>
+      <span class="desc"><strong>Open-source viewer released.</strong> Linden Lab open-sources the viewer code, leading to third-party viewers like Phoenix and later Firestorm. Server code remains proprietary.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2007</span>
+      <span class="desc"><strong>Peak hype and OpenSimulator founded.</strong> Media coverage peaks. Over 1.1 million monthly active users. OpenSim begins as an open-source server alternative. Class 4 hardware introduced (4 sims per server).</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2008</span>
+      <span class="desc"><strong>Havok 4 physics deployed.</strong> Replaces the original physics engine with Havok 4 across all simulators. Voice chat (Vivox) integration goes live. Backbone presence service (Python) introduced.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2010</span>
+      <span class="desc"><strong>Mesh import support added.</strong> Residents can upload COLLADA mesh models for the first time, moving beyond primitive-based building. Backend services begin migrating from custom C++ to web services.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2013</span>
+      <span class="desc"><strong>$3.2 billion in cumulative transactions.</strong> Linden Lab reports 10 years of economic activity. Terms of service change grants Linden Lab broader rights to user-generated content, causing controversy.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2017</span>
+      <span class="desc"><strong>Sansar public beta launches.</strong> VR-focused successor built on AWS ECS. Linden Lab begins planning Second Life's own cloud migration based on Sansar infrastructure lessons.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2020</span>
+      <span class="desc"><strong>COVID pandemic peak and Sansar shutdown.</strong> Concurrency hits ~60,000. Sansar development halted to refocus on SL. Cloud migration accelerates. Region transitions to AWS begin in earnest.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2021</span>
+      <span class="desc"><strong>Full AWS migration completed (January).</strong> All regions, services, and databases now run on Amazon Web Services. Older on-premises hardware decommissioned. Performance improves due to newer AWS hardware.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2024</span>
+      <span class="desc"><strong>WebRTC voice migration begins.</strong> Transition from proprietary Vivox voice to open WebRTC standard. SLua (Luau-based scripting) enters beta testing alongside LSL. Monthly active users at ~500,000.</span>
+    </div>
+  </div>
+
+  <div class="callout c-green">
+    <div class="callout-title">Cloud Migration: What Changed</div>
+    <p>The AWS migration replaced aging on-premises hardware with modern cloud instances, improving baseline sim performance. It also removed the burden of hardware procurement, testing, and commissioning from Linden Lab's operations team. The migration was remarkably smooth for a 17-year-old platform, with only minor hiccups around teleport handling and group chat. What it did not change was the fundamental architecture: regions are still one-process-per-sim, region crossings still involve full state serialization between processes, and the grid topology is unchanged. The cloud made Second Life more reliable and easier to maintain, not architecturally different.</p>
+  </div>
+
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://highscalability.com/second-life-architecture-the-grid/">Second Life Architecture - The Grid</a>
+        <div class="source-desc">High Scalability deep dive on the grid architecture, simulator processes, MySQL partitioning, and Backbone services.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://wiki.secondlife.com/w/index.php?title=Server_architecture">Server Architecture - Second Life Wiki</a>
+        <div class="source-desc">Official wiki documentation of the simulator, Space Server, Data Server, and Login Server components.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://modemworld.me/2020/11/19/ll-confirms-second-life-regions-now-all-on-aws/">LL Confirms Second Life Regions Now All on AWS</a>
+        <div class="source-desc">Inara Pey's coverage of the AWS migration completion, including background on the Lab's cloud relationship since 2008.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://wiki.secondlife.com/wiki/Linden_Scripting_Language">Linden Scripting Language - Second Life Wiki</a>
+        <div class="source-desc">Official LSL documentation covering states, events, functions, and the language's history from LSL1 to LSL2.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://en.wikipedia.org/wiki/Economy_of_Second_Life">Economy of Second Life - Wikipedia</a>
+        <div class="source-desc">Overview of the L$ economy, LindeX exchange rates, transaction volumes, and the user-driven marketplace.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://wiki.secondlife.com/wiki/Physics_engine">Physics Engine - Second Life Wiki</a>
+        <div class="source-desc">Documentation of the Havok integration, physics optimization, freezing behavior, and object collision handling.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://lindenlab.freshdesk.com/support/solutions/articles/31000173560-webrtc-update-for-voice-chat-faq">WebRTC Update for Voice Chat FAQ</a>
+        <div class="source-desc">Linden Lab FAQ on the Vivox-to-WebRTC voice migration, compatibility issues, and transition timeline.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://modemworld.me/2017/11/29/sansar-and-second-life-in-the-cloud-ll-speaks-at-aws-reinvent/">Sansar and Second Life in the Cloud: LL at AWS re:Invent</a>
+        <div class="source-desc">Coverage of Linden Lab's AWS re:Invent presentation on Sansar's ECS architecture and plans for Second Life's migration.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://en.wikipedia.org/wiki/Second_Life">Second Life - Wikipedia</a>
+        <div class="source-desc">General overview including platform history, Sansar development, user statistics, and content creation.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://danielvoyager.wordpress.com/2024/10/30/second-life-has-500000-monthly-active-users/">Second Life Has 500,000 Monthly Active Users</a>
+        <div class="source-desc">Daniel Voyager report on current user statistics, daily concurrency trends, and Brad Oberwager's comments on DAU.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="game-nav">
+    <a href="minecraft.html"><span class="dir">Previous</span><span class="name">Minecraft</span></a>
+    <a class="next" href="wow.html"><span class="dir">Next</span><span class="name">World of Warcraft</span></a>
+  </div>
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

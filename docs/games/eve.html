@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVE Online - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / EVE Online</div>
+  <h1>EVE Online</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Single-Shard</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Sandbox MMO</span>
+  </div>
+  <p class="lead">The only major MMO where every player inhabits the same persistent universe. Tranquility, EVE's single server cluster in London, uses Stackless Python, Time Dilation, and dedicated node reinforcement to support fleet battles with 6,000+ concurrent pilots in a single solar system.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">CCP Games</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2003</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~65K (all); 6.7K/system</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">Carbon / Trinity</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">1 Hz (10s at max TiDi)</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Single Shard</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <h2 id="overview">Overview</h2>
+  <p>EVE Online is architecturally unique among major MMOs. While games like World of Warcraft, Final Fantasy XIV, and Guild Wars 2 split their player populations across multiple servers or shards, EVE puts every single player into one shared universe called New Eden. The server cluster that runs this universe is named <strong>Tranquility</strong>, and it is located in a data center in London, near the international prime meridian.</p>
+  <p>CCP Games made this decision deliberately. A single-shard universe means that EVE's player-driven economy, territorial warfare, and political alliances operate at a scale that sharded games cannot replicate. When an alliance loses a war, there is no alternate server where they still hold power. When a market is manipulated, every player in the game feels the price change. The single shard is the foundation of everything that makes EVE distinctive.</p>
+  <p>The cost of this design is that EVE's server infrastructure has to solve problems that sharded games simply avoid. When 6,000 players converge on a single solar system for a fleet battle, Tranquility cannot just spin up a parallel instance. It has to process all of those players on one node, and when that node cannot keep up, the game slows down time itself using <strong>Time Dilation (TiDi)</strong> rather than dropping players or losing data.</p>
+  <p>The game logic runs on <strong>Stackless Python</strong>, chosen early in development for its cooperative multitasking via lightweight tasklets. This was a forward-thinking choice in 2003, but it means that each node's game logic is bound to a single CPU core due to Python's Global Interpreter Lock (GIL). CCP has spent two decades working around this limitation through hardware upgrades, code optimization (Brain in a Box), and architectural changes (Quasar, Project Sanguine) rather than rewriting the core in a different language.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Single-Shard Universe</h4>
+      <p>All players on all accounts exist in one shared universe. There are no parallel servers, no instances of the open world, and no sharding of any kind. The consequences of this are profound: EVE has real working markets that hit critical mass years ago, with high demand almost always met by adequate supply.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Solar System Nodes</h4>
+      <p>New Eden's ~7,800 solar systems are distributed across physical server nodes. Most nodes host dozens of low-traffic systems. High-traffic systems (trade hubs like Jita, sovereignty timers) get dedicated nodes. CCP can move systems between nodes at daily downtime.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Time Dilation (TiDi)</h4>
+      <p>When a node is overloaded, TiDi slows the game clock to as low as 10% speed. One in-game second becomes ten real-world seconds. This keeps the simulation deterministic and prevents dropped inputs at the cost of making large fights take hours of real time. Server load scales O(n^2) with players on grid.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Stackless Python</h4>
+      <p>All game logic runs on Stackless Python using cooperative tasklets instead of OS threads. Tasklets switch only at known points, eliminating most locking and synchronization issues. The tradeoff: Python's GIL means each node is single-threaded, and performance is capped by single-core speed.</p>
+    </div>
+  </div>
+
+  <!-- DIAGRAM -->
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 860 680">
+      <!-- BACKGROUND GROUPS -->
+      <rect x="10" y="10" width="840" height="90" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="35" class="group-label">PLAYER CONNECTIONS</text>
+
+      <rect x="10" y="120" width="840" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="145" class="group-label">PROXY LAYER</text>
+
+      <rect x="10" y="240" width="590" height="200" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="265" class="group-label">SOL NODES (GAME SIMULATION)</text>
+
+      <rect x="620" y="240" width="230" height="200" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="640" y="265" class="group-label">SERVICES</text>
+
+      <rect x="10" y="460" width="840" height="100" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="485" class="group-label">DATABASE &amp; STORAGE</text>
+
+      <rect x="10" y="580" width="840" height="90" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="605" class="group-label">EXTERNAL / CLOUD SERVICES</text>
+
+      <!-- PLAYERS -->
+      <rect x="80" y="45" width="130" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="145" y="67" text-anchor="middle" class="box-label">EVE Client</text>
+
+      <rect x="260" y="45" width="130" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="325" y="67" text-anchor="middle" class="box-label">EVE Portal</text>
+
+      <rect x="440" y="45" width="150" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="515" y="67" text-anchor="middle" class="box-label">3rd-Party Apps</text>
+
+      <rect x="640" y="45" width="150" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="715" y="67" text-anchor="middle" class="box-label">EVE Online Website</text>
+
+      <!-- PROXY BLADES -->
+      <rect x="60" y="155" width="150" height="44" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5" class="box"/>
+      <text x="135" y="174" text-anchor="middle" class="box-label">Proxy Blade 1</text>
+      <text x="135" y="188" text-anchor="middle" class="box-sub">Player Connections</text>
+
+      <rect x="230" y="155" width="150" height="44" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5" class="box"/>
+      <text x="305" y="174" text-anchor="middle" class="box-label">Proxy Blade 2</text>
+      <text x="305" y="188" text-anchor="middle" class="box-sub">Player Connections</text>
+
+      <rect x="400" y="155" width="150" height="44" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5" class="box"/>
+      <text x="475" y="174" text-anchor="middle" class="box-label">Proxy Blade N</text>
+      <text x="475" y="188" text-anchor="middle" class="box-sub">Player Connections</text>
+
+      <!-- LOAD BALANCER -->
+      <polygon points="655,155 730,155 750,177 730,199 655,199 635,177" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="692" y="175" text-anchor="middle" class="box-label">Load</text>
+      <text x="692" y="188" text-anchor="middle" class="box-sub">Balancer</text>
+
+      <!-- SOL NODES -->
+      <rect x="35" y="290" width="130" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="100" y="311" text-anchor="middle" class="box-label">SOL Blade 1</text>
+      <text x="100" y="325" text-anchor="middle" class="box-sub">~30 systems</text>
+
+      <rect x="180" y="290" width="130" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="245" y="311" text-anchor="middle" class="box-label">SOL Blade 2</text>
+      <text x="245" y="325" text-anchor="middle" class="box-sub">~30 systems</text>
+
+      <rect x="325" y="290" width="130" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="390" y="311" text-anchor="middle" class="box-label">SOL Blade N</text>
+      <text x="390" y="325" text-anchor="middle" class="box-sub">~30 systems</text>
+
+      <!-- JITA DEDICATED -->
+      <rect x="475" y="290" width="110" height="50" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="2" class="box"/>
+      <text x="530" y="311" text-anchor="middle" class="box-label">Jita Node</text>
+      <text x="530" y="325" text-anchor="middle" class="box-sub">Dedicated</text>
+
+      <!-- REINFORCED NODE -->
+      <rect x="35" y="360" width="200" height="50" rx="8" fill="var(--surface)" stroke="var(--amber)" stroke-width="2" class="box"/>
+      <text x="135" y="381" text-anchor="middle" class="box-label">"Everest" Reinforced Node</text>
+      <text x="135" y="395" text-anchor="middle" class="box-sub">Largest fleet fights</text>
+
+      <!-- TiDi label -->
+      <rect x="260" y="360" width="140" height="50" rx="8" fill="var(--surface)" stroke="var(--red)" stroke-width="1.5" class="box"/>
+      <text x="330" y="381" text-anchor="middle" class="box-label">TiDi Controller</text>
+      <text x="330" y="395" text-anchor="middle" class="box-sub">10%--100% speed</text>
+
+      <!-- SERVICES -->
+      <rect x="640" y="280" width="170" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="725" y="297" text-anchor="middle" class="box-label">Market Service</text>
+      <text x="725" y="311" text-anchor="middle" class="box-sub">Orders / History</text>
+
+      <rect x="640" y="330" width="170" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="725" y="347" text-anchor="middle" class="box-label">Chat Service</text>
+      <text x="725" y="361" text-anchor="middle" class="box-sub">XMPP (Cloud)</text>
+
+      <rect x="640" y="380" width="170" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="725" y="397" text-anchor="middle" class="box-label">Sovereignty</text>
+      <text x="725" y="411" text-anchor="middle" class="box-sub">Territory Control</text>
+
+      <!-- DATABASE -->
+      <ellipse cx="150" cy="490" rx="70" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <rect x="80" y="490" width="140" height="35" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="150" cy="525" rx="70" ry="12" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="150" y="513" text-anchor="middle" class="box-label">SQL Server DB</text>
+
+      <!-- SAN -->
+      <rect x="300" y="488" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5" class="box"/>
+      <text x="370" y="507" text-anchor="middle" class="box-label">SSD Storage</text>
+      <text x="370" y="521" text-anchor="middle" class="box-sub">IBM SAN 16Gbit</text>
+
+      <!-- Backup -->
+      <rect x="470" y="488" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5" class="box"/>
+      <text x="540" y="507" text-anchor="middle" class="box-label">Backup Cluster</text>
+      <text x="540" y="521" text-anchor="middle" class="box-sub">22-min backups</text>
+
+      <!-- Infiniband -->
+      <rect x="650" y="488" width="170" height="44" rx="8" fill="var(--surface)" stroke="var(--line2)" stroke-width="1.5" class="box"/>
+      <text x="735" y="507" text-anchor="middle" class="box-label">Infiniband Fabric</text>
+      <text x="735" y="521" text-anchor="middle" class="box-sub">Low-latency interconnect</text>
+
+      <!-- CLOUD / EXTERNAL -->
+      <rect x="60" y="610" width="160" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="140" y="627" text-anchor="middle" class="box-label">ESI (Swagger API)</text>
+      <text x="140" y="641" text-anchor="middle" class="box-sub">Cloud / K8s</text>
+
+      <rect x="250" y="610" width="160" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="330" y="627" text-anchor="middle" class="box-label">SSO / OAuth</text>
+      <text x="330" y="641" text-anchor="middle" class="box-sub">Authentication</text>
+
+      <rect x="440" y="610" width="160" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="520" y="627" text-anchor="middle" class="box-label">Message Bus</text>
+      <text x="520" y="641" text-anchor="middle" class="box-sub">PubSub / gRPC</text>
+
+      <rect x="630" y="610" width="180" height="40" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="720" y="627" text-anchor="middle" class="box-label">Killmail / Analytics</text>
+      <text x="720" y="641" text-anchor="middle" class="box-sub">Cloud Services</text>
+
+      <!-- ARROWS -->
+      <!-- Client to Proxies -->
+      <line x1="145" y1="81" x2="135" y2="155" class="arrow"/>
+      <rect x="112" y="108" width="36" height="14" fill="var(--surface)" rx="2"/>
+      <text x="130" y="118" text-anchor="middle" class="arrow-label">TCP</text>
+
+      <line x1="325" y1="81" x2="305" y2="155" class="arrow"/>
+      <line x1="515" y1="81" x2="475" y2="155" class="arrow"/>
+      <rect x="480" y="108" width="44" height="14" fill="var(--surface)" rx="2"/>
+      <text x="502" y="118" text-anchor="middle" class="arrow-label">HTTPS</text>
+
+      <!-- LB to Proxies -->
+      <line x1="655" y1="177" x2="550" y2="177" class="arrow"/>
+
+      <!-- Website to ESI -->
+      <line x1="715" y1="81" x2="140" y2="610" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+
+      <!-- Proxy to SOL -->
+      <line x1="135" y1="199" x2="100" y2="290" class="arrow"/>
+      <line x1="305" y1="199" x2="245" y2="290" class="arrow"/>
+      <line x1="475" y1="199" x2="390" y2="290" class="arrow"/>
+      <line x1="475" y1="199" x2="530" y2="290" class="arrow"/>
+
+      <!-- SOL to DB -->
+      <line x1="100" y1="340" x2="150" y2="490" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+      <line x1="245" y1="340" x2="150" y2="490" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+      <line x1="390" y1="340" x2="370" y2="488" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+
+      <!-- Reinforced to TiDi -->
+      <line x1="235" y1="385" x2="260" y2="385" class="arrow"/>
+
+      <!-- SOL to Services -->
+      <line x1="540" y1="315" x2="640" y2="300" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+      <line x1="540" y1="315" x2="640" y2="350" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+
+      <!-- ESI to Message Bus -->
+      <line x1="220" y1="630" x2="440" y2="630" class="arrow"/>
+      <rect x="300" y="618" width="50" height="14" fill="var(--surface)" rx="2"/>
+      <text x="325" y="628" text-anchor="middle" class="arrow-label">gRPC</text>
+
+      <!-- Message Bus to DB -->
+      <line x1="520" y1="610" x2="370" y2="532" class="arrow" stroke="var(--t3)" stroke-width="1" stroke-dasharray="4 2"/>
+    </svg>
+    <div class="diagram-caption">Simplified Tranquility cluster architecture based on CCP developer blogs, Fanfest presentations, and EVE University wiki documentation</div>
+  </div>
+
+  <!-- INFRASTRUCTURE -->
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Tranquility is a single cluster located in London. Although players experience it as one unified server, the cluster is physically divided into distinct hardware tiers with different responsibilities.</p>
+  <p>The cluster has been through three major hardware generations. The original deployment used IBM blade servers with AMD Opteron 2.8 GHz dual-core processors and 4 GB of DDR1 RAM. The current generation, deployed as part of the <strong>TQ Tech III</strong> project, uses Lenovo hardware with redundancy built into the design: six chassis configured so that one can be pulled out of rotation for maintenance while the other five continue operating. The internal network uses <strong>IBM SAN 16 Gbit switches</strong> with full cross-connection to eliminate single points of failure.</p>
+  <p>The most recent database server is a 2U machine with 2 TB of memory and a single CPU running 128 cores at 2.25 GHz (boosting to 3.4 GHz). Earlier database hardware included Lenovo x880 flex nodes with 768 GB RAM and Intel Xeon E7-8893 v3 CPUs at 3.2 GHz. Backups that previously took 60 minutes now complete in 22 minutes after storage upgrades increased average transfer rates from 3.3 Gb/s to 8.8 Gb/s.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Proxy Blades</h4>
+      <p>The public-facing tier. All player connections enter through proxy blades, which handle authentication, connection management, and routing commands to the appropriate SOL node. The proxy layer abstracts the internal cluster topology from clients.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>SOL Blades</h4>
+      <p>The computational workhorses. The cluster runs 90-100 SOL blades, each hosting 2 nodes. Each node is a single-core Stackless Python process handling one or more solar systems. Standard blades run ~30 low-traffic systems; dedicated blades run a single high-traffic system (Jita, staging systems, etc.).</p>
+    </div>
+    <div class="info-card c-pink">
+      <h4>Database Cluster</h4>
+      <p>SQL Server on high-memory hardware (up to 2 TB RAM, 128 cores). SSDs handle the extreme I/O load. CCP has faced NUMA-related issues where one CPU socket maxes out while others idle, traced to uneven distribution of their 15,000+ open database connections.</p>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Reinforced Nodes</h4>
+      <p>CCP reserves 6 "enhanced" servers for large fleet engagements and trade hubs. The single most powerful node is nicknamed "Everest" and is assigned to the highest-load situations. Players can petition CCP 24 hours in advance of planned fleet fights to have target systems moved to reinforced hardware.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Network Fabric</h4>
+      <p>Internal cluster communication uses Infiniband for low-latency interconnects. External throughput was upgraded from 16 Gbps to 30 Gbps during TQ Tech III, with maximum concurrent connection capacity increasing from 4 million to 24 million.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Cloud Services (ESI)</h4>
+      <p>The EVE Swagger Interface (ESI) runs in a cloud-hosted Kubernetes cluster (originally Google Cloud, migrated to AWS in 2018), completely separate from Tranquility. It communicates with the game servers over a message bus using gRPC for serialization. ESI handles 350,000+ requests per minute from 2,350+ third-party applications.</p>
+    </div>
+  </div>
+
+  <!-- NETWORKING -->
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>EVE's networking has gone through multiple generations. The original networking layer was built alongside the Stackless Python game logic. The second generation, <strong>CarbonIO</strong>, enabled the implementation of Time Dilation. The current generation, <strong>Quasar</strong>, is part of Project Sanguine's effort to work around the GIL bottleneck by introducing a message bus architecture with gRPC for faster serialization.</p>
+  <p>Tranquility runs at a <strong>1 Hz tick rate</strong>: one simulation tick per second under normal conditions. For context, competitive shooters run at 60-128 Hz. EVE's low tick rate is acceptable because the game's combat is strategic rather than twitch-based, with ship commands taking seconds to execute. When Time Dilation kicks in, the effective tick rate drops proportionally, reaching 0.1 Hz (one tick per ten real-world seconds) at maximum dilation.</p>
+  <p>Server load during fleet fights scales at <strong>O(n^2)</strong> with the number of players on grid, because each player's actions must be evaluated against every other player in range. An area-of-effect weapon hitting 50 targets generates hundreds of individual damage calculations, each of which must be resolved against the target's resistances, effects, and state.</p>
+
+  <table class="proto">
+    <thead><tr><th>Connection</th><th>Protocol</th><th>Details</th></tr></thead>
+    <tbody>
+      <tr><td>Client to Proxy</td><td><code>TCP</code></td><td>All game traffic flows through TCP to proxy blades. Reliable delivery is essential because lost packets would desync ship positions and module states.</td></tr>
+      <tr><td>Proxy to SOL</td><td><code>Internal</code></td><td>Proxies route commands to the SOL node hosting the player's current solar system. Infiniband fabric provides low-latency inter-node communication.</td></tr>
+      <tr><td>SOL to Database</td><td><code>SQL / SAN</code></td><td>Heavy I/O path. SOL nodes read/write game state to SQL Server via SSD-backed SAN storage over 16 Gbit fiber switches.</td></tr>
+      <tr><td>ESI (External API)</td><td><code>HTTPS / REST</code></td><td>Third-party apps and EVE Portal connect to ESI via standard HTTPS. ESI relays to Tranquility over a message bus/gRPC.</td></tr>
+      <tr><td>Chat System</td><td><code>XMPP</code></td><td>Chat was rebuilt and moved to a cloud-hosted XMPP-based system, decoupled from the game cluster to reduce SOL node load.</td></tr>
+      <tr><td>SSO / OAuth</td><td><code>OAuth 2.0</code></td><td>EVE SSO provides authentication tokens for ESI access. 42% of active players have authorized at least one third-party application.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- DATA -->
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>EVE's persistence layer runs on <strong>Microsoft SQL Server</strong>, chosen early in the game's development. The database is the single source of truth for the entire universe: every ship, module, market order, sovereignty structure, and player asset exists as rows in SQL Server tables.</p>
+  <p>CCP has published detailed histories of their database hardware evolution. The most notable challenge has been <strong>NUMA (Non-Uniform Memory Access) issues</strong> with SQL Server. When running on multi-socket servers, SQL Server's thread scheduling can cause one CPU to max out while others sit idle. CCP traced recurring server crashes to a small subset of their 15,000+ open database connections being unevenly distributed across NUMA nodes, causing one socket to be overwhelmed during startup sequences.</p>
+  <p>The database handles approximately <strong>250 million transactions daily</strong>. The I/O profile is extremely write-heavy because every player action, market trade, ship movement, and combat event generates state changes that must be persisted. SSD storage was a transformative upgrade, and the move to solid-state drives is specifically cited by CCP as the reason the database can keep up with Tranquility's load.</p>
+  <p>Outside the core database, CCP has been progressively moving ancillary systems to the cloud. The chat system now runs on a cloud-hosted platform using standard protocols. ESI runs in a cloud-hosted Kubernetes cluster. The killmail system is being moved to cloud infrastructure. This strategy reduces the load on Tranquility's SQL Server and allows those services to scale independently.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-pink">
+      <h4>SQL Server (Core)</h4>
+      <p>All persistent game state. 2 TB RAM, 128-core single-socket CPU. Handles 250M+ daily transactions. SSD-backed SAN storage with 16 Gbit fiber interconnects. Backup time: 22 minutes (down from 60 after storage upgrade).</p>
+    </div>
+    <div class="info-card c-blue">
+      <h4>In-Memory State</h4>
+      <p>SOL nodes keep active game state in memory for fast access. A solar system's current state (ships, modules, combat timers) lives in the SOL node's memory while players are present. State is flushed to SQL Server periodically and on system unload.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Cloud Data Layer</h4>
+      <p>ESI uses a cloud message bus as a data relay between cloud services and Tranquility. This decouples external API access from the game database, allowing ESI to scale horizontally in Kubernetes without adding load to SQL Server.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Static Data Export (SDE)</h4>
+      <p>CCP publishes a Static Data Export containing item definitions, solar system maps, and other reference data. Third-party tools use SDE combined with ESI market data to build trading, manufacturing, and logistics applications.</p>
+    </div>
+  </div>
+
+  <!-- SCALING -->
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <p>EVE's scaling story is fundamentally different from sharded games. In WoW, scaling means adding more shards. In EVE, scaling means making the one shard handle more load. Every optimization CCP makes is measured in how many more players can fit in a single solar system before Time Dilation becomes unbearable.</p>
+  <p>The peak concurrent user count for the entire cluster has been around 65,000. For individual solar systems, the records come from the war that the community calls World War Bee 2 (2020-2021). The <strong>Fury at FWST-8</strong> in October 2020 set a Guinness World Record with 6,557 concurrent participants and 8,825 total participants over 14 hours. Two months later, the <strong>Battle of M2-XFE</strong> pushed even further with 6,739 pilots in a single system, and approximately 12,000 attempted to enter the system (roughly double the record, but the node could not handle them all).</p>
+  <p>These battles operate under maximum Time Dilation for hours. At 10% TiDi, a fight that would take 20 minutes at normal speed takes over 3 hours of real time. The three systems involved in the M2-XFE battle saw a combined peak of 13,770 players across three reinforced nodes. When PAPI attempted to jump 6,000 additional players into M2-XFE where 4,000 were already present, the server infrastructure failed to handle the transition, causing widespread disconnections and in-game issues for the attacking side.</p>
+
+  <h3>Node Reinforcement Process</h3>
+  <p>CCP maintains a fleet fight notification system. Alliance directors can petition CCP at least 24 hours before a planned operation, providing estimated attack and defense numbers. CCP reviews these petitions during daily downtime and moves the target solar systems to dedicated reinforced nodes. The "Everest" node, the single most powerful machine in the cluster, is reserved for the largest expected fights.</p>
+  <p>This is not a perfect system. CCP cannot always predict where fights will happen, and surprise engagements on unreinforced nodes experience severe performance degradation. The system is also manipulable: alliances can submit false petitions to waste CCP's limited reinforced node capacity, though CCP has adjusted its processes to account for this.</p>
+
+  <!-- DEEP DIVES -->
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <div class="callout">
+    <div class="callout-title">Time Dilation: Slowing Down the Universe</div>
+    <p>Time Dilation was introduced in 2011 as a response to the long-standing problem of fleet fight lag. Before TiDi, when a node was overloaded, the server would simply drop commands. Players would click buttons and nothing would happen. Ships would warp but arrive at the wrong location. Modules would fail to activate. The server was processing commands faster than it could handle, losing data in the process.</p>
+    <p>TiDi takes the opposite approach: instead of dropping commands, it slows down time so the server can process everything deterministically. The game clock runs at a percentage of normal speed, from 100% (normal) down to 10% (maximum dilation). All in-space actions are affected: ship movement, weapon cycling, warp speeds, and module activation times all slow proportionally. The server maintains a consistent simulation at the cost of making everything take longer in real time.</p>
+    <p>TiDi operates per-node, not per-system. If two solar systems share a node and one triggers TiDi, both systems are affected. This is why high-traffic systems get dedicated nodes: to prevent a fleet fight in one system from slowing down unrelated gameplay in another.</p>
+  </div>
+
+  <div class="callout c-amber">
+    <div class="callout-title">Stackless Python and the GIL Problem</div>
+    <p>Stackless Python uses lightweight "tasklets" instead of OS threads. A tasklet consumes only its execution stack in memory and uses cooperative scheduling, meaning it only yields control at known switching points. This eliminates most locking and synchronization complexity. CCP describes it as inconceivable that EVE could exist without Stackless Python.</p>
+    <p>The fundamental limitation is CPython's Global Interpreter Lock (GIL), which prevents true parallel execution of Python code. A SOL node with a 128-core CPU will still only use one core for Python game logic. The other cores sit idle unless CCP runs multiple nodes per blade (which they do: 2 nodes per SOL blade). CCP has never pursued a full rewrite to a GIL-free language. Instead, they work around the limitation by offloading non-game-logic work to external services, optimizing the Python code itself (Brain in a Box), and moving subsystems to cloud infrastructure where they can use any language.</p>
+  </div>
+
+  <div class="callout c-green">
+    <div class="callout-title">Brain in a Box: Pre-Calculation and Caching</div>
+    <p>Brain in a Box (BiaB) was released with the Parallax expansion in November 2015. It is an optimization focused on pre-calculating and caching complex attribute computations. Before BiaB, every time the server needed to determine a ship's stats (speed, resistances, capacitor recharge, etc.), it would recalculate them from scratch by evaluating all active effects, modules, rigs, implants, and fleet bonuses. In a fleet of 1,000 ships, this meant millions of redundant calculations per tick.</p>
+    <p>BiaB introduced a state machine approach: ship attributes are calculated once and cached, then invalidated only when a relevant state change occurs (module activated, buff applied, damage taken). This dramatically reduced the CPU cost per tick for large fleets and was one of the most significant server-side performance improvements in EVE's history.</p>
+  </div>
+
+  <div class="callout c-purple">
+    <div class="callout-title">ESI: From Monolith to Cloud API</div>
+    <p>EVE's API history spans three generations. The original XML API interfaced directly with the game database and was read-only. CREST (Carbon RESTful API) added read/write capability and could communicate with game servers directly, enabling the (now-defunct) Dust 514 cross-game integration. ESI (EVE Swagger Interface) replaced both in 2018.</p>
+    <p>ESI runs entirely in Google Cloud on Kubernetes, separate from Tranquility. It uses Google PubSub as a data relay and gRPC for fast serialization. Each API endpoint is versioned individually rather than globally, allowing rapid iteration. ESI handles 350,000+ requests per minute from 2,350+ third-party applications, and 42% of active players have authorized at least one ESI-connected app. CCP can scale ESI horizontally by spinning up new containers per endpoint as load increases, then shutting them down when demand drops.</p>
+  </div>
+
+  <div class="callout c-red">
+    <div class="callout-title">The Market System</div>
+    <p>EVE's market operates as a real economy with supply and demand, price discovery, and genuine scarcity. Because there is only one shard, the market reaches critical mass naturally. High demand is almost always met by players with adequate supply within reasonable timeframes. Major trade hubs (Jita 4-4 being the largest) are always stocked. Even significant price manipulation attempts tend to self-correct within hours as other players respond to arbitrage opportunities.</p>
+    <p>The market's technical infrastructure handles buy and sell orders across all 7,800+ solar systems, with range-limited orders and regional price variations. The Jita trade hub processes so many transactions that it requires a dedicated node. Market data is exposed through ESI, and an entire ecosystem of third-party market analysis tools has developed around it, with traders running automated analysis on price feeds to identify profitable trades and manufacturing opportunities.</p>
+  </div>
+
+  <!-- EVOLUTION -->
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item"><span class="year">2003</span><span class="desc"><strong>Launch:</strong> EVE Online launches with a single-shard architecture running on IBM blade servers (AMD Opteron 2.8 GHz, 4 GB DDR1). Stackless Python chosen for all game logic. SQL Server for persistence.</span></div>
+    <div class="timeline-item"><span class="year">2006</span><span class="desc"><strong>Early scaling:</strong> Cluster grows to ~100 SOL blades running 2 nodes each. Jita trade hub gets a dedicated node. Peak concurrent users approach 30,000-40,000.</span></div>
+    <div class="timeline-item"><span class="year">2008</span><span class="desc"><strong>CarbonIO:</strong> New networking layer replaces the original. Enables development of Time Dilation by providing the hooks needed to control simulation speed per-node.</span></div>
+    <div class="timeline-item"><span class="year">2010</span><span class="desc"><strong>Dust 514 integration attempt:</strong> CREST API developed with read/write capability to connect the PS3 shooter Dust 514 to the EVE universe. The cross-game link was technically functional but Dust 514 was discontinued in 2016.</span></div>
+    <div class="timeline-item"><span class="year">2011</span><span class="desc"><strong>Time Dilation:</strong> TiDi introduced, fundamentally changing how EVE handles fleet fights. Instead of dropping commands, the server slows time to maintain deterministic simulation. Enables the record-breaking battles that follow.</span></div>
+    <div class="timeline-item"><span class="year">2014</span><span class="desc"><strong>Bloodbath of B-R5RB:</strong> 7,548 players participate in the largest fleet battle to date. 75 Titans destroyed. Estimated $300,000+ in real-world value lost. TiDi at maximum for 21 hours.</span></div>
+    <div class="timeline-item"><span class="year">2015</span><span class="desc"><strong>Brain in a Box:</strong> Released with the Parallax expansion. Pre-calculation and caching of ship attributes dramatically reduces per-tick CPU cost in large fleets. Database upgraded to Lenovo x880 flex nodes (768 GB RAM, Xeon E7-8893 v3).</span></div>
+    <div class="timeline-item"><span class="year">2016</span><span class="desc"><strong>Project Sanguine / ESI:</strong> First iteration of ESI and EVE Portal establish a message bus paradigm within the server architecture. gRPC adopted for faster serialization. XML API and CREST scheduled for deprecation.</span></div>
+    <div class="timeline-item"><span class="year">2018</span><span class="desc"><strong>XML/CREST shutdown:</strong> Legacy APIs deprecated on May 8. ESI becomes the sole external API. Chat system rebuilt and moved to cloud-hosted XMPP platform, decoupling it from the game cluster.</span></div>
+    <div class="timeline-item"><span class="year">2019</span><span class="desc"><strong>TQ Tech III:</strong> Third physical move of Tranquility infrastructure. All new hardware (network, storage, servers) deployed in new London facility. 6 chassis with built-in redundancy. Throughput: 30 Gbps. Max connections: 24 million.</span></div>
+    <div class="timeline-item"><span class="year">2020</span><span class="desc"><strong>World War Bee 2 begins:</strong> Fury at FWST-8 (Oct): 6,557 concurrent, 8,825 total participants. Two Guinness World Records. Battle of M2-XFE (Dec-Jan): 6,739 in-system, ~12,000 attempted. 257 Titans destroyed. Database server upgraded to 2 TB RAM, 128-core single-socket CPU.</span></div>
+    <div class="timeline-item"><span class="year">2021</span><span class="desc"><strong>Quasar:</strong> Newest iteration of the networking layer, part of Project Sanguine. Addresses GIL-related bottlenecks in message routing, serialization, and transmission. ESI fully running in cloud-hosted Kubernetes.</span></div>
+  </div>
+
+  <!-- SOURCES -->
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://highscalability.com/eve-online-architecture/" target="_blank">High Scalability: EVE Online Architecture</a><div class="source-desc">Detailed technical overview of Tranquility's cluster design, SOL/Proxy blade architecture, Stackless Python usage, and database infrastructure.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://www.eveonline.com/news/view/a-history-of-eve-database-server-hardware" target="_blank">CCP Dev Blog: A History of EVE Database Server Hardware</a><div class="source-desc">CCP's own account of database hardware evolution from original IBM blades through Lenovo x880 flex nodes to the current 128-core, 2 TB RAM server.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://www.eveonline.com/news/view/tranquility-tech-3" target="_blank">CCP Dev Blog: Tranquility Tech III</a><div class="source-desc">Details of the TQ Tech III hardware refresh: new facility, 6-chassis redundancy design, IBM SAN 16 Gbit switches, throughput and connection capacity upgrades.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info"><a href="https://wiki.eveuniversity.org/Tranquility" target="_blank">EVE University Wiki: Tranquility</a><div class="source-desc">Community-maintained documentation of Tranquility's infrastructure, including SOL blade counts, proxy architecture, and database cluster details.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info"><a href="https://wiki.eveuniversity.org/Time_dilation" target="_blank">EVE University Wiki: Time Dilation</a><div class="source-desc">Comprehensive explanation of TiDi mechanics, including the 10%-100% scale, per-node behavior, and impact on gameplay at maximum dilation.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info"><a href="https://www.slideshare.net/slideshow/stackless-python-in-eve-554535/554535" target="_blank">CCP Presentation: Stackless Python in EVE</a><div class="source-desc">Kristjan Valur Jonsson's slides on Stackless Python's tasklet/channel model, cooperative scheduling, and why EVE is inconceivable without it.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://nosygamer.blogspot.com/2021/10/quasar-updating-eve-onlines-network.html" target="_blank">The Nosy Gamer: Quasar - Updating EVE Online's Network Layer</a><div class="source-desc">Analysis of Project Sanguine, Quasar, and the message bus architecture introduced to work around Python's GIL limitations.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://www.gamedeveloper.com/design/infinite-space-an-argument-for-single-sharded-architecture-in-mmos" target="_blank">Game Developer: Infinite Space - An Argument for Single-Sharded Architecture</a><div class="source-desc">CCP's case for why single-shard is the natural choice for MMOs with player-driven economies and territorial warfare.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info"><a href="https://docs.esi.evetech.net/" target="_blank">ESI Documentation</a><div class="source-desc">Official EVE Swagger Interface documentation. 195 endpoints, OAuth 2.0 authentication, OpenAPI specification, running on cloud-hosted Kubernetes.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://www.eveonline.com/news/view/fury-at-fwst-8-battle-report" target="_blank">CCP: Fury at FWST-8 Battle Report</a><div class="source-desc">Official battle report for the Guinness World Record fleet fight: 6,557 concurrent participants, 8,825 total, 14 hours of combat under maximum TiDi.</div></div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info"><a href="https://www.eveonline.com/news/view/the-massacre-of-m2-xfe" target="_blank">CCP: The Massacre of M2-XFE</a><div class="source-desc">The most expensive battle in EVE history. 257 Titans destroyed out of 1,304 participating. Double the ISK loss of the Bloodbath of B-R5RB.</div></div>
+    </div>
+  </div>
+
+  <!-- GAME NAV -->
+  <div class="game-nav">
+    <a href="wow.html"><span class="dir">Previous</span><span class="name">World of Warcraft</span></a>
+    <a class="next" href="albion.html"><span class="dir">Next</span><span class="name">Albion Online</span></a>
+  </div>
+
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<!-- TOC scroll highlight -->
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+
+</body>
+</html>

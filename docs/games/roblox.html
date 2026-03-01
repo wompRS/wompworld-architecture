@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roblox - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Roblox</div>
+  <h1>Roblox</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Distributed Platform</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">UGC Metaverse</span>
+  </div>
+  <p class="lead">A platform hosting millions of user-created "experiences" on proprietary Linux servers, powered by a custom Luau scripting engine, RakNet-based networking, and a cellular infrastructure capable of matching 4 billion join combinations per second. Not one game, but a game-hosting operating system.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Roblox Corporation</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2006</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">30.6M (2025)</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">Custom (Luau)</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">60 Hz (physics)</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Cellular / Hybrid Cloud</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <h2 id="overview">Overview</h2>
+  <p>Roblox is not a game. It is an infrastructure platform that hosts hundreds of thousands of simultaneously active games (called "experiences") built by third-party developers using Roblox Studio and the Luau programming language. Each experience runs on Roblox's own servers via the RCC (Roblox Cloud Compute) service, a modified headless version of the Roblox engine that handles all server-side simulation.</p>
+  <p>The scale is staggering. As of mid-2025, Roblox supports 77.7 million daily active users, over 250 million concurrent connections, and more than 135,000 physical servers. A single experience like "Grow a Garden" broke the Guinness World Record with 21.6 million concurrent players. The platform doubled its peak CCU from 13.9 million in April 2025 to 30.6 million by June 2025.</p>
+  <p>Unlike traditional game servers that run a single game, every Roblox server is a general-purpose compute unit that can run any experience. When a player clicks "Play," the matchmaking system evaluates up to 4 billion possible join combinations per second to find the optimal server. If no suitable server exists, a new RCC instance spins up, loads the experience's assets, and begins simulation within seconds.</p>
+  <p>The backend runs on over 2,000 microservices in a proprietary internal cloud, with web-facing infrastructure on AWS. Roblox owns and operates its own data centers in the US and recently expanded to Sao Paulo, Brazil. The company is in the middle of migrating its entire backend from a legacy monolithic layout to a cellular architecture for better fault isolation and scaling.</p>
+
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 800 680">
+      <!-- PLAYERS -->
+      <rect x="310" y="10" width="180" height="36" rx="16" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="400" y="33" text-anchor="middle" class="box-label">Players (30M+ CCU)</text>
+
+      <!-- CDN / EDGE -->
+      <polygon points="400,80 440,100 400,120 360,100" fill="none" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="400" y="104" text-anchor="middle" class="box-label">CDN / Edge</text>
+
+      <!-- AUTH -->
+      <rect x="120" y="150" width="140" height="40" rx="8" fill="none" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="190" y="175" text-anchor="middle" class="box-label">Auth / Identity</text>
+
+      <!-- MATCHMAKING -->
+      <rect x="330" y="150" width="140" height="40" rx="8" fill="none" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="400" y="168" text-anchor="middle" class="box-label">Matchmaking</text>
+      <text x="400" y="181" text-anchor="middle" class="box-sub">4B combos/sec</text>
+
+      <!-- TELEPORT SERVICE -->
+      <rect x="540" y="150" width="140" height="40" rx="8" fill="none" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="610" y="175" text-anchor="middle" class="box-label">Teleport Service</text>
+
+      <!-- RCC CLUSTER -->
+      <rect x="60" y="230" width="680" height="130" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="80" y="250" class="group-label">RCC GAME SERVERS (135,000+ HOSTS)</text>
+
+      <rect x="80" y="262" width="120" height="44" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="140" y="282" text-anchor="middle" class="box-label">RCC Instance</text>
+      <text x="140" y="296" text-anchor="middle" class="box-sub">Experience A</text>
+
+      <rect x="215" y="262" width="120" height="44" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="275" y="282" text-anchor="middle" class="box-label">RCC Instance</text>
+      <text x="275" y="296" text-anchor="middle" class="box-sub">Experience B</text>
+
+      <rect x="350" y="262" width="120" height="44" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="410" y="282" text-anchor="middle" class="box-label">RCC Instance</text>
+      <text x="410" y="296" text-anchor="middle" class="box-sub">Experience C</text>
+
+      <rect x="485" y="262" width="120" height="44" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="545" y="282" text-anchor="middle" class="box-label">RCC Instance</text>
+      <text x="545" y="296" text-anchor="middle" class="box-sub">Experience D</text>
+
+      <rect x="620" y="262" width="100" height="44" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="670" y="287" text-anchor="middle" class="box-sub">+ thousands</text>
+
+      <text x="400" y="345" text-anchor="middle" class="box-sub">Each RCC instance: headless Luau VM, physics engine, replication layer. Ubuntu Linux.</text>
+
+      <!-- MICROSERVICES TIER -->
+      <rect x="60" y="400" width="680" height="80" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="80" y="418" class="group-label">BACKEND MICROSERVICES (2,000+)</text>
+
+      <rect x="80" y="428" width="100" height="36" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="130" y="451" text-anchor="middle" class="box-label">Economy</text>
+
+      <rect x="195" y="428" width="100" height="36" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="245" y="451" text-anchor="middle" class="box-label">Chat / Safety</text>
+
+      <rect x="310" y="428" width="100" height="36" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="360" y="451" text-anchor="middle" class="box-label">Avatar / UGC</text>
+
+      <rect x="425" y="428" width="100" height="36" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="475" y="451" text-anchor="middle" class="box-label">Presence</text>
+
+      <rect x="540" y="428" width="100" height="36" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="590" y="448" text-anchor="middle" class="box-label">AI / ML</text>
+      <text x="590" y="460" text-anchor="middle" class="box-sub">1B req/day</text>
+
+      <!-- DATA LAYER -->
+      <rect x="60" y="520" width="680" height="100" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="80" y="538" class="group-label">DATA &amp; PERSISTENCE</text>
+
+      <ellipse cx="160" cy="560" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M105,560 L105,590 Q105,605 160,605 Q215,605 215,590 L215,560" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="160" y="585" text-anchor="middle" class="box-label">DataStore</text>
+      <text x="160" y="598" text-anchor="middle" class="box-sub">Player State</text>
+
+      <ellipse cx="330" cy="560" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M275,560 L275,590 Q275,605 330,605 Q385,605 385,590 L385,560" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="330" y="585" text-anchor="middle" class="box-label">Asset CDN</text>
+      <text x="330" y="598" text-anchor="middle" class="box-sub">Models/Scripts</text>
+
+      <ellipse cx="500" cy="560" rx="55" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M445,560 L445,590 Q445,605 500,605 Q555,605 555,590 L555,560" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="500" y="585" text-anchor="middle" class="box-label">Feature Store</text>
+      <text x="500" y="598" text-anchor="middle" class="box-sub">70B records/day</text>
+
+      <rect x="590" y="555" width="130" height="44" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="655" y="575" text-anchor="middle" class="box-label">Analytics</text>
+      <text x="655" y="589" text-anchor="middle" class="box-sub">Telemetry</text>
+
+      <!-- ARROWS -->
+      <line x1="400" y1="46" x2="400" y2="80" class="arrow"/>
+      <rect x="370" y="55" width="60" height="14" fill="var(--surface)"/><text x="400" y="65" text-anchor="middle" class="arrow-label">RakNet</text>
+
+      <line x1="370" y1="120" x2="190" y2="150" class="arrow"/>
+      <line x1="400" y1="120" x2="400" y2="150" class="arrow"/>
+      <line x1="430" y1="120" x2="610" y2="150" class="arrow"/>
+
+      <line x1="400" y1="190" x2="400" y2="230" class="arrow"/>
+      <rect x="374" y="202" width="52" height="14" fill="var(--surface)"/><text x="400" y="212" text-anchor="middle" class="arrow-label">Assign</text>
+
+      <line x1="400" y1="360" x2="400" y2="400" class="arrow"/>
+      <rect x="371" y="372" width="58" height="14" fill="var(--surface)"/><text x="400" y="382" text-anchor="middle" class="arrow-label">Internal</text>
+
+      <line x1="160" y1="480" x2="160" y2="550" class="arrow"/>
+      <line x1="330" y1="480" x2="330" y2="550" class="arrow"/>
+      <line x1="500" y1="480" x2="500" y2="550" class="arrow"/>
+      <line x1="655" y1="480" x2="655" y2="555" class="arrow"/>
+
+      <!-- Cross-arrows for teleport -->
+      <line x1="610" y1="190" x2="545" y2="262" class="arrow"/>
+      <rect x="563" y="216" width="52" height="14" fill="var(--surface)"/><text x="589" y="226" text-anchor="middle" class="arrow-label">Teleport</text>
+    </svg>
+    <div class="diagram-caption">Roblox platform architecture: CDN edge layer, matchmaking, RCC game server fleet, 2,000+ microservices, and distributed data stores</div>
+  </div>
+
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Roblox runs on its own bare-metal infrastructure, not on a public cloud provider. The company owns and operates data centers with over 135,000 servers. Web-facing services like the Roblox website and APIs run on AWS, but the game servers themselves run on proprietary hardware in Roblox-owned facilities.</p>
+
+  <h3>RCC (Roblox Cloud Compute)</h3>
+  <p>The RCC service is the heart of the platform. It is a headless build of the Roblox engine that runs on Ubuntu Linux. Each RCC instance loads an experience's place file, spins up a Luau virtual machine, runs the experience's server-side scripts, and simulates physics for all connected players. RCC replaced the older Roblox Grid Service (RBXGS) around 2008, and the Windows version was fully discontinued in 2021 after a migration to Ubuntu that began in 2018.</p>
+  <p>Each RCC process simulates one server instance of one experience. A popular experience like "Adopt Me" or "Brookhaven" might have thousands of RCC instances running simultaneously across different physical machines, each hosting a separate server with up to 100 players (or more, depending on the experience's configuration).</p>
+
+  <h3>Cellular Architecture Migration</h3>
+  <p>Roblox has been undertaking a major migration from a legacy monolithic infrastructure to a cellular architecture. Each "cell" is a self-contained unit that can run independently. The migration involves moving thousands of infrastructure services and thousands of backend services into newly built cells, a process that began in 2023 and was expected to extend through 2025.</p>
+  <p>The cellular model improves fault isolation. If one cell has a problem, it does not cascade to the entire platform. This is critical for a service that must stay up 24/7 for tens of millions of concurrent users. Roblox is also experimenting with cloud bursting, where peak demand can spill over from on-premises cells into cloud-based edge data centers that scale up and tear down automatically.</p>
+
+  <h3>Global Expansion</h3>
+  <p>In 2025, Roblox brought a new data center in Sao Paulo, Brazil fully online, reducing latency for millions of South American users. The company continues to expand its global footprint to reduce round-trip times for players in underserved regions.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Compute Layer</h4>
+      <ul>
+        <li>135,000+ proprietary servers (Roblox-owned DCs)</li>
+        <li>RCC instances on Ubuntu Linux</li>
+        <li>Each instance: 1 experience, 1 Luau VM</li>
+        <li>Cellular architecture migration in progress</li>
+      </ul>
+    </div>
+    <div class="info-card c-green">
+      <h4>Platform Services</h4>
+      <ul>
+        <li>2,000+ internal microservices</li>
+        <li>Matchmaking: 4 billion join combos/sec</li>
+        <li>250 million concurrent connections</li>
+        <li>Web/API tier on AWS</li>
+      </ul>
+    </div>
+    <div class="info-card c-pink">
+      <h4>AI/ML Infrastructure</h4>
+      <ul>
+        <li>1 billion personalization requests daily</li>
+        <li>Tens of thousands of CPUs, 1,000+ GPUs</li>
+        <li>4 billion tokens/week via vLLM</li>
+        <li>250 ML pipelines in production</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Data Scale</h4>
+      <ul>
+        <li>Feature store: 30B ingested, 70B served daily</li>
+        <li>50ms P99 latency on feature store reads</li>
+        <li>Exabytes of content delivered</li>
+        <li>77.7 million daily active users</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>Roblox uses a modified version of RakNet, a UDP-based networking library originally designed for multiplayer games. RakNet provides reliable and unreliable delivery modes, packet ordering, and connection management on top of raw UDP, giving Roblox the low-latency characteristics of UDP with optional reliability when needed.</p>
+
+  <h3>Replication Model</h3>
+  <p>Roblox uses a server-authoritative replication model. The server (RCC) owns the canonical game state, and the client receives replicated copies of the data model. When an object is created, moved, or destroyed on the server, the change replicates to connected clients through the ServerReplicator. Clients send inputs through RemoteEvents (reliable) and UnreliableRemoteEvents (fire-and-forget) to request state changes on the server.</p>
+  <p>Physics replication uses a concept called "network ownership." The server can assign physics ownership of a part to a specific client, meaning that client simulates the physics locally and sends the results back to the server. This reduces latency for things like player-controlled vehicles. However, it creates a trust problem: a malicious client with physics ownership can send bogus position data. Roblox mitigates this through server-side validation, but exploiters have historically found ways to manipulate network ownership to their advantage.</p>
+
+  <h3>Matchmaking and Joins</h3>
+  <p>When a player clicks "Play," the matchmaking system evaluates available servers for that experience. Roblox set an internal goal of handling 10 million joins in 10 seconds. At peak, the system evaluates up to 4 billion possible join combinations per second, considering factors like server population, region, friend presence, and platform. If no suitable server exists, a new RCC instance is provisioned on the fly.</p>
+  <p>The TeleportService allows experiences to send players between different places within the same experience (or between experiences entirely). This is how large Roblox games implement lobby systems, world transitions, and mini-game hubs. Each teleport tears down the client's connection to one RCC instance and establishes a new one to a different instance, so there is always a loading screen during transitions.</p>
+
+  <table class="proto">
+    <tr><th>Connection</th><th>Protocol</th><th>Notes</th></tr>
+    <tr><td>Client to RCC</td><td><code>RakNet (UDP)</code></td><td>Game data replication, physics updates, RemoteEvents</td></tr>
+    <tr><td>Client to Web</td><td><code>HTTPS</code></td><td>Authentication, marketplace, social features (via AWS)</td></tr>
+    <tr><td>RCC to DataStore</td><td><code>HTTPS</code></td><td>Player data persistence, rate-limited API calls</td></tr>
+    <tr><td>RCC to Microservices</td><td><code>Internal RPC</code></td><td>Chat filtering, economy, presence, moderation</td></tr>
+    <tr><td>Inter-RCC (Teleport)</td><td><code>Internal</code></td><td>Player transfers between server instances</td></tr>
+    <tr><td>Sim to Sim (Adjacent)</td><td><code>UDP Circuit</code></td><td>Not applicable; each experience instance is isolated</td></tr>
+  </table>
+
+  <div class="callout c-amber">
+    <div class="callout-title">Reliable vs. Unreliable Events</div>
+    <p>Roblox provides two networking primitives for developers. RemoteEvents use reliable ordered delivery, guaranteeing that every message arrives in sequence. UnreliableRemoteEvents use fire-and-forget UDP delivery, which is faster but may drop packets. Developers must choose the right tool: use reliable events for critical state changes (purchases, damage), and unreliable events for high-frequency updates (cursor position, cosmetic effects) where occasional packet loss is acceptable.</p>
+  </div>
+
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>Roblox provides developers with DataStoreService, a server-side API for persisting player and game data across sessions. DataStores are key-value stores accessible only from server-side scripts (not from the client). Each experience gets its own isolated data store namespace.</p>
+
+  <h3>DataStoreService Mechanics</h3>
+  <p>DataStores support two types: GlobalDataStore (general key-value) and OrderedDataStore (sorted numeric values, useful for leaderboards). Operations include GetAsync, SetAsync, UpdateAsync, RemoveAsync, and IncrementAsync. All operations are asynchronous and rate-limited.</p>
+  <p>The rate limits are strict. Each server gets a base budget of requests per minute, with additional budget granted per player. Budget is consumed per operation type: reads cost less than writes, and UpdateAsync (which reads and writes atomically) costs more than either alone. If a server exceeds its budget, requests queue and may eventually fail. Experienced developers use caching layers and batched writes to stay within limits.</p>
+  <p>DataStores use internal caching with a 4-second cooldown per key. If you read the same key twice within 4 seconds, the second read returns the cached value. This means multiple servers reading the same key can see stale data for up to 4 seconds. For critical state that must be consistent across servers, developers use MessagingService to broadcast changes.</p>
+
+  <h3>Asset Storage and CDN</h3>
+  <p>Every asset in Roblox (models, textures, audio, scripts, animations) gets a unique numeric asset ID. Assets are stored in Roblox's backend and delivered to clients through a CDN. When an experience loads, the client downloads the place file and all referenced assets. The CDN caches popular assets close to players to reduce load times.</p>
+  <p>The Roblox Studio publishing pipeline compiles a place file (a serialized data model) and uploads it to Roblox's servers. The place file contains all the parts, scripts, and references needed to reconstruct the experience. When an RCC instance spins up, it downloads this place file and deserializes it into the running data model.</p>
+
+  <h3>Robux Economy Backend</h3>
+  <p>The Robux economy runs as a set of dedicated microservices handling marketplace transactions, developer monetization, payments, and fraud detection. Millions of transactions flow through these systems daily. Developers earn Robux through in-experience purchases (game passes, developer products) and UGC marketplace sales. Roblox takes a 30% platform fee on most transactions. Developers can cash out earned Robux through the Developer Exchange (DevEx) program at a rate of $0.0038 per Robux (as of September 2025). In 2022 alone, over $624 million was paid out to developers.</p>
+
+  <div class="callout c-green">
+    <div class="callout-title">DataStore Rate Limits</div>
+    <p>DataStoreService enforces per-server request budgets. The base budget is 60 + (numPlayers * 10) requests per minute for reads, and 60 + (numPlayers * 10) for writes. UpdateAsync consumes both a read and a write. Budget overruns queue requests rather than immediately failing them, but queued requests can time out. This rate limiting is a hard constraint that shapes how every Roblox developer designs their data layer.</p>
+  </div>
+
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <h3>Handling Record-Breaking Concurrency</h3>
+  <p>In June 2025, Roblox's peak concurrent users doubled from 13.9 million to 30.6 million, driven by viral experiences like "Grow a Garden" and "Dress to Impress." Grow a Garden alone hit 21.6 million simultaneous players, setting a Guinness World Record for most concurrently played video game.</p>
+  <p>To handle these surges, Roblox engineering runs a rigorous weekly operations cycle. Mondays are dedicated to incident reviews. Tuesdays focus on capacity planning. Chaos testing runs throughout the week to verify the system can handle failure scenarios under load. The cellular architecture helps here: cells can be brought online or taken offline independently, and cloud bursting allows overflow into dynamically provisioned edge data center capacity.</p>
+
+  <h3>Per-Experience Scaling</h3>
+  <p>Each experience has its own scaling profile. A small experience might run on a single RCC instance with 10 players. A massive experience like "Brookhaven" runs thousands of parallel RCC instances, each hosting its own isolated server. The matchmaking system distributes players across these instances, and the TeleportService allows developers to build their own load-balancing logic for multi-place experiences.</p>
+  <p>The default server size is up to 100 players per instance, but developers can configure this lower. Some competitive games run 10-player instances. Some social experiences push to the maximum. The per-instance server cost (in terms of compute) scales with player count, script complexity, and physics simulation density.</p>
+
+  <h3>Luau Performance</h3>
+  <p>Luau, Roblox's custom language (derived from Lua 5.1), compiles to bytecode that runs in a sandboxed virtual machine. The VM is heavily optimized for game workloads, with a type-aware JIT compiler that produces native code for performance-critical paths. Roblox continuously benchmarks and improves Luau's execution speed, since every RCC instance in the fleet runs Luau scripts, and even small per-frame savings multiply across hundreds of thousands of concurrent instances.</p>
+
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>Luau Sandboxing and Security</h3>
+  <p>Luau is designed to be safe even against actively malicious code. The standard library strips out all dangerous functionality: the <code>io</code> library (file access) is completely removed, the <code>package</code> library (native module loading) is completely removed, and the <code>os</code> library is stripped down to only <code>clock</code>, <code>date</code>, <code>difftime</code>, and <code>time</code>. There is no <code>__gc</code> metamethod, which eliminates an entire class of memory corruption attacks. Instead, tag-based destructors (only available to the host, not to scripts) handle resource cleanup.</p>
+  <p>Within the VM, isolation between privileged and unprivileged code is enforced through separate execution contexts. Trusted (Roblox internal) code and untrusted (developer) code run in the same VM but with different capability levels. The VM tracks which context is executing and restricts API access accordingly. For guaranteed isolation, Roblox loads trusted and untrusted code into separate VMs entirely.</p>
+
+  <h3>Physics Engine and Network Ownership</h3>
+  <p>Roblox's physics engine runs at 60 Hz (60 steps per second) on the server and client. The server is the authority on physics by default, but it can delegate physics ownership of specific parts to individual clients. When a client owns a part's physics, that client simulates the part locally and sends position/rotation updates back to the server. The server replicates these updates to other clients.</p>
+  <p>This delegation is automatic for parts near a player (like a ball they kicked) but can be overridden by developers using <code>BasePart:SetNetworkOwner()</code>. The tradeoff is latency vs. trust: client-owned physics feels instant for the owning player but is vulnerable to manipulation. Some physics constraints (like certain anchored/constraint setups) can cause replication to halt entirely, a known bug where the client stops sending position data back to the server.</p>
+
+  <h3>Trust and Safety Infrastructure</h3>
+  <p>Every text message in Roblox passes through a server-side chat filter before being displayed to other players. The filter is more aggressive for players under 13, restricting personal information, links, and sensitive content. The filtering system runs as a backend microservice called by the RCC instance in real time, meaning there is a small delay between a player typing a message and it appearing on screen.</p>
+  <p>Beyond text, Roblox runs AI-based moderation on uploaded assets (images, audio, models) to detect policy violations. The AI inference pipeline processes approximately 1 billion personalization requests daily and runs across tens of thousands of CPUs and over a thousand GPUs in Roblox's hybrid cloud infrastructure (on-premises for CPU inference, cloud for GPU training).</p>
+
+  <h3>Cross-Platform: PlayStation and Meta Quest</h3>
+  <p>Roblox launched on PlayStation and Meta Quest, extending the platform beyond PC, mobile, and Xbox. The architecture did not fundamentally change for these ports. Because the game logic runs server-side on RCC, the client is primarily a rendering and input layer. Each platform's client connects to the same RCC servers using the same RakNet protocol. The main engineering challenge was adapting the Roblox client's rendering pipeline and input handling to the constraints of console and VR hardware, while meeting each platform's certification requirements.</p>
+
+  <h3>Roblox Studio Publishing</h3>
+  <p>Roblox Studio is the development environment where creators build experiences. When a developer publishes, Studio serializes the entire data model (parts, scripts, configurations, terrain) into a binary place file and uploads it to Roblox's servers. The uploaded file is stored and versioned. When a player joins, the matchmaking system assigns them to an RCC instance, which downloads and deserializes the latest published version of the place file.</p>
+  <p>Studio supports real-time collaborative editing, where multiple developers work on the same place simultaneously. Changes sync through Roblox's backend in near-real-time. At GDC 2025, Roblox demonstrated major Studio performance improvements, including a rebuilt Explorer panel (rewritten in Luau) that handles thousands of instances without slowdowns.</p>
+
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <span class="year">2006</span>
+      <span class="desc"><strong>Roblox launches publicly.</strong> Originally built as a physics sandbox using Lua 5.1. Game servers run on Windows machines.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2008</span>
+      <span class="desc"><strong>RCC (Roblox Cloud Compute) replaces Roblox Grid Service.</strong> The server architecture shifts to a dedicated headless engine for hosting experiences, separating the game server from the client.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2013</span>
+      <span class="desc"><strong>Developer Exchange (DevEx) launches.</strong> Creators can now cash out earned Robux for real money, establishing the economic foundation that would drive platform growth.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2018</span>
+      <span class="desc"><strong>Linux migration begins.</strong> Roblox starts porting RCC from Windows to Ubuntu, a multi-year effort to reduce operating costs and improve performance.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2019</span>
+      <span class="desc"><strong>Luau introduced.</strong> Roblox forks Lua 5.1 into Luau, adding type annotations, performance optimizations, and safety improvements. The language evolves independently from upstream Lua.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2020</span>
+      <span class="desc"><strong>COVID-era growth surge.</strong> Daily active users spike as millions of children shift to online activities. RCC migration to Ubuntu completes. Infrastructure scales rapidly.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2021</span>
+      <span class="desc"><strong>Three-day outage (Oct 28-31).</strong> A cascading infrastructure failure (later attributed to a contention issue in Consul's BoltDB backend during high write load) takes the platform offline. The outage lasts 73 hours, the longest in Roblox history, and accelerates the push toward cellular architecture.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2023</span>
+      <span class="desc"><strong>Cellular architecture migration begins.</strong> Roblox starts migrating backend services into isolated cells for better fault tolerance and scaling. Service mesh and service discovery systems rebuilt.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2024</span>
+      <span class="desc"><strong>PlayStation and Meta Quest launch.</strong> Roblox expands to console and VR platforms. AI/ML inference moves to on-premises data centers for latency and privacy. Hybrid cloud model solidified.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2025</span>
+      <span class="desc"><strong>30.6 million peak CCU.</strong> Sao Paulo data center goes live. Grow a Garden sets Guinness World Record. DevEx rate increased to $0.0038/R$. Cellular migration continues.</span>
+    </div>
+  </div>
+
+  <div class="callout c-red">
+    <div class="callout-title">The 2021 Outage</div>
+    <p>On October 28, 2021, Roblox went completely offline for 73 hours. The root cause was a combination of a viral Chipotle promotion driving abnormal traffic and a bug in Consul (their service discovery system) that triggered cascading failures across backend services. The outage affected every aspect of the platform: no one could play, create, or access the website. It was a defining moment that pushed Roblox to accelerate its cellular infrastructure migration, specifically to prevent a single failure point from taking down the entire platform again.</p>
+  </div>
+
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://corp.roblox.com/newsroom/2023/12/making-robloxs-infrastructure-efficient-resilient">How We're Making Roblox's Infrastructure More Efficient and Resilient</a>
+        <div class="source-desc">Roblox engineering blog on the cellular architecture migration, service mesh, and fault isolation strategy.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://about.roblox.com/newsroom/2025/06/roblox-infrastructure-supporting-record-breaking-games">The Infrastructure Supporting Record-Breaking Experiences</a>
+        <div class="source-desc">Roblox on scaling to 30.6M CCU, weekly operations cadence, cloud bursting, and the Sao Paulo DC.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.infoq.com/news/2024/01/roblox-cellular-infrastructure/">Roblox Builds New Cellular Infrastructure to Improve Gaming Experience</a>
+        <div class="source-desc">InfoQ coverage of the cellular architecture, including migration timeline and scaling strategy.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info">
+        <a href="https://devforum.roblox.com/t/in-depth-information-about-robloxs-remoteevents-instance-replication-and-physics-replication-w-sources/1847340">In-Depth Networking, Replication, and Physics Replication</a>
+        <div class="source-desc">Community tutorial on Roblox Developer Forum covering RemoteEvents, physics replication rates, and network ownership.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://luau.org/sandbox/">Embedding a Sandboxed Luau Virtual Machine</a>
+        <div class="source-desc">Official Luau documentation on sandboxing, library stripping, isolation, and memory safety.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://create.roblox.com/docs/reference/engine/classes/DataStoreService">DataStoreService Official Documentation</a>
+        <div class="source-desc">Roblox Creator docs covering DataStore API, rate limits, caching behavior, and scope management.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://corp.roblox.com/newsroom/2024/09/running-ai-inference-at-scale-in-the-hybrid-cloud">Running AI Inference at Scale in the Hybrid Cloud</a>
+        <div class="source-desc">Roblox engineering blog on hybrid cloud AI infrastructure, CPU/GPU allocation, and vLLM deployment.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://www.gdcvault.com/play/1029302/Roblox-Engine-Developing-on-a">GDC: Roblox Engine - Developing on a Platform that Powers 32M Experiences</a>
+        <div class="source-desc">GDC Vault talk on the Roblox engine architecture, cross-platform publishing, and Studio tooling.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://roblox.fandom.com/wiki/Roblox_Cloud_Compute_Service">Roblox Cloud Compute Service - Roblox Wiki</a>
+        <div class="source-desc">Community wiki documenting RCC history, from RBXGS to the Windows-to-Linux migration.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://about.roblox.com/newsroom/2023/10/inside-tech-solving-matchmaking-roblox">Inside the Tech: Solving for Matchmaking on Roblox</a>
+        <div class="source-desc">Roblox blog on matchmaking architecture, the 10M-joins-in-10-seconds goal, and thundering herd handling.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="game-nav">
+    <a href="destiny2.html"><span class="dir">Previous</span><span class="name">Destiny 2</span></a>
+    <a class="next" href="minecraft.html"><span class="dir">Next</span><span class="name">Minecraft</span></a>
+  </div>
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

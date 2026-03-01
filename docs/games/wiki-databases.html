@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Databases for Game Servers - Wiki | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <a href="wiki-engines.html">Engines</a>
+  <a href="wiki-languages.html">Languages</a>
+  <a href="wiki-databases.html" style="color:var(--t1);font-weight:700">Databases</a>
+  <a href="wiki-networking.html">Networking</a>
+  <a href="wiki-middleware.html">Middleware</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // WIKI</span>
+</nav>
+
+<!-- TOC -->
+<div class="toc">
+  <a href="#intro">Introduction</a>
+  <a href="#comparison-table">Comparison Table</a>
+  <a href="#mysql">MySQL / MariaDB</a>
+  <a href="#postgresql">PostgreSQL</a>
+  <a href="#sqlserver">SQL Server</a>
+  <a href="#sqlite">SQLite</a>
+  <a href="#mongodb">MongoDB</a>
+  <a href="#redis">Redis</a>
+  <a href="#cassandra">Apache Cassandra</a>
+  <a href="#dynamodb">DynamoDB</a>
+  <a href="#spacetimedb">SpacetimeDB</a>
+  <a href="#leveldb">LevelDB / RocksDB</a>
+  <a href="#choosing">Choosing a Database</a>
+  <a href="#sources">Sources</a>
+</div>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Wiki / Databases</div>
+  <h1>Databases for Game Servers</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">WIKI</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">10 DATABASES</span>
+    <span class="badge" style="background:rgba(4,120,87,0.1);color:var(--green)">COMPARISON GUIDE</span>
+  </div>
+  <p class="lead">Every persistent multiplayer game needs a place to store data that survives server restarts, player disconnects, and hardware failures. This page covers ten database systems used in production game servers, from traditional SQL engines to bleeding-edge approaches that merge the database and game server into one.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Databases Covered</span><span class="value">10</span></div>
+    <div class="key-stat"><span class="label">Categories</span><span class="value">Relational, Document, KV, Wide-Column</span></div>
+    <div class="key-stat"><span class="label">Games Referenced</span><span class="value">18</span></div>
+    <div class="key-stat"><span class="label">Key Decision</span><span class="value">Data Model + Consistency</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- ========== INTRODUCTION ========== -->
+  <h2 id="intro">Introduction</h2>
+  <p>The database is the backbone of any persistent game server. It determines how fast players can save progress, how reliably the world survives a crash, how many concurrent users the system can handle, and how expensive the whole thing is to operate. Pick the wrong database and you hit a wall at 500 concurrent players. Pick the right one and you might handle 50,000.</p>
+  <p>There is no single "best" database for games. The right choice depends on what kind of data you are storing, how often it changes, whether you need strong consistency or can tolerate stale reads, and how much money you want to spend. Most production MMOs use multiple databases for different jobs. Albion Online uses Cassandra for game state and PostgreSQL for its marketplace. Fortnite uses MongoDB for player profiles and probably something else for real-time match state. EVE Online runs the entire universe on SQL Server but caches aggressively in memory.</p>
+  <p>This guide covers ten database systems that appear in production game servers. For each one, we explain how it works, what it is good at, what it is bad at, and which games from our 18-game survey use it. The comparison table at the top gives you the quick overview; the deep dives below give you the details.</p>
+
+  <div class="callout">
+    <div class="callout-title">The Golden Rule of Game Databases</div>
+    <p>Never hit the database in the hot path. Load player data into memory at session start, process game logic against the in-memory state, and write changes back asynchronously. Every major MMO does this. The database is for persistence and recovery, not for real-time game logic. The exception is SpacetimeDB, which merges the two layers entirely.</p>
+  </div>
+
+  <!-- ========== COMPARISON TABLE ========== -->
+  <h2 id="comparison-table">Comparison Table</h2>
+  <p>All ten databases, side by side. This table covers the major decision factors for game server work. Scroll right on mobile.</p>
+
+  <div class="diagram-full" style="overflow-x:auto">
+    <table class="proto" style="min-width:1100px">
+      <thead>
+        <tr>
+          <th>Database</th>
+          <th>Data Model</th>
+          <th>Consistency</th>
+          <th>Scaling</th>
+          <th>Read Latency</th>
+          <th>Write Latency</th>
+          <th>Cost</th>
+          <th>Best Game Use Case</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>MySQL / MariaDB</td>
+          <td>Relational</td>
+          <td>ACID</td>
+          <td>Vertical + read replicas, manual sharding</td>
+          <td>Low (sub-ms cached)</td>
+          <td>Low-Medium</td>
+          <td>Free (GPL/LGPL)</td>
+          <td>General game data, auth, character storage</td>
+        </tr>
+        <tr>
+          <td>PostgreSQL</td>
+          <td>Relational + JSONB</td>
+          <td>ACID (MVCC)</td>
+          <td>Vertical + read replicas, Citus for sharding</td>
+          <td>Low (sub-ms cached)</td>
+          <td>Low-Medium</td>
+          <td>Free (PostgreSQL License)</td>
+          <td>Complex queries, marketplaces, flexible schemas</td>
+        </tr>
+        <tr>
+          <td>SQL Server</td>
+          <td>Relational</td>
+          <td>ACID</td>
+          <td>Vertical (massive), AlwaysOn clusters</td>
+          <td>Very Low (in-memory OLTP)</td>
+          <td>Very Low</td>
+          <td>$$$ (~$15K/2-core pack)</td>
+          <td>Single-shard MMOs needing maximum single-node power</td>
+        </tr>
+        <tr>
+          <td>SQLite</td>
+          <td>Relational</td>
+          <td>ACID</td>
+          <td>None (single file)</td>
+          <td>Very Low (local)</td>
+          <td>Low (single writer)</td>
+          <td>Free (Public Domain)</td>
+          <td>Single-player saves, dev prototypes, small servers</td>
+        </tr>
+        <tr>
+          <td>MongoDB</td>
+          <td>Document (BSON)</td>
+          <td>ACID (single doc), tunable for reads</td>
+          <td>Horizontal (auto-sharding)</td>
+          <td>Low</td>
+          <td>Low</td>
+          <td>Free (SSPL) / Atlas pricing</td>
+          <td>Player profiles, inventories, session-based games</td>
+        </tr>
+        <tr>
+          <td>Redis</td>
+          <td>Key-Value (in-memory)</td>
+          <td>Eventual (replication), strong (single node)</td>
+          <td>Horizontal (Redis Cluster)</td>
+          <td>Sub-millisecond</td>
+          <td>Sub-millisecond</td>
+          <td>RSALv2 + SSPLv1 (since 2024) / Redis Ltd pricing</td>
+          <td>Caching, leaderboards, session state, pub/sub</td>
+        </tr>
+        <tr>
+          <td>Apache Cassandra</td>
+          <td>Wide-Column</td>
+          <td>Tunable (eventual to strong)</td>
+          <td>Horizontal (add nodes)</td>
+          <td>Low-Medium</td>
+          <td>Very Low</td>
+          <td>Free (Apache 2.0)</td>
+          <td>Write-heavy game state, time-series, telemetry</td>
+        </tr>
+        <tr>
+          <td>DynamoDB</td>
+          <td>Key-Value / Document</td>
+          <td>Eventual or Strong (per-read)</td>
+          <td>Horizontal (managed, automatic)</td>
+          <td>Single-digit ms</td>
+          <td>Single-digit ms</td>
+          <td>Pay-per-request or provisioned</td>
+          <td>Cloud-native games, serverless backends, global reach</td>
+        </tr>
+        <tr>
+          <td>SpacetimeDB</td>
+          <td>Relational (in-memory)</td>
+          <td>ACID (transactional reducers)</td>
+          <td>Vertical (single module)</td>
+          <td>In-process (zero network)</td>
+          <td>In-process (zero network)</td>
+          <td>Free (BSL 1.1)</td>
+          <td>Indie MMOs, real-time multiplayer with no infra budget</td>
+        </tr>
+        <tr>
+          <td>LevelDB / RocksDB</td>
+          <td>Key-Value (embedded)</td>
+          <td>ACID (single process)</td>
+          <td>None (embedded library)</td>
+          <td>Very Low (local)</td>
+          <td>Very Low (LSM optimized)</td>
+          <td>Free (BSD / Apache 2.0)</td>
+          <td>World chunk storage, embedded game saves</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="diagram-caption">All ten databases compared across core decision factors for game server development.</div>
+  </div>
+
+
+  <!-- ========== MYSQL / MARIADB ========== -->
+  <h2 id="mysql">MySQL / MariaDB</h2>
+  <h3>How It Works</h3>
+  <p>MySQL is a relational database. You define tables with columns, rows, and relationships between them using foreign keys. When your game needs to look up a player's inventory, it runs a SQL query against the characters table, which joins to the inventory table, which joins to the items table. Data is structured, typed, and validated by the database engine before it gets stored.</p>
+  <p>MariaDB is a fork of MySQL created in 2009 by the original MySQL creator, Michael Widenius, after Oracle acquired Sun Microsystems (and MySQL with it). For most game server purposes they are interchangeable. MariaDB adds some extra features like the Aria storage engine and the Spider sharding engine, but the core SQL behavior is the same.</p>
+
+  <h3>Storage Engines: InnoDB vs MyISAM</h3>
+  <p>MySQL supports pluggable storage engines, and the two most relevant for game servers are InnoDB and MyISAM.</p>
+  <p><strong>InnoDB</strong> is the default and the right choice for almost all game server work. It supports transactions (so a trade between two players either fully completes or fully rolls back), uses row-level locking (so two players updating their separate inventories do not block each other), and is crash-safe (the database recovers cleanly after an unexpected shutdown). InnoDB keeps frequently accessed data in a buffer pool in RAM, which is why tuning <code>innodb_buffer_pool_size</code> is the single most impactful MySQL performance knob.</p>
+  <p><strong>MyISAM</strong> is an older engine that uses table-level locking. When one player writes to a MyISAM table, every other write to that same table waits. This is fine for read-heavy, rarely-updated data like a static item definition table, but it is completely unsuitable for any table that sees concurrent writes from multiple players. MyISAM is also not crash-safe. If the server dies mid-write, you can lose data or corrupt the table. Do not use MyISAM for player-facing game data.</p>
+
+  <h3>Replication and Sharding</h3>
+  <p>MySQL supports asynchronous replication where a primary server streams its write log to one or more read replicas. This is useful for offloading read-heavy queries (like leaderboard lookups or marketplace searches) to replicas while the primary handles all writes. Semi-synchronous replication adds a guarantee that at least one replica has received the write before the primary acknowledges it to the application, reducing the risk of data loss during a failover.</p>
+  <p>MariaDB extends this with Galera Cluster, which provides true synchronous multi-master replication. Every node in a Galera cluster can accept writes, and all nodes are guaranteed to have the same data. The tradeoff is higher write latency because every write must be confirmed by a quorum of nodes before it completes. MariaDB also offers MaxScale, a database proxy that can route queries to appropriate shards based on schema rules.</p>
+  <p>Horizontal sharding (splitting data across multiple independent MySQL instances) is possible but requires application-level logic. You decide that players with IDs 1-1,000,000 go to shard A and players 1,000,001-2,000,000 go to shard B, then your application code routes queries accordingly. This works but adds significant complexity to your codebase.</p>
+
+  <h3>Performance at MMO Scale</h3>
+  <p>MySQL performs well for typical game workloads when properly tuned. The buffer pool should be sized to fit your entire working dataset in RAM if possible. Connection pooling is essential because MySQL's thread-per-connection model gets expensive above a few hundred connections. ProxySQL or MaxScale can sit between your game servers and MySQL to manage connection pooling and query routing.</p>
+  <p>The fundamental bottleneck with MySQL at MMO scale is write throughput on a single primary. A well-tuned MySQL server on modern NVMe storage can handle tens of thousands of writes per second, which is enough for most games if you batch your writes and keep transactions short. But if you need to scale writes beyond what one machine can handle, you are looking at manual sharding, which is a significant engineering investment.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>World of Warcraft</strong> is the flagship example. WoW private server emulators (AzerothCore, TrinityCore, VMaNGOS) all use MySQL/MariaDB with a three-database architecture: <code>auth</code> (account data, realm lists), <code>characters</code> (player saves, inventories, guild data), and <code>world</code> (static content like NPC spawns, item definitions, quest data). While Blizzard's production infrastructure is not public, the emulator architecture closely mirrors the original design. RuneScape's backend also historically used MySQL for player data storage.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>You want a battle-tested relational database with massive community support</li>
+    <li>Your game needs structured data with clear relationships between entities</li>
+    <li>You are comfortable with SQL and want something that "just works" for most use cases</li>
+    <li>Write volume fits on a single primary server (up to ~50K writes/sec with good hardware)</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>You need horizontal write scaling without application-level sharding logic</li>
+    <li>Your data model is highly dynamic and does not fit neatly into fixed schemas</li>
+    <li>You are building a global game that needs multi-region write capability</li>
+  </ul>
+
+
+  <!-- ========== POSTGRESQL ========== -->
+  <h2 id="postgresql">PostgreSQL</h2>
+  <h3>How It Works</h3>
+  <p>PostgreSQL is a relational database, like MySQL, but with a significantly richer feature set. It supports everything MySQL does (tables, joins, indexes, transactions) plus a bunch of advanced features that are genuinely useful for game development: JSONB columns for semi-structured data, built-in pub/sub via <code>LISTEN</code>/<code>NOTIFY</code>, full-text search, array columns, range types, and custom data types.</p>
+  <p>The core difference from MySQL is PostgreSQL's MVCC (Multi-Version Concurrency Control) implementation. When a transaction reads data, it sees a consistent snapshot of the database as of the transaction's start time. Readers never block writers and writers never block readers. This is critical for game servers where you might have one thread reading a player's inventory while another thread is updating it. In PostgreSQL, both operations proceed without locking conflicts.</p>
+
+  <h3>JSONB: Flexible Schema Within a Relational Database</h3>
+  <p>PostgreSQL's JSONB column type lets you store arbitrary JSON documents inside a relational table. This is extremely useful for game data that does not fit a fixed schema. Think player inventories where different item types have different properties, achievement metadata, quest progress with variable completion criteria, or equipment with randomized stat rolls.</p>
+  <p>You can index JSONB columns using GIN (Generalized Inverted Index) indexes, which makes querying into the JSON structure fast. Want to find all players who have a specific item in their inventory? GIN index on the inventory JSONB column, and PostgreSQL can answer that query efficiently.</p>
+  <p>The catch: JSONB columns have write amplification issues. PostgreSQL's MVCC works by creating new row versions rather than updating in place. When you update a single field inside a JSONB document, PostgreSQL writes a complete new copy of the entire row, including every index entry that points to it. For tables with large JSONB documents that get frequently updated, this can become a serious performance problem. The Heap-Only Tuple (HOT) optimization that helps with regular column updates does not apply to GIN-indexed JSONB fields.</p>
+
+  <h3>Pub/Sub for Game Events</h3>
+  <p>PostgreSQL's <code>LISTEN</code>/<code>NOTIFY</code> feature lets your game servers subscribe to named channels and receive notifications when something changes. A marketplace server can <code>LISTEN</code> on a channel and get notified whenever a new buy order is placed, without polling the database. This is simpler than setting up a separate message broker like RabbitMQ for basic event-driven patterns, though it does not scale as well as dedicated message queues under very high throughput.</p>
+
+  <h3>Performance Tuning for Game Workloads</h3>
+  <p>Key PostgreSQL tuning parameters for game servers: <code>shared_buffers</code> (typically 25% of available RAM), <code>effective_cache_size</code> (75% of RAM, tells the query planner how much OS cache to expect), <code>work_mem</code> (memory per sort/hash operation), and <code>max_connections</code> (keep this lower than you think and use a connection pooler like PgBouncer). PostgreSQL's thread-per-connection model is heavier than MySQL's, so connection pooling is even more important.</p>
+  <p>For read-heavy workloads, streaming replication to read replicas works well. For write scaling, the Citus extension (now part of Microsoft's Azure ecosystem) adds transparent sharding to PostgreSQL, distributing data across multiple nodes while maintaining the ability to run SQL queries across shards.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>Albion Online</strong> is the clearest example. Sandbox Interactive uses PostgreSQL for their marketplace database, gold market database, and accounts database. These are query-heavy systems where PostgreSQL's advanced SQL features, strong consistency, and indexing capabilities are more valuable than Cassandra's write throughput. The marketplace in particular needs complex queries (filter by item type, price range, seller, expiration time) that are natural to express in SQL but awkward in a key-value or wide-column store.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>You need complex queries beyond simple key-value lookups (marketplaces, auction houses, social features)</li>
+    <li>Your data model mixes structured relational data with semi-structured JSONB data</li>
+    <li>You want one database that can handle relational queries, full-text search, and pub/sub</li>
+    <li>Data correctness matters more than raw write throughput</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>You need extremely high write throughput and can tolerate eventual consistency</li>
+    <li>Your workload is purely key-value with no complex query requirements</li>
+    <li>You need seamless multi-region write capability without third-party extensions</li>
+  </ul>
+
+
+  <!-- ========== SQL SERVER ========== -->
+  <h2 id="sqlserver">SQL Server</h2>
+  <h3>How It Works</h3>
+  <p>Microsoft SQL Server is a commercial relational database that runs primarily on Windows (with a Linux version available since 2017). It provides the same relational model as MySQL and PostgreSQL but with enterprise features aimed at large-scale, high-availability deployments: In-Memory OLTP (formerly Hekaton) for tables that live entirely in RAM, AlwaysOn Availability Groups for automatic failover, and deep integration with Windows Server's memory and CPU management.</p>
+  <p>SQL Server's query optimizer is considered one of the best in the industry for complex analytical queries, and its tooling (SQL Server Management Studio, Profiler, Activity Monitor) gives detailed visibility into query performance and resource usage.</p>
+
+  <h3>EVE Online: The Definitive Case Study</h3>
+  <p>EVE Online's Tranquility cluster is the most documented example of SQL Server in game production. CCP Games has published detailed accounts of their database hardware evolution, and the numbers are staggering.</p>
+  <p>The current database servers run twin Intel Gold 6346 CPUs at 3.6GHz (64 cores total across 2 NUMA nodes) with <strong>4 TB of RAM</strong> and NVMe storage arrays that replaced racks of legacy 10K SAS disks and older SSDs. The entire EVE universe database fits in memory, which eliminates disk I/O as a bottleneck for read operations.</p>
+  <p>CCP maintains approximately <strong>15,000 open database connections</strong> from the game cluster to SQL Server at any given time. This created a serious NUMA (Non-Uniform Memory Access) problem: the previous hardware had 4 NUMA nodes, and SQL Server's connection management was causing one NUMA node to max out while the other three sat nearly idle. The fix turned out to be surprisingly simple. CCP changed their database connection pool from a stack (last-in, first-out) to a queue (first-in, first-out), which distributed load evenly across all NUMA nodes. The new hardware with only 2 NUMA nodes further reduced the problem.</p>
+  <p>Storage was another major evolution. CCP moved from traditional fiber channel disk arrays to SSDs, and eventually to a compact NVMe array. The result was effectively zero database lag for normal operations. Server startup and shutdown times dropped dramatically.</p>
+
+  <h3>Licensing Cost</h3>
+  <p>This is the big barrier. SQL Server Enterprise Edition costs approximately <strong>$15,123 per 2-core license pack</strong>, with a minimum of 4 cores per server. A 16-core server costs roughly $120,984 in licensing alone. A 64-core server like EVE's would cost approximately $483,936 per machine. Add Software Assurance for upgrade rights and unlimited virtualization, and you are looking at a very significant ongoing expense.</p>
+  <p>SQL Server Standard Edition is cheaper (~$3,945 per 2-core pack) but has memory limits (128 GB max buffer pool) that make it unsuitable for the kind of "put the entire database in RAM" approach that EVE uses. For a game studio, the licensing math often pushes teams toward PostgreSQL or MySQL unless they specifically need SQL Server's enterprise features or are already invested in the Microsoft ecosystem.</p>
+
+  <h3>NUMA Considerations</h3>
+  <p>SQL Server is NUMA-aware and distributes buffer cache pages across NUMA nodes so that threads can access locally-allocated memory. But as CCP discovered, the way your application uses connections can defeat this optimization. If your connection pool always hands out the most recently returned connection (a stack), you end up routing most traffic through one NUMA node. The fix is simple in concept (use a queue instead) but the problem is subtle enough that it took CCP years to diagnose.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>EVE Online</strong> is the primary example from our survey. CCP has been running on SQL Server since the game launched in 2003, progressing through multiple hardware generations. The combination of SQL Server's in-memory capabilities, strong ACID guarantees, and single-node performance makes it well-suited for EVE's single-shard architecture where all game data must be consistent and immediately available.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>You are building a single-shard game and can throw serious hardware at one database node</li>
+    <li>You need in-memory OLTP for latency-critical data access</li>
+    <li>Your team is already in the Microsoft ecosystem with Windows servers and .NET</li>
+    <li>You can afford the licensing costs (or qualify for a startup program)</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>You are an indie studio with a limited budget (licensing costs will eat you alive)</li>
+    <li>You want to run on Linux without any Windows infrastructure</li>
+    <li>You need horizontal scaling across many database nodes</li>
+    <li>Your game design requires multi-region write capability</li>
+  </ul>
+
+
+  <!-- ========== SQLITE ========== -->
+  <h2 id="sqlite">SQLite</h2>
+  <h3>How It Works</h3>
+  <p>SQLite is a relational database engine that runs inside your application process rather than as a separate server. The entire database lives in a single file on disk. There is no network protocol, no authentication, no separate daemon to manage. You link the SQLite library into your game binary, open a file, and run SQL queries against it. The library is about 700 KB and has zero external dependencies.</p>
+  <p>SQLite supports full ACID transactions, foreign keys, triggers, views, and most of the SQL standard. It is one of the most widely deployed pieces of software in existence, embedded in every Android phone, every iPhone, every major web browser, and most operating systems.</p>
+
+  <h3>WAL Mode</h3>
+  <p>By default, SQLite uses a rollback journal that locks the entire database during writes. WAL (Write-Ahead Logging) mode changes this so that reads and writes can proceed concurrently. In WAL mode, writes go to a separate WAL file, and readers continue to see the previous consistent state until the write commits. This dramatically improves performance for workloads with concurrent readers and occasional writers.</p>
+  <p>WAL mode has limitations: all processes accessing the database must be on the same machine (WAL does not work over network filesystems), the WAL file can grow unbounded if checkpointing is not managed, and the database must be writable (you cannot open a WAL-mode database read-only unless the WAL index files already exist).</p>
+
+  <h3>The Single-Writer Bottleneck</h3>
+  <p>SQLite can only handle one write operation at a time. Period. If two threads try to write simultaneously, one waits. For a single-player game saving progress, this is totally fine. For a small multiplayer server with 5-10 players where writes are infrequent, it is probably fine. For anything with frequent concurrent writes from many players, it becomes a serious problem.</p>
+  <p>A game server that needs to constantly update the state of hundreds of players (positions, inventories, health, quest progress) would be crippled by this single-writer constraint. Each write blocks all other writes, creating a bottleneck that scales linearly with player count.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>Minecraft Bedrock Edition</strong> does not use SQLite for world storage (it uses LevelDB), but many Minecraft server plugins and mods use SQLite for configuration and small data stores. Single-player games across the industry commonly use SQLite for save files. It is also widely used in mobile games on iOS and Android where each device needs a local database.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>Single-player game saves</li>
+    <li>Local data storage on mobile (player preferences, cached data, offline progress)</li>
+    <li>Development and prototyping (swap in a real database later)</li>
+    <li>Small multiplayer servers with fewer than ~20 concurrent players and infrequent writes</li>
+    <li>Static data like item definitions, map data, or localization strings</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>Any multiplayer game with significant concurrent write load</li>
+    <li>Any scenario requiring network access to the database from multiple machines</li>
+    <li>Any game that needs horizontal scaling</li>
+    <li>Production MMO servers of any size</li>
+  </ul>
+
+
+  <!-- ========== MONGODB ========== -->
+  <h2 id="mongodb">MongoDB</h2>
+  <h3>How It Works</h3>
+  <p>MongoDB is a document database. Instead of tables with fixed columns, you have collections of documents. Each document is a JSON-like object (stored internally as BSON, a binary JSON format) that can have any structure. A player document might contain their username, level, an array of inventory items (each with different properties), a nested object for quest progress, and a list of achievement timestamps. No two player documents need to have the same fields.</p>
+  <p>This flexibility is the core appeal for game development. Games are constantly adding new features, and each feature brings new data fields. With a relational database, adding a new column to a 10-million-row table requires a schema migration. With MongoDB, you just start writing documents with the new field, and old documents without it continue to work fine.</p>
+
+  <h3>Consistency and Transactions</h3>
+  <p>A common misconception is that MongoDB is "eventually consistent." This was closer to true in older versions, but modern MongoDB (4.0+) provides strong consistency for reads and writes to the primary node. Single-document operations are always atomic. Multi-document transactions have been supported since version 4.0, and cross-shard transactions since version 4.2. MongoDB is an ACID-compliant database when configured with appropriate write and read concerns.</p>
+  <p>The "eventual consistency" reputation comes from reading from secondary replicas, which are asynchronously replicated from the primary. If you read from a secondary, you might get stale data. For game logic that needs the latest state, you read from the primary. For analytics dashboards or social feeds where slight staleness is acceptable, reading from secondaries reduces load on the primary.</p>
+
+  <h3>Sharding</h3>
+  <p>MongoDB's built-in sharding distributes data across multiple replica sets automatically. A sharded cluster consists of shards (each a replica set holding a subset of data), mongos routers (which direct queries to the right shard), and config servers (which track which data lives where). You choose a shard key, and MongoDB distributes documents across shards based on that key.</p>
+  <p>Choosing a good shard key is critical. For player data, sharding by player ID distributes load evenly but makes queries like "find all players in region X" hit every shard. Sharding by geographic region keeps regional data together but can create hotspots if one region has more players. MongoDB supports location-based sharding through Atlas Global Clusters, which associates data with specific geographic zones.</p>
+
+  <h3>The Fortnite Outage: A Cautionary Tale</h3>
+  <p>On February 3-4, 2018, Fortnite experienced a major outage when concurrent users spiked to 3.4 million. The backend at the time relied on MongoDB sharding, Memcached caching, and XMPP messaging. The Matchmaking Control Plane was handling 124K requests/sec, the database was processing 318K reads/sec and 132K writes/sec, and the authentication system was handling 100K requests/sec.</p>
+  <p>The primary database shard for the MCP service could not handle the sudden surge. The resulting cascade took down matchmaking, authentication, and social features. Epic Games' post-mortem identified that their data was not properly shardable and they were prototyping in-memory database solutions as a fix. This is a real-world lesson that MongoDB (or any database) at massive scale requires careful shard key design and capacity planning.</p>
+
+  <h3>Which Games Use It</h3>
+  <p><strong>Fortnite</strong> used MongoDB for its primary player profile and matchmaking data, running 9 shards where each shard had a writer, two read replicas, and a hidden replica. MongoDB is also widely used in mobile games and session-based multiplayer games where the flexible document model maps naturally to player profiles and game session data.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>Player profiles with frequently changing schemas as you add game features</li>
+    <li>Session-based games where each match generates a variable-structure document</li>
+    <li>You need built-in horizontal scaling without managing sharding logic yourself</li>
+    <li>Your team is more comfortable with JSON documents than SQL tables</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>You need complex cross-collection queries with joins (MongoDB can do this with <code>$lookup</code>, but it is not what the system is optimized for)</li>
+    <li>Your data has strong relational structure that benefits from foreign keys and referential integrity</li>
+    <li>You need the absolute lowest write latency for real-time game state (the network round-trip to MongoDB still exists)</li>
+  </ul>
+
+  <div class="callout c-amber">
+    <div class="callout-title">"MongoDB is Web Scale"</div>
+    <p>The famous satirical video from 2010 mocked MongoDB's early marketing, which oversold its capabilities and downplayed its consistency tradeoffs. Modern MongoDB (v7+) is a genuinely capable database with ACID transactions, strong consistency on primaries, and production-proven sharding. The meme is outdated, but the underlying lesson remains: no database is magic, and understanding your consistency and scaling requirements matters more than marketing claims.</p>
+  </div>
+
+
+  <!-- ========== REDIS ========== -->
+  <h2 id="redis">Redis</h2>
+  <h3>How It Works</h3>
+  <p>Redis is an in-memory data structure store. All data lives in RAM, which is why Redis operations typically complete in under one millisecond. Unlike a traditional database where you store rows in tables, Redis stores data in typed structures: strings, hashes, lists, sets, sorted sets, bitmaps, and streams. Each structure has specialized commands optimized for specific operations.</p>
+  <p>The key insight with Redis is that it is not a general-purpose database replacement. It is a specialized tool that excels at specific patterns. You almost always use Redis alongside a primary database (PostgreSQL, MySQL, MongoDB), not instead of one.</p>
+
+  <h3>Game Server Use Cases</h3>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Caching</h4>
+      <p>Store frequently accessed data in Redis to avoid hitting your primary database. Player session data, item definitions, NPC stats, map metadata. The 80/20 rule applies: roughly 20% of data accounts for 80% of accesses. Caching that hot 20% in Redis can reduce primary database load dramatically.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Leaderboards</h4>
+      <p>Redis sorted sets are purpose-built for rankings. Each member has a score, and Redis maintains the sort order automatically. Adding a score, getting a player's rank, and fetching the top N players are all O(log N) operations. Real-time leaderboards with millions of entries and sub-millisecond updates.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Pub/Sub and Game Events</h4>
+      <p>Redis Pub/Sub lets game servers broadcast events to subscribers. A chat system, kill feed, auction notifications, or inter-server communication can all run through Redis channels. Subscribers receive messages in real time without polling. Redis Streams provide persistent message logs if you need guaranteed delivery.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Session Store</h4>
+      <p>Store player session data (auth tokens, current server, party membership) in Redis instead of on individual game servers. This eliminates "sticky sessions" when load-balancing across multiple game server instances. Any server can look up any player's session state in Redis.</p>
+    </div>
+  </div>
+
+  <h3>Persistence</h3>
+  <p>Although Redis is in-memory, it provides persistence options. RDB snapshots save a point-in-time copy of all data to disk at configured intervals. AOF (Append Only File) logs every write operation, providing stronger durability at the cost of more disk I/O. You can combine both methods. But persistence is not Redis's primary strength. If you need guaranteed durability for critical game data, that data should live in your primary database, with Redis serving as a fast cache layer.</p>
+
+  <h3>Scaling</h3>
+  <p>Redis Cluster distributes data across multiple nodes using hash slots. Each key is assigned to one of 16,384 hash slots, and slots are distributed across cluster nodes. This provides horizontal read and write scaling with automatic failover. Redis Enterprise adds Active-Active replication across data centers using CRDTs (Conflict-Free Replicated Data Types) for global games that need low-latency access from multiple regions.</p>
+
+  <h3>Which Games Use It</h3>
+  <p>Redis is used across the industry as a caching and session management layer. <strong>Roblox</strong> is known to use Redis caching extensively. Most major online games use Redis or a similar in-memory store (Memcached) alongside their primary database. It is rare to find a production multiplayer game at scale that does not use some form of in-memory caching.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>Always, as a caching layer alongside your primary database</li>
+    <li>Leaderboards, rankings, counters, rate limiting</li>
+    <li>Session state that needs to be shared across multiple game server instances</li>
+    <li>Real-time pub/sub for chat, notifications, or inter-server messaging</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>As your only database (data that matters needs durable storage)</li>
+    <li>For data that does not fit in RAM (Redis stores everything in memory, and memory is expensive)</li>
+    <li>Complex queries with filtering and aggregation (Redis is not a query engine)</li>
+  </ul>
+
+
+  <!-- ========== CASSANDRA ========== -->
+  <h2 id="cassandra">Apache Cassandra</h2>
+  <h3>How It Works</h3>
+  <p>Cassandra is a wide-column store, which sounds exotic but is conceptually similar to a hash table of hash tables. Data is organized into tables, but unlike a relational database, each row can have a different set of columns. Rows are identified by a partition key (which determines which node stores the data) and optional clustering keys (which determine the sort order within a partition).</p>
+  <p>Under the hood, Cassandra uses a Log-Structured Merge Tree (LSM tree) storage architecture. Writes go to an in-memory Memtable first (extremely fast), then periodically flush to immutable SSTables (Sorted String Tables) on disk. A commit log ensures durability in case the node crashes before a Memtable flush. This architecture is why Cassandra is so fast at writes: the write path never needs to read existing data from disk or update an index in place.</p>
+  <p>Cassandra is designed from the ground up for horizontal scaling. You add nodes to the cluster, and Cassandra automatically redistributes data using consistent hashing. There is no single master node. Every node can accept reads and writes for any data, routing requests to the appropriate replica nodes internally. This means there is no single point of failure, which is a big deal for a game that needs to stay up 24/7.</p>
+
+  <h3>Tunable Consistency</h3>
+  <p>Cassandra's consistency model is tunable on a per-query basis. When you write data, you specify a consistency level that determines how many replica nodes must acknowledge the write before it is considered successful. When you read data, you specify how many replicas must respond.</p>
+  <ul>
+    <li><strong>ONE:</strong> Only one replica must respond. Fastest, but you might read stale data if the node you hit has not received the latest write yet.</li>
+    <li><strong>QUORUM:</strong> A majority of replicas must respond. This guarantees you read the latest written value (assuming a replication factor of 3 and QUORUM for both reads and writes). Slower, but strongly consistent.</li>
+    <li><strong>ALL:</strong> Every replica must respond. Strongest consistency, but if any replica is down, the operation fails. Almost never used in production.</li>
+  </ul>
+  <p>Research using Probabilistically Bounded Staleness shows that even with consistency level ONE (the weakest), Cassandra typically converges within milliseconds. With a replication factor of 3, the first read after a write returns current data about 86% of the time immediately and 99% of the time within tens of milliseconds.</p>
+
+  <h3>Conflict Resolution</h3>
+  <p>When two writes to the same data happen on different nodes, Cassandra resolves the conflict using last-write-wins based on timestamps. This means your clocks matter. If node clocks are skewed, the "wrong" write can win. Running NTP (Network Time Protocol) across all Cassandra nodes is not optional.</p>
+
+  <h3>Albion Online's Architecture</h3>
+  <p>Albion Online is the clearest example of Cassandra in game production. Sandbox Interactive chose Cassandra as their primary game database because they needed a highly scalable NoSQL store for their single-world MMO. The team uses Cassandra for core game state (player inventories, positions, world objects) while keeping PostgreSQL for query-heavy systems like the marketplace.</p>
+  <p>Albion's approach leverages Cassandra's strengths: they configure slow reads but very fast writes, because most data is loaded into the game server's memory when a player logs in and written back asynchronously. The database is optimized for the write path, and reads only happen at session start or during server-to-server handoffs when a player moves between world clusters.</p>
+  <p>The Cassandra cluster can be expanded by adding nodes as the player base grows, with no downtime and no manual data migration. This horizontal scalability was a key factor in choosing Cassandra for a game designed to have every player in one shared world.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>Write-heavy workloads where game state is constantly being updated</li>
+    <li>You need horizontal scaling that handles growth by adding nodes, not buying bigger machines</li>
+    <li>High availability is critical and you cannot tolerate single points of failure</li>
+    <li>Your data access patterns are well-defined (Cassandra requires designing your data model around your queries)</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>You need ad-hoc queries with complex joins (Cassandra's query language, CQL, is deliberately limited)</li>
+    <li>Your workload is read-heavy with complex filtering (Cassandra is optimized for writes, not reads)</li>
+    <li>You need strong consistency without tuning (Cassandra defaults to eventual consistency)</li>
+    <li>Your team is small and you do not want to manage a distributed cluster</li>
+  </ul>
+
+
+  <!-- ========== DYNAMODB ========== -->
+  <h2 id="dynamodb">DynamoDB</h2>
+  <h3>How It Works</h3>
+  <p>DynamoDB is Amazon's fully managed NoSQL database service. You create a table, define a partition key (and optionally a sort key), and start reading and writing items. AWS handles everything else: provisioning, replication, backups, scaling, patching, and hardware failures. You never see a server. You never manage a disk. You never configure replication. It just works.</p>
+  <p>Each item in a DynamoDB table is a collection of attributes (similar to a MongoDB document but simpler). Items are identified by their primary key and can contain strings, numbers, binary data, lists, maps, and sets. Items can be up to 400 KB in size.</p>
+  <p>DynamoDB provides two consistency options per read: eventually consistent reads (the default, which may return slightly stale data but consume half the read capacity) and strongly consistent reads (which always return the latest data but cost twice as much). Writes are always strongly consistent on the primary.</p>
+
+  <h3>Capacity Modes</h3>
+  <p><strong>On-Demand:</strong> You pay per read and write request with no capacity planning. DynamoDB automatically scales to handle whatever traffic you throw at it. This is the simpler option and, since November 2024 when AWS cut on-demand pricing by 50%, it is now the recommended default for most workloads.</p>
+  <p><strong>Provisioned:</strong> You specify how many read and write capacity units per second you need, and pay a flat rate. Cheaper than on-demand for stable, predictable workloads. Auto-scaling can adjust provisioned capacity based on utilization, but there is a lag between traffic spikes and scale-up. Reserved capacity offers further discounts for committed usage.</p>
+
+  <h3>Global Tables</h3>
+  <p>DynamoDB Global Tables replicate data across multiple AWS regions with active-active replication. Players in US-East read from and write to the US-East replica; players in EU-West use the EU-West replica. Conflicts are resolved using last-writer-wins with timestamps. As of November 2024, AWS reduced Global Tables pricing by up to 67%, making multi-region replication significantly cheaper.</p>
+
+  <h3>New World: AWS-Native MMO Architecture</h3>
+  <p><strong>New World</strong> by Amazon Games is the primary example of DynamoDB in MMO production. The game writes approximately <strong>800,000 state updates every 30 seconds</strong> to DynamoDB. AWS Lambda functions power over 150 million invocations per minute for microservices including achievements, guilds, characters, sessions, and globally unique naming. The game logs 23 million events per minute through Kinesis into S3.</p>
+  <p>New World's architecture is fully cloud-native: DynamoDB for persistence, Lambda for compute, EC2 instances as application routers, and Kinesis/S3/Athena for analytics. This approach let Amazon Games scale to over 900,000 concurrent users during launch weekend without provisioning dedicated database hardware.</p>
+
+  <h3>Cost at Scale</h3>
+  <p>DynamoDB's cost scales with usage, which can be a double-edged sword. Read and write traffic is the biggest cost driver. Each Global Secondary Index multiplies write costs because every write to the base table generates a corresponding write to the GSI. Cross-region transfer fees in Global Tables deployments add up. At massive scale, DynamoDB bills can be significant, but you also avoid the operational cost of managing your own database infrastructure.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>You are building on AWS and want zero database operations overhead</li>
+    <li>You need predictable single-digit millisecond latency at any scale</li>
+    <li>Your data access patterns are simple (get item by key, query by partition + sort key)</li>
+    <li>You need multi-region active-active replication with minimal configuration</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>You need complex queries, joins, or aggregations (DynamoDB is a key-value store at heart)</li>
+    <li>You want to avoid vendor lock-in to AWS</li>
+    <li>Your item sizes exceed 400 KB (hard limit per item)</li>
+    <li>You want to run your database locally without cloud dependency (DynamoDB Local exists for dev but is not production-grade)</li>
+  </ul>
+
+
+  <!-- ========== SPACETIMEDB ========== -->
+  <h2 id="spacetimedb">SpacetimeDB</h2>
+  <h3>How It Works</h3>
+  <p>SpacetimeDB takes a radically different approach: the database <em>is</em> the server. In a traditional game architecture, you have game servers that hold state in memory, a database that persists state to disk, and a network layer between them. SpacetimeDB collapses all three into one. You write your game logic as Rust (or TypeScript) modules that run inside the database engine itself. These modules have direct, in-process access to relational tables with no network round-trip.</p>
+  <p>Clients connect directly to the SpacetimeDB instance via WebSocket and invoke "reducers," which are transactional functions that can read and write tables, execute game logic, and return results. Reducers are atomic, isolated, and durable, similar to stored procedures but designed for real-time game logic rather than batch data processing.</p>
+
+  <h3>Eliminating the ORM and Networking Layer</h3>
+  <p>In a traditional setup, your game server talks to the database over the network. Every database query involves serialization, network transfer, deserialization, query parsing, execution, result serialization, network transfer back, and deserialization again. This round-trip adds latency even on a local network, and it means your game logic and your data live in separate processes with separate memory spaces.</p>
+  <p>SpacetimeDB eliminates this entirely. Game logic runs in the same process as the data, accessing tables through direct memory reads. There is no ORM mapping objects to rows, no connection pool to manage, no network serialization between server and database. The BSATN (Binary SpacetimeDB Algebraic Type Notation) wire format handles serialization only for client-to-server communication, not for internal data access.</p>
+
+  <h3>Subscription Queries</h3>
+  <p>SpacetimeDB provides real-time data synchronization through subscription queries. A client subscribes to a SQL query (like "SELECT * FROM players WHERE region = 'forest'"), and SpacetimeDB pushes transactional updates whenever the result set changes. This replaces the typical game networking pattern of custom packet definitions, delta compression, and state interpolation with a declarative model: tell the database what data you care about, and it keeps you updated.</p>
+
+  <h3>Performance</h3>
+  <p>SpacetimeDB achieves over <strong>100,000 transactions per second</strong> for TypeScript modules and up to <strong>170,000 transactions per second</strong> for Rust modules. This performance comes from holding all application state in memory and persisting through a write-ahead log (WAL) that is used for recovery, not for real-time access. The system is optimized for many small transactions with low latency rather than batch processing.</p>
+
+  <h3>BitCraft Online</h3>
+  <p><strong>BitCraft Online</strong>, developed by Clockwork Labs (the same team behind SpacetimeDB), is a survival crafting MMO built entirely on SpacetimeDB. The game has no traditional server infrastructure. Everything in the game, including chat, items, resources, terrain, buildings, and player positions, is stored and processed by SpacetimeDB modules and synchronized to clients in real time. BitCraft requires more persistence than a typical MMO because the entire world is player-editable, so terrain deformation, building placement, and resource depletion all need to be stored and replicated.</p>
+
+  <h3>Licensing</h3>
+  <p>SpacetimeDB is source-available under the Business Source License 1.1 (BSL 1.1). This means you can read and modify the source code, but there are restrictions on commercial use. It is not open source in the OSI-approved sense. Clockwork Labs offers hosted SpacetimeDB services for teams that do not want to self-host.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>You are a small team building a multiplayer game and do not want to manage separate server and database infrastructure</li>
+    <li>Your game logic is naturally transactional (trades, inventory changes, combat resolution)</li>
+    <li>You want real-time state synchronization without building custom networking code</li>
+    <li>You are comfortable with Rust or TypeScript for server-side logic</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>You need horizontal scaling across multiple machines (SpacetimeDB currently runs as a single module)</li>
+    <li>You need a database with decades of production track record (SpacetimeDB hit 1.0 in 2024)</li>
+    <li>Your game requires custom networking optimizations (UDP, delta compression, client-side prediction) that do not fit the subscription query model</li>
+    <li>You are uncomfortable with BSL licensing and want fully open-source infrastructure</li>
+  </ul>
+
+  <div class="callout c-purple">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>SpacetimeDB is the most interesting option on this list for a small team building an MMO. It eliminates the need to build separate game servers, database infrastructure, and networking code. The tradeoff is that it is new, the scaling story for truly massive player counts is unproven, and the BSL license means you are somewhat dependent on Clockwork Labs. For a project like Wompworld that needs persistent ocean world state with player-driven economies, the "database is the server" model deserves serious prototyping time before committing to a traditional architecture.</p>
+  </div>
+
+
+  <!-- ========== LEVELDB / ROCKSDB ========== -->
+  <h2 id="leveldb">LevelDB / RocksDB</h2>
+  <h3>How It Works</h3>
+  <p>LevelDB and RocksDB are embedded key-value stores. "Embedded" means they run as a library inside your application process, not as a separate server. You link the library, open a database directory, and read/write key-value pairs. There is no SQL, no query language, no network protocol. You put bytes in with a key, and you get bytes out with the same key. That is the entire API.</p>
+  <p>Both use a Log-Structured Merge Tree (LSM tree) storage architecture, which is the same general approach that Cassandra uses. Writes go to an in-memory buffer (MemTable), which periodically flushes to sorted, immutable files on disk (SSTables). Background compaction merges SSTables to maintain read performance and reclaim space from deleted entries.</p>
+
+  <h3>LevelDB vs RocksDB</h3>
+  <p>LevelDB was created by Jeff Dean and Sanjay Ghemawat at Google and is optimized for simplicity and correctness. RocksDB is a fork created at Facebook that adds multi-threaded compaction, column families, and various optimizations for SSD storage and high-throughput server workloads. RocksDB is generally faster and more configurable, but also more complex.</p>
+  <p>LevelDB is the better choice for embedded use in game clients where simplicity and small binary size matter. RocksDB is better for server-side use where you need maximum write throughput and can tune compaction settings.</p>
+
+  <h3>Minecraft Bedrock Edition</h3>
+  <p><strong>Minecraft Bedrock Edition</strong> uses a modified version of LevelDB for world storage. Mojang forked Google's LevelDB to add Zlib compression and Windows support (available at <code>github.com/Mojang/leveldb-mcpe</code>). The entire world is stored in a LevelDB database in the <code>db/</code> subdirectory of each world save.</p>
+  <p>The key structure is clever: chunk data is keyed by the chunk's X and Z coordinates (as 32-bit little-endian integers), an optional dimension identifier (1 for Nether, 2 for End, omitted for Overworld), and a tag byte indicating the record type (sub-chunk blocks, entities, block entities, etc.). This means looking up all data for a specific chunk is a simple key prefix scan, which LSM trees handle efficiently.</p>
+  <p>Non-spatial data like player information and village data uses text-encoded keys. The whole system is fast, compact, and requires zero configuration, which makes it well-suited for a game that runs on everything from phones to game consoles to PCs.</p>
+
+  <h3>RocksDB in Server Infrastructure</h3>
+  <p>While RocksDB is not commonly used as a primary game database, it appears as a storage engine inside other systems that games use. Apache Kafka uses RocksDB for state stores in Kafka Streams. Apache Flink uses it for checkpoints. CockroachDB and TiDB use RocksDB as their underlying storage engine. If you are using any of these systems in your game infrastructure, RocksDB is doing work under the hood.</p>
+
+  <h3>When to Use It</h3>
+  <ul>
+    <li>You need fast, embedded key-value storage inside a game client or dedicated server process</li>
+    <li>Your data is naturally key-addressable (world chunks by coordinates, player saves by ID)</li>
+    <li>You want zero infrastructure overhead (no separate database server to manage)</li>
+    <li>You are building a voxel/sandbox game that needs efficient chunk storage</li>
+  </ul>
+
+  <h3>When to Avoid It</h3>
+  <ul>
+    <li>You need queries more complex than get/put/iterate-range</li>
+    <li>Multiple processes need to access the same database simultaneously (LevelDB supports only one process)</li>
+    <li>You need network access to the data from multiple machines</li>
+    <li>You need relational features like joins, indexes on multiple fields, or transactions spanning many keys</li>
+  </ul>
+
+
+  <!-- ========== CHOOSING A DATABASE ========== -->
+  <h2 id="choosing">Choosing a Database for Your Game</h2>
+  <p>The decision tree for game databases is simpler than it looks. Start with these questions:</p>
+
+  <h3>1. What kind of data are you storing?</h3>
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Structured with Relationships</h4>
+      <p>Player accounts linked to characters, characters linked to inventories, inventories linked to items. If your data has clear foreign key relationships and you need to query across them, use a relational database: <strong>PostgreSQL</strong> (free, flexible) or <strong>MySQL/MariaDB</strong> (free, simpler). Use <strong>SQL Server</strong> if you have the budget and need maximum single-node performance.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Flexible / Schema-Light</h4>
+      <p>Player profiles where every player has different achievements, settings, and equipment. If your data model changes frequently and you do not need complex joins, use <strong>MongoDB</strong> or <strong>DynamoDB</strong>. MongoDB if you want to self-host, DynamoDB if you are on AWS and want zero ops.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Write-Heavy State Updates</h4>
+      <p>Constant position updates, health changes, resource ticks. If you have extremely high write volumes and can tolerate eventual consistency, use <strong>Cassandra</strong>. If you want the database and server combined, evaluate <strong>SpacetimeDB</strong>.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Chunk / Blob Storage</h4>
+      <p>Voxel world data, procedurally generated terrain, large binary objects keyed by spatial coordinates. Use <strong>LevelDB</strong> (embedded in client) or <strong>RocksDB</strong> (embedded in server).</p>
+    </div>
+  </div>
+
+  <h3>2. How many concurrent writers do you need to support?</h3>
+  <ul>
+    <li><strong>1 writer:</strong> SQLite is fine. Simplest possible setup.</li>
+    <li><strong>Hundreds:</strong> MySQL, PostgreSQL, or SQL Server on a single well-tuned machine.</li>
+    <li><strong>Thousands+:</strong> MongoDB (sharded), Cassandra (distributed), DynamoDB (managed), or Redis (in-memory) alongside a primary store.</li>
+  </ul>
+
+  <h3>3. How much can you spend?</h3>
+  <ul>
+    <li><strong>$0:</strong> PostgreSQL, MySQL/MariaDB, SQLite, Cassandra, Redis, LevelDB/RocksDB are all free to run on your own hardware.</li>
+    <li><strong>Pay-per-use:</strong> DynamoDB, MongoDB Atlas. No upfront cost, but bills scale with usage.</li>
+    <li><strong>Enterprise budget:</strong> SQL Server Enterprise. High upfront cost, but unmatched single-node performance for the right workload.</li>
+    <li><strong>Source-available:</strong> SpacetimeDB (BSL 1.1). Free to use within license terms, hosted option available.</li>
+  </ul>
+
+  <h3>4. Do you need multi-region?</h3>
+  <p>If your players are spread across continents and latency matters, your options narrow. <strong>DynamoDB Global Tables</strong> and <strong>Cassandra</strong> provide native multi-region replication. <strong>MongoDB Atlas</strong> offers global clusters. <strong>Redis Enterprise</strong> provides Active-Active replication. Most other databases require manual setup for cross-region replication.</p>
+
+  <div class="callout c-green">
+    <div class="callout-title">The Polyglot Persistence Approach</div>
+    <p>Most production games use multiple databases. A common pattern: <strong>PostgreSQL or MySQL</strong> for accounts and marketplace data, <strong>Cassandra or DynamoDB</strong> for high-volume game state, <strong>Redis</strong> for caching and leaderboards, and maybe <strong>LevelDB</strong> for local world storage on the client. This is not overengineering. Each database is doing the job it was designed for. The complexity cost of running multiple databases is usually lower than the performance cost of forcing one database to do everything.</p>
+  </div>
+
+
+  <!-- ========== SOURCES ========== -->
+  <h2 id="sources">Sources</h2>
+  <div class="sources">
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://www.eveonline.com/news/view/a-history-of-eve-database-server-hardware" target="_blank">A History of EVE Database Server Hardware</a>
+        <div class="source-desc">CCP Games' detailed account of Tranquility's database evolution: NUMA problems, 4TB RAM servers, NVMe migration, and the stack-to-queue connection pool fix.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://aws.amazon.com/blogs/gametech/the-unique-architecture-behind-amazon-games-seamless-mmo-new-world/" target="_blank">The Unique Architecture Behind Amazon Games' Seamless MMO New World</a>
+        <div class="source-desc">AWS technical blog on New World's cloud-native architecture: 800K DynamoDB writes per 30 seconds, 150M Lambda invocations per minute, 23M logged events per minute.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://www.fortnite.com/news/postmortem-of-service-outage-at-3-4m-ccu" target="_blank">Postmortem of Service Outage at 3.4M CCU</a>
+        <div class="source-desc">Epic Games' post-mortem of the February 2018 Fortnite outage. Details on MongoDB shard configuration, MCP throughput numbers, and cascading failure analysis.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-talk">TALK</span>
+      <div class="source-info">
+        <a href="https://davidsalz.de/wp-content/uploads/2016/06/Albion-Online-Quo-Vadis-2016-talk.pdf" target="_blank">Albion Online: Software Architecture of an MMO (Quo Vadis 2016)</a>
+        <div class="source-desc">David Salz (CTO, Sandbox Interactive) on Albion's architecture: Cassandra for game DB, PostgreSQL for marketplace/accounts, single-threaded cluster servers, database I/O threading model.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-docs">DOCS</span>
+      <div class="source-info">
+        <a href="https://spacetimedb.com/docs/" target="_blank">SpacetimeDB Documentation</a>
+        <div class="source-desc">Official documentation covering modules, reducers, subscription queries, BSATN format, and the "database is the server" architecture. Includes Rust and TypeScript quickstarts.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://spacetimedb.com/blog/introducing-spacetimedb-1-0" target="_blank">Introducing SpacetimeDB 1.0</a>
+        <div class="source-desc">Clockwork Labs announcement of SpacetimeDB 1.0. Performance benchmarks showing 170K TPS for Rust modules, BitCraft Online case study, and architectural overview.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-wiki">WIKI</span>
+      <div class="source-info">
+        <a href="https://minecraft.wiki/w/Bedrock_Edition_level_format" target="_blank">Minecraft Wiki: Bedrock Edition Level Format</a>
+        <div class="source-desc">Technical documentation of Minecraft Bedrock's LevelDB world storage: key structure for chunk data, dimension encoding, sub-chunk indexing, and entity storage.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://prdeving.wordpress.com/2023/09/29/mmo-architecture-source-of-truth-dataflows-i-o-bottlenecks-and-how-to-solve-them/" target="_blank">MMO Architecture: Source of Truth, Dataflows, I/O Bottlenecks and How to Solve Them</a>
+        <div class="source-desc">Deep dive into the fundamental database I/O challenge in MMO design: why the database is always the bottleneck, data caching strategies, and asynchronous persistence patterns.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-article">ARTICLE</span>
+      <div class="source-info">
+        <a href="https://redis.io/industries/gaming/" target="_blank">Redis for Gaming</a>
+        <div class="source-desc">Redis official gaming page covering leaderboard implementation with sorted sets, session management, caching patterns, and Active-Active replication for global games.</div>
+      </div>
+    </div>
+
+    <div class="source-item">
+      <span class="source-type st-docs">DOCS</span>
+      <div class="source-info">
+        <a href="https://cassandra.apache.org/doc/latest/cassandra/architecture/guarantees.html" target="_blank">Apache Cassandra Architecture: Guarantees</a>
+        <div class="source-desc">Official Cassandra documentation on consistency guarantees, tunable consistency levels, replication, fault tolerance, and the write path through commit log, memtable, and SSTable.</div>
+      </div>
+    </div>
+
+  </div>
+
+
+  <!-- NAV -->
+  <div class="game-nav">
+    <a href="wiki-languages.html">
+      <span class="dir">Previous</span>
+      <span class="name">Languages</span>
+    </a>
+    <a class="next" href="wiki-networking.html">
+      <span class="dir">Next</span>
+      <span class="name">Networking</span>
+    </a>
+  </div>
+
+</div>
+
+<!-- TOC HIGHLIGHT SCRIPT -->
+<script>
+(function(){
+  const toc = document.querySelector('.toc');
+  if (!toc) return;
+  const links = Array.from(toc.querySelectorAll('a'));
+  const ids = links.map(a => a.getAttribute('href').slice(1));
+  function update(){
+    let current = ids[0];
+    for (const id of ids){
+      const el = document.getElementById(id);
+      if (el && el.getBoundingClientRect().top <= 100) current = id;
+    }
+    links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + current));
+  }
+  window.addEventListener('scroll', update, {passive:true});
+  update();
+})();
+</script>
+
+</body>
+</html>

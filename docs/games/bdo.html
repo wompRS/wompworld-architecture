@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black Desert Online - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Black Desert Online</div>
+  <h1>Black Desert Online</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Channel-Based Sharding</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Action MMORPG</span>
+  </div>
+  <p class="lead">A seamless open-world MMO built on Pearl Abyss's proprietary engine, featuring real-time action combat, a player-driven economy via the Central Market, and large-scale siege warfare that has historically pushed its server infrastructure to the breaking point.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Pearl Abyss</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2015 (KR)</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">~250K</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">Black Desert Engine</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">~20-30 Hz</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Channel / One World</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <h2 id="overview">Overview</h2>
+  <p>Black Desert Online runs on a custom proprietary engine built from scratch by Pearl Abyss founder Kim Dae-il, who made the deliberate decision to build in-house rather than license an existing engine. The studio was founded in 2010, and the engine was developed alongside the game itself, optimized specifically for seamless open-world streaming and the fast rendering demands of large-scale PvP with hundreds of characters on screen.</p>
+  <p>The game uses a <strong>"One World" server model</strong> where each geographic region (NA, EU, KR, etc.) is a single logical world. Within that world, players can freely switch between multiple <strong>channels</strong>, which are parallel instances of the same persistent game world. Characters, inventories, and progression are shared across all channels in a region. This is distinct from traditional "server" selection seen in older MMOs, where characters were locked to a specific shard.</p>
+  <p>The engine prioritizes <strong>client-side prediction</strong> for its action combat system, which requires frame-precise inputs for dodging, combos, and grab moves. This design choice makes the combat feel responsive at the cost of introducing desync problems during large-scale PvP, where the gap between what the client predicts and what the server confirms becomes painfully visible.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Seamless Streaming</h4>
+      <p>The world loads continuously as the player moves. No zone boundaries, no loading screens between regions. The engine uses spatial partitioning to stream terrain, objects, and NPCs in and out of memory based on proximity. Only instanced content like certain dungeons triggers a loading screen.</p>
+    </div>
+    <div class="info-card c-orange">
+      <h4>Action Combat Netcode</h4>
+      <p>Combat uses client-side prediction with server reconciliation. Player inputs are processed locally for instant feedback, then verified by the server. The gap between client state and server state is the root cause of desync in PvP, especially at high player density or across high-latency connections.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Channel Architecture</h4>
+      <p>Each region runs dozens of channels. Players pick a channel on login and can swap freely (with a short cooldown). Channel swaps are blocked during world boss spawns and near node war start times. Special "Siege" and "Node War" channels exist for scheduled PvP events.</p>
+    </div>
+    <div class="info-card c-purple">
+      <h4>Global Self-Publishing</h4>
+      <p>Pearl Abyss originally licensed publishing to regional partners (Kakao Games for NA/EU, GameNet for Russia). By 2021, Pearl Abyss took over self-publishing worldwide, unifying the update pipeline and reducing the content gap between regions.</p>
+    </div>
+  </div>
+
+  <!-- DIAGRAM -->
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 860 620">
+      <!-- BACKGROUND GROUPS -->
+      <rect x="10" y="10" width="840" height="130" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="35" class="group-label">CLIENT LAYER</text>
+
+      <rect x="10" y="160" width="840" height="140" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="185" class="group-label">GATEWAY &amp; ROUTING</text>
+
+      <rect x="10" y="320" width="840" height="150" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="345" class="group-label">GAME SERVERS (CHANNELS)</text>
+
+      <rect x="10" y="490" width="840" height="120" rx="12" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="30" y="515" class="group-label">PERSISTENCE &amp; SERVICES</text>
+
+      <!-- PLAYERS -->
+      <rect x="60" y="55" width="120" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="120" y="77" text-anchor="middle" class="box-label">PC Client</text>
+
+      <rect x="220" y="55" width="120" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="280" y="77" text-anchor="middle" class="box-label">Console Client</text>
+
+      <rect x="380" y="55" width="130" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="445" y="77" text-anchor="middle" class="box-label">Mobile (BDM)</text>
+
+      <rect x="560" y="55" width="130" height="36" rx="16" fill="var(--surface)" stroke="var(--cyan)" stroke-width="1.5" class="box"/>
+      <text x="625" y="77" text-anchor="middle" class="box-label">BD+ Companion</text>
+
+      <!-- AUTH / LOGIN -->
+      <rect x="140" y="195" width="160" height="44" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5" class="box"/>
+      <text x="220" y="215" text-anchor="middle" class="box-label">Auth / Login Server</text>
+      <text x="220" y="229" text-anchor="middle" class="box-sub">Account, Family, Region</text>
+
+      <!-- CHANNEL ROUTER -->
+      <polygon points="510,195 570,217 510,239 450,217" fill="var(--surface)" stroke="var(--green)" stroke-width="1.5"/>
+      <text x="510" y="220" text-anchor="middle" class="box-label">Channel Router</text>
+
+      <!-- CDN -->
+      <rect x="680" y="195" width="130" height="44" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="745" y="215" text-anchor="middle" class="box-label">CDN / Patcher</text>
+      <text x="745" y="229" text-anchor="middle" class="box-sub">Asset Delivery</text>
+
+      <!-- GAME CHANNELS -->
+      <rect x="40" y="360" width="145" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="112" y="382" text-anchor="middle" class="box-label">Channel Balenos-1</text>
+      <text x="112" y="396" text-anchor="middle" class="box-sub">Open World Instance</text>
+
+      <rect x="205" y="360" width="145" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="277" y="382" text-anchor="middle" class="box-label">Channel Balenos-2</text>
+      <text x="277" y="396" text-anchor="middle" class="box-sub">Open World Instance</text>
+
+      <rect x="370" y="360" width="145" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="442" y="382" text-anchor="middle" class="box-label">Node War Ch</text>
+      <text x="442" y="396" text-anchor="middle" class="box-sub">Siege / NW PvP</text>
+
+      <rect x="535" y="360" width="145" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="607" y="382" text-anchor="middle" class="box-label">Season Channel</text>
+      <text x="607" y="396" text-anchor="middle" class="box-sub">Seasonal Server</text>
+
+      <rect x="700" y="360" width="130" height="50" rx="8" fill="var(--surface)" stroke="var(--orange)" stroke-width="1.5" class="box"/>
+      <text x="765" y="382" text-anchor="middle" class="box-label">Arsha (PvP) Ch</text>
+      <text x="765" y="396" text-anchor="middle" class="box-sub">Open PvP Channel</text>
+
+      <!-- DATABASE / SERVICES -->
+      <!-- Central Market -->
+      <rect x="40" y="530" width="150" height="50" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="115" y="552" text-anchor="middle" class="box-label">Central Market</text>
+      <text x="115" y="566" text-anchor="middle" class="box-sub">Order / Price Engine</text>
+
+      <!-- Player DB -->
+      <path d="M280,530 L280,535 Q280,545 310,545 L340,545 Q370,545 370,535 L370,530 L370,565 Q370,575 340,575 L310,575 Q280,575 280,565 Z" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="325" cy="530" rx="45" ry="10" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="325" y="558" text-anchor="middle" class="box-label">Player DB</text>
+
+      <!-- World State DB -->
+      <path d="M430,530 L430,535 Q430,545 460,545 L490,545 Q520,545 520,535 L520,530 L520,565 Q520,575 490,575 L460,575 Q430,575 430,565 Z" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <ellipse cx="475" cy="530" rx="45" ry="10" fill="var(--surface)" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="475" y="558" text-anchor="middle" class="box-label">World State</text>
+
+      <!-- Worker / Node Manager -->
+      <rect x="570" y="530" width="130" height="50" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="635" y="552" text-anchor="middle" class="box-label">Worker/Node Mgr</text>
+      <text x="635" y="566" text-anchor="middle" class="box-sub">Background Tasks</text>
+
+      <!-- Boss Sync -->
+      <rect x="720" y="530" width="120" height="50" rx="8" fill="var(--surface)" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3" class="box"/>
+      <text x="780" y="552" text-anchor="middle" class="box-label">Boss Sync Svc</text>
+      <text x="780" y="566" text-anchor="middle" class="box-sub">Cross-Channel HP</text>
+
+      <!-- ARROWS -->
+      <!-- Clients to Auth -->
+      <line x1="120" y1="91" x2="190" y2="195" class="arrow"/>
+      <line x1="280" y1="91" x2="230" y2="195" class="arrow"/>
+      <text x="140" y="148" class="arrow-label">LOGIN</text>
+
+      <!-- Clients to Channel Router -->
+      <line x1="445" y1="91" x2="500" y2="197" class="arrow"/>
+      <line x1="625" y1="91" x2="530" y2="197" class="arrow"/>
+      <text x="490" y="148" class="arrow-label">CH SELECT</text>
+
+      <!-- Auth to Channel Router -->
+      <line x1="300" y1="217" x2="450" y2="217" class="arrow"/>
+      <text x="370" y="210" class="arrow-label">SESSION TOKEN</text>
+
+      <!-- Channel Router to Channels -->
+      <line x1="480" y1="239" x2="112" y2="360" class="arrow"/>
+      <line x1="500" y1="239" x2="277" y2="360" class="arrow"/>
+      <line x1="510" y1="239" x2="442" y2="360" class="arrow"/>
+      <line x1="530" y1="239" x2="607" y2="360" class="arrow"/>
+      <line x1="545" y1="239" x2="765" y2="360" class="arrow"/>
+
+      <!-- Channels to DBs -->
+      <line x1="112" y1="410" x2="115" y2="530" class="arrow"/>
+      <line x1="277" y1="410" x2="325" y2="530" class="arrow"/>
+      <line x1="442" y1="410" x2="475" y2="520" class="arrow"/>
+      <line x1="607" y1="410" x2="635" y2="530" class="arrow"/>
+      <line x1="765" y1="410" x2="780" y2="530" class="arrow"/>
+      <text x="200" y="475" class="arrow-label">STATE READ/WRITE</text>
+
+    </svg>
+    <div class="diagram-caption">BDO's channel-based architecture: a single region shares player data, market, and world boss state across all channels</div>
+  </div>
+
+  <!-- INFRASTRUCTURE -->
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Pearl Abyss operates BDO's servers across multiple geographic regions. The NA/EU infrastructure was historically hosted through Leaseweb, a provider that became a point of significant community criticism due to performance issues during peak load events like sieges. When Pearl Abyss took over self-publishing from Kakao Games in February 2021, they consolidated the publishing pipeline but the underlying hosting situation evolved only gradually.</p>
+
+  <h3>The One World System</h3>
+  <p>Each region (NA, EU, KR, JP, SEA, etc.) is a single logical "world." A player's family (account) exists across all channels within that region. Characters, warehouse storage, the Central Market, guild data, and contribution/energy points are all shared. You can switch channels freely with a 15-minute cooldown, and your character stays exactly where they were geographically.</p>
+
+  <h3>Channel Types</h3>
+  <ul>
+    <li><strong>Standard Channels (Balenos-1, Serendia-2, etc.):</strong> Normal PvE/PvP channels with karma penalties for open-world killing.</li>
+    <li><strong>Season Channels:</strong> Restricted to seasonal characters with boosted progression, separate from main servers but sharing the same persistent world data.</li>
+    <li><strong>Arsha (PvP) Channel:</strong> No karma penalties for killing other players. Popular for contested grind spots.</li>
+    <li><strong>Node War / Siege Channels:</strong> Dedicated channels that host scheduled large-scale PvP. Non-participants may be kicked from these channels before war starts.</li>
+    <li><strong>Olvia Channels:</strong> Boosted XP channels restricted to new or returning players.</li>
+  </ul>
+
+  <h3>Hosting and Provider Issues</h3>
+  <p>The NA/EU servers ran on Leaseweb infrastructure during the Kakao Games publishing era. Community investigations found Leaseweb to be among the lowest-rated hosting providers for game servers. Despite thousands of players reporting lag, desync, and disconnections, Kakao initially blamed individual ISPs rather than acknowledging server-side problems. This was a persistent source of frustration, especially during large-scale PvP.</p>
+
+  <div class="callout c-red">
+    <div class="callout-title">The Valencia Siege Incident (March 2018)</div>
+    <p>27 guilds placed forts in the Valencia region for what became the largest siege in BDO history across all regions. Over 1,400 players were present on a single battlefield. When the siege started, approximately 95% of participants were disconnected. For the next 90 minutes, gameplay consisted of logging in, walking a few meters, and getting disconnected again. This event became a rallying point for infrastructure complaints.</p>
+  </div>
+
+  <!-- NETWORKING -->
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>BDO's networking is built around the demands of its action combat system. The game uses a hybrid approach where the client handles input prediction and animation locally while the server performs authoritative state validation. This is fundamentally different from tab-target MMOs where the server can process everything at a leisurely pace.</p>
+
+  <h3>Client-Side Prediction</h3>
+  <p>When a player executes a combo or dodge, the client plays the animation immediately and sends the action to the server. The server validates the action, checks cooldowns and resource costs, and either confirms or rejects it. In most cases, the server confirms and the player never notices the round trip. In high-latency or high-load scenarios, the server may reject actions the client already showed, creating visible desync.</p>
+
+  <table class="proto">
+    <thead>
+      <tr><th>System</th><th>Authority</th><th>Update Rate</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Movement</td><td>Client-predicted, server-validated</td><td>~20-30 Hz</td><td>Client sends position; server checks for speed hacks</td></tr>
+      <tr><td>Combat Hits</td><td>Server-authoritative</td><td>~20-30 Hz</td><td>Damage calculated server-side after client reports hit</td></tr>
+      <tr><td>Skill Usage</td><td>Client-predicted</td><td>Per action</td><td>Animation plays instantly; server confirms/denies</td></tr>
+      <tr><td>World Bosses</td><td>Server-authoritative</td><td>Cross-channel sync</td><td>HP shared across all channels via boss sync service</td></tr>
+      <tr><td>Central Market</td><td>Server-authoritative</td><td>Async queue</td><td>Orders processed in queue; prices update periodically</td></tr>
+      <tr><td>Worker/Nodes</td><td>Server-authoritative</td><td>Background tick</td><td>Worker cycles run server-side on timers</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Desync in PvP</h3>
+  <p>Desync has been the single most persistent technical complaint in BDO's history. In large-scale PvP, the gap between what your client shows and what the server actually computed becomes significant. Players routinely report being grabbed by enemies who appear to be facing the wrong direction, taking damage from attacks that visually missed, or having their own attacks fail to register despite showing hit effects on screen.</p>
+  <p>The root cause is the combination of fast-paced action combat (which demands client-side prediction for responsiveness) with high player density (which overwhelms server tick rates). Pearl Abyss has made incremental improvements over the years, including reducing unnecessary packet data and optimizing server-side processing, but the fundamental tension between responsiveness and accuracy persists.</p>
+
+  <!-- DATA -->
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>BDO persists a staggering amount of data per player. Each "family" (account) contains multiple characters, each with their own gear, skill builds, and lifeskill levels. On top of that, the family shares contribution points, energy, warehouse storage across cities, worker empires, node investments, horse stables, fairy companions, and garden plots.</p>
+
+  <h3>Central Market</h3>
+  <p>The Central Market replaced the older territory-based Marketplace in a major architectural overhaul. The old system used a lottery-based bidding mechanism for high-value items: when something was listed above 3 million silver, it entered a bidding phase where the winner was selected randomly. This was territory-restricted, requiring players to be in the right city.</p>
+  <p>The new Central Market is a centralized order-book system. Players place buy orders at a chosen price, and when a seller lists at that price, orders are fulfilled in queue order. Prices float dynamically within a band (base price +/- 7.5%), and the base price itself shifts based on supply and demand. The market is accessible from anywhere via the ESC menu and even from the Black Desert+ mobile companion app while offline.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-amber">
+      <h4>Worker Empire System</h4>
+      <p>Workers are NPCs assigned to resource nodes. They run on server-side timers, cycling between nodes to gather materials and return them to city warehouses. Worker quality (white/green/blue/yellow) affects cycle time and yield. The entire worker empire runs as background server processing, consuming no client resources. Players manage hundreds of workers across dozens of nodes.</p>
+    </div>
+    <div class="info-card c-cyan">
+      <h4>Node Investment</h4>
+      <p>Contribution Points (a shared family resource) are invested into nodes on the world map to unlock resource gathering, establish trade routes, and (allegedly) boost item drop rates. Node connections form a graph structure that the server validates for trade route bonuses. Disconnected nodes break trade distance calculations.</p>
+    </div>
+    <div class="info-card c-pink">
+      <h4>Horse Breeding & Training</h4>
+      <p>Horse data includes tier, level, skills learned, appearance, breeding count, and training progress. Horses level up through distance traveled (tracked server-side). Breeding combines two horses' genetics to produce offspring with probabilistic skill and tier inheritance. Auto-pathing distance is logged even during AFK play.</p>
+    </div>
+    <div class="info-card c-green">
+      <h4>Lifeskill Processing</h4>
+      <p>Processing, cooking, and alchemy run as server-validated sequences. The client sends the craft request, the server checks materials and mastery level, processes the recipe, and returns results. Mastery scores (gear-based) act as server-side multipliers on yield. AFK processing queues are maintained server-side until materials run out.</p>
+    </div>
+  </div>
+
+  <!-- SCALING -->
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <p>BDO's scaling challenges center on two scenarios: normal open-world load (which the channel system handles adequately) and large-scale PvP events (which have historically broken everything).</p>
+
+  <h3>Channel-Based Load Distribution</h3>
+  <p>The channel system is BDO's primary horizontal scaling mechanism. When player counts rise, the load spreads across channels. Each channel is essentially a complete copy of the game world running on dedicated server resources. Players self-select their channel based on preference, and the game gently suggests less populated channels during login.</p>
+
+  <h3>Node War &amp; Siege Scaling Failures</h3>
+  <p>Node Wars pit guilds against each other on specific channels at scheduled times. Guilds place forts, build structures, and fight to destroy each other's forts. The scale ranges from small skirmishes (20v20) to territory wars with hundreds of participants.</p>
+  <p>The server's ability to handle these fights has been a moving target. Pearl Abyss has capped the number of guilds that can place forts in a single region and introduced "Fortress Siege" mode, a faster 20-minute format that limits participant count. These are design-level workarounds for infrastructure limitations.</p>
+
+  <table class="proto">
+    <thead>
+      <tr><th>Scenario</th><th>Player Count</th><th>Performance</th><th>Mitigations</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Open World PvE</td><td>50-100 per area</td><td>Stable</td><td>Channel selection distributes load</td></tr>
+      <tr><td>World Boss</td><td>100-200 per channel</td><td>Laggy but functional</td><td>PvP disabled during spawn; HP shared cross-channel</td></tr>
+      <tr><td>Node War (Tier 1)</td><td>~40-80 total</td><td>Generally playable</td><td>Limited guild count per node</td></tr>
+      <tr><td>Siege War</td><td>200-500+</td><td>Severe desync, disconnections</td><td>Guild fort limits, Fortress Siege mode added</td></tr>
+      <tr><td>Mega Siege (1400+)</td><td>1400+</td><td>Unplayable (2018 incident)</td><td>Region-level guild caps introduced after</td></tr>
+    </tbody>
+  </table>
+
+  <!-- DEEP DIVES -->
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>World Boss Cross-Channel Synchronization</h3>
+  <p>World bosses operate on a fixed weekly schedule and share HP across all channels simultaneously. When Kzarka spawns, it spawns on every channel at the same time with a single shared health pool. Damage dealt on any channel reduces the same pool. When the boss dies, it dies on all channels. This is managed by a dedicated boss synchronization service that aggregates damage from all channel servers.</p>
+  <p>During boss spawns, two restrictions kick in: PvP is globally disabled for 15 minutes (controversial, since bosses only affect specific locations), and channel swapping is blocked to prevent players from hopping channels to claim loot multiple times. The PvP lockout was justified as reducing server load and preventing griefing at boss locations, but PvP-focused players objected to the blanket restriction affecting areas nowhere near the boss.</p>
+
+  <h3>Seamless World Streaming</h3>
+  <p>The Black Desert engine streams world data continuously as the player moves. The engine uses spatial partitioning to determine which terrain tiles, objects, and NPCs need to be in memory at any given time. As you ride a horse across the continent, the engine is constantly loading terrain ahead of you and unloading terrain behind you.</p>
+  <p>This streaming applies to the client only. The server always has the full world state in memory for its channel. The server does not need to stream, because it does not render. It tracks entity positions, validates actions, and processes background systems (workers, marketplace, boss HP) regardless of where players are.</p>
+  <p>Pearl Abyss evolved this technology into the BlackSpace engine for Crimson Desert, adding hierarchical level subdivision, hierarchical proxy loading, and imposter rendering for even more efficient distance streaming. These techniques prioritize rendering what is closest and replace distant geometry with lightweight imposters.</p>
+
+  <h3>The Remastered Upgrade</h3>
+  <p>In 2018, Pearl Abyss released the "Remastered" graphics mode, adding physically-based rendering (PBR), enhanced global illumination, and YEBIS post-processing effects. From a networking perspective, the remaster did not change the client-server protocol. The additional rendering load was entirely client-side, meaning players with weaker hardware could still run the original graphics mode while sharing servers with remastered players.</p>
+
+  <h3>Ocean Content &amp; Bartering</h3>
+  <p>The ocean expansion added bartering as a lifeskill, where players sail between island NPCs exchanging goods in multi-step trade chains. The bartering inventory, exchange rates, and refresh timers are all server-side. The ocean also introduced large-scale sailing with guild ships and the Vell world boss (a sea boss requiring coordinated guild groups across ships). Ocean physics, including ship movement and wave interaction, are primarily client-side visual effects. Ship position is server-tracked but movement feels client-authoritative for responsiveness.</p>
+
+  <h3>Global vs. Regional Publishing</h3>
+  <p>BDO originally used a licensing model: Pearl Abyss developed the game in Korea and licensed publishing rights to regional partners. Kakao Games (originally Daum Games) published NA/EU, GameNet handled Russia, and other partners covered Japan and Southeast Asia. Each publisher ran its own servers, managed its own patch schedule, and could be weeks or months behind the Korean version.</p>
+  <p>Pearl Abyss had already self-published in Korea, Russia, and Japan before taking over NA/EU in February 2021. The transition required players to migrate their accounts from Kakao's platform to Pearl Abyss's platform before a June 2021 deadline; accounts that were not transferred were permanently deleted. The consolidation to self-publishing reduced the content gap between regions and gave Pearl Abyss direct control over server infrastructure decisions.</p>
+
+  <!-- EVOLUTION -->
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="year">2010</div>
+      <div class="desc"><strong>Pearl Abyss founded.</strong> Kim Dae-il begins developing the custom Black Desert engine from scratch rather than licensing an existing engine.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2013</div>
+      <div class="desc"><strong>Korean closed beta.</strong> First public tests of the seamless open world and action combat systems on live servers.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2015</div>
+      <div class="desc"><strong>Korean launch.</strong> Published by Daum Games (later Kakao). Channel system and node/siege war architecture go live.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2016</div>
+      <div class="desc"><strong>NA/EU launch.</strong> Published by Kakao Games on Leaseweb infrastructure. Desync complaints begin immediately during large-scale PvP.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2018</div>
+      <div class="desc"><strong>Remastered graphics update.</strong> PBR rendering, YEBIS post-processing added. Client-only change; no networking modifications. The Valencia mega-siege with 1,400 players exposes infrastructure limits.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2019</div>
+      <div class="desc"><strong>Central Market replaces old Marketplace.</strong> The bidding/lottery system is retired in favor of a centralized order-book economy with dynamic pricing and companion app access.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2019</div>
+      <div class="desc"><strong>Pearl Abyss acquires Korean publishing from Kakao.</strong> Begins consolidating global publishing rights, starting with Korea, Russia, and Japan.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2020</div>
+      <div class="desc"><strong>Ocean expansion and bartering system.</strong> Adds server-managed multi-step trade chains across ocean islands. Vell ocean boss introduced.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2021</div>
+      <div class="desc"><strong>Pearl Abyss takes over NA/EU publishing.</strong> Account migration deadline set. Kakao Games exits BDO publishing. Server infrastructure begins transition.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2023</div>
+      <div class="desc"><strong>Fortress Siege mode introduced.</strong> A shorter, more constrained PvP format designed to work within server performance limits. Ongoing packet optimization for node wars.</div>
+    </div>
+    <div class="timeline-item">
+      <div class="year">2025</div>
+      <div class="desc"><strong>BlackSpace engine announced for Crimson Desert.</strong> Next-generation evolution of the BDO engine with improved streaming, physics, and rendering. BDO continues on the original engine with incremental updates.</div>
+    </div>
+  </div>
+
+  <!-- SOURCES -->
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://en.wikipedia.org/wiki/Black_Desert_Online" target="_blank">Black Desert Online - Wikipedia</a>
+        <div class="source-desc">General overview of the game, engine, and development history</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.mmorpg.com/news/sieges-besieged-by-persistent-lag-and-connection-issues-2000098094" target="_blank">Sieges Besieged by Persistent Lag and Connection Issues - MMORPG.com</a>
+        <div class="source-desc">Detailed coverage of the Valencia siege incident and Leaseweb hosting complaints</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.mmorpg.com/news/pearl-abyss-self-publishing-of-black-desert-online-starts-february-2000120779" target="_blank">Pearl Abyss Self-Publishing Starts February - MMORPG.com</a>
+        <div class="source-desc">Coverage of the Kakao-to-Pearl Abyss publishing transition</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://trunrd.com/crimson-desert-and-the-blackspace-engine-at-gdc/" target="_blank">Crimson Desert and the BlackSpace Engine - GDC 2025</a>
+        <div class="source-desc">GDC presentation covering the BlackSpace engine's streaming technology and evolution from the BDO engine</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://80.lv/articles/pearl-abyss-demonstrated-crimson-desert-s-blackspace-engine-tech-advancements" target="_blank">BlackSpace Engine Features Revealed - 80 Level</a>
+        <div class="source-desc">Technical breakdown of hierarchical level subdivision, proxy loading, and imposter rendering</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info">
+        <a href="https://www.blackdesertfoundry.com/node-war-guide/" target="_blank">Node War Guide - BDFoundry</a>
+        <div class="source-desc">Comprehensive guide to node war mechanics, channel restrictions, and fort placement</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://www.naeu.playblackdesert.com/en-US/Wiki?wikiNo=304" target="_blank">Official Server Guide - Pearl Abyss</a>
+        <div class="source-desc">Official documentation on channel types, server regions, and the One World system</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://grumpygreen.cricket/bdo-central-market/" target="_blank">Central Market Guide - GrumpyG</a>
+        <div class="source-desc">Detailed breakdown of the Central Market order system, pricing, and tax structure</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://massivelyop.com/2021/03/11/desert-oasis-a-brief-history-kakao-games-black-deserts-former-pc-publisher/" target="_blank">A Brief History of Kakao Games - Massively OP</a>
+        <div class="source-desc">History of Kakao's involvement with BDO and the publishing transition</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.blackdesertfoundry.com/world-bosses-dungeons-guide/" target="_blank">World Bosses Guide - BDFoundry</a>
+        <div class="source-desc">Boss spawn schedules, cross-channel HP sync, and PvP restriction details</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME NAV -->
+  <div class="game-nav">
+    <a href="gw2.html"><span class="dir">Previous</span><span class="name">Guild Wars 2</span></a>
+    <a class="next" href="star-citizen.html"><span class="dir">Next</span><span class="name">Star Citizen</span></a>
+  </div>
+
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>

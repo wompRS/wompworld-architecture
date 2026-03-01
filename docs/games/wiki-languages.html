@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Programming Languages for Game Servers - Wiki | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <a href="wiki-engines.html">Engines</a>
+  <a href="wiki-languages.html" style="color:var(--t1);font-weight:700">Languages</a>
+  <a href="wiki-databases.html">Databases</a>
+  <a href="wiki-networking.html">Networking</a>
+  <a href="wiki-middleware.html">Middleware</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // WIKI</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / Wiki / Languages</div>
+  <h1>Programming Languages for Game Servers</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Reference</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">9 Languages</span>
+  </div>
+  <p class="lead">Every multiplayer game server is built on a programming language that shapes what the team can build, how fast they can iterate, and how the server performs under load. This page covers nine languages used in real shipped game servers, from the industry standard C++ to niche picks like Erlang, with honest assessments of what each one costs you in development time, performance, and complexity.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Most Common</span><span class="value">C++</span></div>
+    <div class="key-stat"><span class="label">Fastest Growing</span><span class="value">Rust</span></div>
+    <div class="key-stat"><span class="label">Lowest Barrier</span><span class="value">TypeScript / GDScript</span></div>
+    <div class="key-stat"><span class="label">Most Unique</span><span class="value">Erlang/Elixir</span></div>
+    <div class="key-stat"><span class="label">Largest Ecosystem</span><span class="value">C# (.NET)</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- ============================================================ -->
+  <!-- C++ -->
+  <!-- ============================================================ -->
+  <h2 id="cpp">C++</h2>
+  <p>C++ is the dominant language in game development and has been for roughly three decades. The vast majority of AAA game servers, including those for Fortnite, Valorant, Overwatch, and every Unreal Engine title, run C++ on the server side. If you are building a game server that needs to handle thousands of concurrent players at high tick rates with minimal latency, C++ is the default choice the industry reaches for.</p>
+
+  <h3>How It Works</h3>
+  <p>C++ is a compiled language. You write source code, run it through a compiler (GCC, Clang, MSVC), and get a native binary that runs directly on the CPU with no interpreter or virtual machine sitting in between. This direct compilation to machine code is the root of its performance advantage. The language gives you control over memory layout, CPU cache usage, and allocation patterns that higher-level languages abstract away.</p>
+  <p>The flip side of all that control is complexity. C++ is a massive language with decades of accumulated features: templates, multiple inheritance, move semantics, RAII, smart pointers, constexpr, and a half-dozen ways to initialize a variable. The language specification runs to over 1,800 pages. Professional C++ programmers often use only a carefully chosen subset of the language and enforce that subset through style guides.</p>
+
+  <h3>Memory Management</h3>
+  <p>C++ uses <strong>manual memory management</strong>. You allocate memory with <code>new</code> and free it with <code>delete</code>, or more commonly in modern C++, you use smart pointers (<code>std::unique_ptr</code>, <code>std::shared_ptr</code>) and RAII patterns that tie resource lifetimes to object scopes. There is no garbage collector. When an object goes out of scope, its destructor runs immediately and deterministically.</p>
+  <p>This determinism is exactly why game servers love C++. There are no GC pauses, no unpredictable latency spikes from a collector deciding to run at the worst possible moment. But the cost is that memory bugs (use-after-free, double-free, buffer overflows) are your responsibility to prevent, and they can be devastating: crashes, security vulnerabilities, and data corruption that only shows up under specific load conditions in production.</p>
+
+  <h3>Performance for Game Servers</h3>
+  <p>C++ delivers the lowest latency and highest throughput of any language on this list. A well-written C++ server can process tens of thousands of game state updates per second with sub-millisecond per-tick times. You have full control over memory allocation patterns, which matters enormously when a game server is allocating and freeing thousands of small objects per frame.</p>
+  <p>The compilation model is the main productivity drag. A full rebuild of a large C++ game project can take 10 to 30 minutes. Incremental builds are faster but still measured in seconds to minutes. Compare this to interpreted languages where changes take effect instantly, and you can see why studios supplement C++ with scripting languages for game logic that changes frequently.</p>
+
+  <h3>Networking Libraries</h3>
+  <p><strong>Boost.Asio</strong> is the most established general-purpose networking library. It is solid, cross-platform, and supports both TCP and UDP with an asynchronous event model. The downside is that Boost pulls in complex template-heavy code that increases build times and produces notoriously unreadable compiler errors.</p>
+  <p><strong>ENet</strong> is a lightweight reliable UDP library designed specifically for games. It handles packet ordering, reliability, and fragmentation. The limitation is that it was designed for small-scale games (around 64 players) and struggles above 1,500 concurrent connections on a single instance.</p>
+  <p><strong>GameNetworkingSockets</strong> is Valve's open-source transport layer, extracted from Steam's internal networking stack. It has become a popular modern alternative that offers encryption, relay support, and better scaling than ENet.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Strengths</h4>
+      <ul>
+        <li>Unmatched runtime performance and latency control</li>
+        <li>No garbage collector pauses</li>
+        <li>Direct hardware access and memory layout control</li>
+        <li>Massive ecosystem: Unreal Engine, CryEngine, custom engines</li>
+        <li>Every major middleware and library supports C++</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Weaknesses</h4>
+      <ul>
+        <li>Slow compilation times (10-30 min for full builds)</li>
+        <li>Memory bugs are subtle and dangerous</li>
+        <li>Enormous language complexity, steep learning curve</li>
+        <li>Debugging multithreaded C++ is genuinely difficult</li>
+        <li>No standardized build system or package manager</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Notable Game Servers Using C++</h3>
+  <table class="proto">
+    <tr><th>Game</th><th>Notes</th></tr>
+    <tr><td>Fortnite</td><td>Unreal Engine dedicated servers, pure C++ game logic</td></tr>
+    <tr><td>Valorant</td><td>UE4 base with C++ server, Go for orchestration, Python for tooling</td></tr>
+    <tr><td>Overwatch</td><td>Custom C++ engine with ECS architecture (no Unreal)</td></tr>
+    <tr><td>World of Warcraft</td><td>Custom C++ server handling 10K+ players per realm</td></tr>
+    <tr><td>Final Fantasy XIV</td><td>Custom C++ server with zone-based world partitioning</td></tr>
+    <tr><td>Guild Wars 2</td><td>Custom C++ engine, megaserver technology</td></tr>
+  </table>
+
+  <div class="callout">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>C++ would give Wompworld the absolute best runtime performance for naval combat simulation, physics, and large-scale fleet battles. The cost is development speed. For a team without professional game dev experience, C++ server development from scratch would be a multi-year learning investment before the game logic even starts. If you use Unreal Engine, the server comes in C++ by default. If you are rolling a custom server, C++ is the power option for teams that can afford the time.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- C# -->
+  <!-- ============================================================ -->
+  <h2 id="csharp">C#</h2>
+  <p>C# is the second most common language for game server development, largely because of Unity's dominance in the indie and mid-tier game market. The language runs on the .NET runtime (formerly .NET Core, now just .NET), which gives it garbage collection, a rich standard library, and cross-platform support. The best real-world proof that C# can power an MMO server is Albion Online, which runs its entire game backend on C# with Photon Server.</p>
+
+  <h3>How It Works</h3>
+  <p>C# compiles to an intermediate language (IL) that runs on the .NET Common Language Runtime (CLR). The CLR uses a Just-In-Time (JIT) compiler to convert IL to native machine code at startup, so the actual game loop runs as compiled native code, not interpreted bytecode. This gives C# performance that sits between C++ and scripting languages: slower than hand-tuned C++ by roughly 10-30%, but far faster than Python or Lua.</p>
+  <p>The language itself is clean and well-designed. Strong typing, good IDE support (Visual Studio, Rider), async/await for non-blocking I/O, and LINQ for data queries. C# evolves rapidly, with new features shipping yearly. For teams coming from a web development or general software background, C# is immediately productive.</p>
+
+  <h3>Memory Management</h3>
+  <p>C# uses a <strong>tracing garbage collector</strong>. You allocate objects freely and the GC reclaims memory when objects are no longer referenced. The .NET GC is generational (Gen 0, Gen 1, Gen 2) and concurrent, meaning most collections happen without stopping the world. But Gen 2 collections on large heaps can cause pauses of 10-50ms, which is noticeable in a game server running at 20+ ticks per second.</p>
+  <p>Game server developers working in C# learn to minimize allocations in hot paths. Object pooling, struct-based value types, <code>Span&lt;T&gt;</code>, and avoiding boxing are standard techniques. Albion Online's team keeps game data in memory and uses bare metal hosting rather than VMs partly to give the GC more room to operate efficiently.</p>
+
+  <h3>Photon Server</h3>
+  <p>Photon Server is the most common middleware for C# game servers. Its core is written in C++ for raw networking performance, but all application logic is written in C# running on the .NET CLR. This hybrid approach means you get C++ speed for socket handling and packet processing, with C# productivity for game logic. Photon supports UDP (reliable and unreliable), TCP for chat and inter-server communication, and comes with built-in load balancing across multiple game server instances.</p>
+
+  <h3>The Albion Online Case Study</h3>
+  <p>Albion Online is the strongest argument for C# in MMO development. Sandbox Interactive built the entire game in C# with a strict Model-View-Controller separation. The server contains all game logic and is the single authority on game state. The Unity client is just a view layer that renders whatever the server tells it. This architecture means the client DLL and server share code, which was only possible because both sides use C#.</p>
+  <p>Their server farm runs on bare metal machines, not VMs, because they need strong CPU time and memory guarantees. Albion is a single unified game world (no sharding), distributed across a fixed number of physical machines. They use Apache Cassandra for persistence with eventual consistency (fast writes, slow reads), and supplement it with PostgreSQL for complex queries like marketplace lookups.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Strengths</h4>
+      <ul>
+        <li>Same language on client (Unity) and server, enabling code sharing</li>
+        <li>Fast iteration: changes compile in seconds, not minutes</li>
+        <li>Excellent async/await for non-blocking I/O patterns</li>
+        <li>Rich ecosystem (.NET libraries, NuGet packages)</li>
+        <li>Photon Server provides battle-tested networking out of the box</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Weaknesses</h4>
+      <ul>
+        <li>GC pauses can cause latency spikes in game loops</li>
+        <li>Roughly 10-30% slower than equivalent C++ code</li>
+        <li>Higher memory usage than C++ due to GC overhead and object headers</li>
+        <li>Less control over memory layout and cache behavior</li>
+        <li>.NET ecosystem is Windows-heavy (improving but still)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Notable Game Servers Using C#</h3>
+  <table class="proto">
+    <tr><th>Game</th><th>Notes</th></tr>
+    <tr><td>Albion Online</td><td>Full MMO server on C# + Photon Server, single-world architecture</td></tr>
+    <tr><td>Escape from Tarkov</td><td>Unity client with C# server components</td></tr>
+    <tr><td>Rust (the game)</td><td>Unity client, C# game logic with custom server</td></tr>
+    <tr><td>VRChat</td><td>Unity-based with C# server infrastructure</td></tr>
+  </table>
+
+  <div class="callout c-green">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>C# is a strong candidate for Wompworld if the team uses Unity as the client engine. Sharing code between client and server in the same language reduces the amount of work by a significant margin. The GC concern is real but manageable with object pooling and careful allocation patterns. Photon Server could handle the networking layer, letting the team focus on game logic rather than socket programming. For a team with tech backgrounds but no game dev experience, C# offers the fastest path to a working server.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- RUST -->
+  <!-- ============================================================ -->
+  <h2 id="rust">Rust</h2>
+  <p>Rust is the newest serious contender for game server development. It promises the performance of C++ with memory safety guaranteed at compile time, and no garbage collector. The tradeoff is a steep learning curve and slower compilation times. Rust is not yet mainstream in game development, but it is growing fast: SpacetimeDB's entire backend for BitCraft Online is written in Rust, and studios like Embark Studios have used it for commercial game projects.</p>
+
+  <h3>How It Works</h3>
+  <p>Rust is a compiled systems language. Like C++, it compiles to native machine code through LLVM, producing binaries with comparable performance. Where Rust diverges from C++ is in its ownership system, which is a set of rules the compiler enforces at compile time to prevent memory bugs, data races, and undefined behavior.</p>
+  <p>The core concept is simple: every value in Rust has exactly one owner. When the owner goes out of scope, the value is dropped (freed). You can lend references to a value, but the compiler tracks every reference and enforces that you cannot have a mutable reference and an immutable reference to the same data at the same time. This eliminates entire categories of bugs that plague C++ code: use-after-free, data races, dangling pointers, buffer overflows.</p>
+
+  <h3>Memory Management</h3>
+  <p>Rust uses an <strong>ownership model</strong> that is neither manual (like C++) nor garbage-collected (like C# or Java). The compiler inserts deallocation calls automatically based on ownership rules. Memory is freed deterministically when the owning variable goes out of scope. There is no runtime cost for this: no GC pauses, no reference counting overhead on hot paths (unless you explicitly opt into <code>Rc</code> or <code>Arc</code>).</p>
+  <p>The practical effect for game servers is that you get C++-level memory performance without C++-level memory bugs. The borrow checker catches mistakes at compile time rather than letting them crash your production server at 3 AM. The cost is that the compiler is strict, sometimes frustratingly so. Patterns that are trivial in C++ (self-referential structures, graph data structures, entity-component systems) require different approaches in Rust.</p>
+
+  <h3>SpacetimeDB and BitCraft</h3>
+  <p>The most significant Rust game server in production today is SpacetimeDB, which powers the MMORPG BitCraft Online. SpacetimeDB is a radical architecture: it collapses the game server and the database into a single system. Game logic runs as Rust modules (stored procedures) inside a relational database. Clients connect directly to the database, which executes the game logic and synchronizes state to all connected clients in real time. The entire backend for BitCraft is a SpacetimeDB module. No separate game servers, no microservices, no container orchestration.</p>
+  <p>SpacetimeDB 1.0 shipped in March 2025, and small studios have already used it to ship games. Lightfox Games built and shipped DeliveryZ to the App Store in three months with a team of eight engineers using SpacetimeDB.</p>
+
+  <h3>Learning Curve and Compile Times</h3>
+  <p>Rust's learning curve is real. The borrow checker will reject code that looks correct to someone coming from C++ or C#. Patterns that work in other languages (mutable aliasing, self-referential structs) require rethinking in Rust. According to Google's internal survey, about two-thirds of developers felt confident contributing to a Rust codebase within two months. That is faster than most people expect, but still a significant ramp-up period.</p>
+  <p>Compile times are Rust's other pain point. Full builds of a medium-sized project can take several minutes. Incremental builds are faster, and tools like <code>cargo check</code> (type-checking without code generation) help during development. But compared to C#'s near-instant compilation, Rust's compile times are a real drag on iteration speed.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Strengths</h4>
+      <ul>
+        <li>C++-level performance with no garbage collector</li>
+        <li>Memory safety enforced at compile time</li>
+        <li>Data races are impossible in safe Rust</li>
+        <li>Modern tooling: cargo, crates.io, built-in testing</li>
+        <li>SpacetimeDB offers a production-ready MMO backend in Rust</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Weaknesses</h4>
+      <ul>
+        <li>Steep learning curve, especially the borrow checker</li>
+        <li>Slower compile times than C++ or C#</li>
+        <li>Smaller game development ecosystem than C++ or C#</li>
+        <li>ECS and graph data structures are harder to express idiomatically</li>
+        <li>Fewer game-specific libraries and middleware options</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Notable Game Servers Using Rust</h3>
+  <table class="proto">
+    <tr><th>Game</th><th>Notes</th></tr>
+    <tr><td>BitCraft Online</td><td>MMORPG, entire backend is a SpacetimeDB Rust module</td></tr>
+    <tr><td>DeliveryZ</td><td>Mobile game shipped in 3 months on SpacetimeDB</td></tr>
+    <tr><td>Veloren</td><td>Open-source multiplayer voxel RPG, server and client both in Rust</td></tr>
+  </table>
+
+  <div class="callout c-purple">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>Rust with SpacetimeDB is genuinely interesting for Wompworld. The database-as-server model would eliminate the need to build and maintain separate game servers, databases, and synchronization layers. The ownership model would prevent the kind of concurrency bugs that crash MMO servers under load. The risk is the learning curve: a team without game dev experience would be learning both Rust and game server programming simultaneously, which is a steep hill. If the team is willing to invest 2-3 months in Rust fundamentals before touching game logic, this could pay off significantly.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- JAVA -->
+  <!-- ============================================================ -->
+  <h2 id="java">Java</h2>
+  <p>Java powered some of the most important multiplayer games in history. RuneScape's server has run on Java since 2001. Minecraft's server is Java. At its peak, Java was the default choice for MMO servers because it offered reasonable performance, cross-platform deployment, and automatic memory management. Today, Java has largely fallen out of favor for new game projects, replaced by C# for managed-language shops and C++ or Rust for performance-critical work. But the games that run on Java are still running, and still massive.</p>
+
+  <h3>How It Works</h3>
+  <p>Java compiles to bytecode that runs on the Java Virtual Machine (JVM). Like C#'s CLR, the JVM uses a JIT compiler to convert bytecode to native machine code at runtime. This means Java programs start up slow (the JIT needs time to warm up and optimize hot code paths) but reach near-native performance once the JIT has done its work. The JVM ecosystem is enormous, with decades of libraries, frameworks, and tooling.</p>
+
+  <h3>Memory Management</h3>
+  <p>Java uses a <strong>tracing garbage collector</strong>, and the JVM offers multiple collector implementations. The default G1GC collector works well for most applications but can cause noticeable pauses on game servers. The Minecraft server community has produced extensive documentation on tuning G1GC flags: setting <code>-Xms</code> equal to <code>-Xmx</code>, increasing the New Generation size with <code>G1NewSizePercent</code>, and using <code>MaxGCPauseMillis</code> to target maximum pause duration.</p>
+  <p>Newer collectors like ZGC and Shenandoah offer sub-millisecond pause times but were not available when RuneScape and Minecraft chose Java. The Minecraft community has found that Shenandoah GC is significantly better than G1GC for game server workloads, nearly eliminating the rubber-banding that GC pauses cause.</p>
+
+  <h3>Netty</h3>
+  <p>Netty is the dominant networking library for Java game servers. Minecraft uses Netty for its entire networking layer, handling packet encoding, decoding, and connection management. Netty provides non-blocking I/O with an event-driven architecture that can handle thousands of concurrent connections. The library is mature and battle-tested, but it introduces its own complexity: race conditions between Netty I/O threads and the main game thread have caused real bugs in Minecraft's server code.</p>
+
+  <h3>Why Java Fell Out of Favor</h3>
+  <p>Java's decline in game server development happened gradually. The JVM's startup time, memory overhead, and GC pauses became less acceptable as player expectations for responsiveness increased. C# offered similar productivity with a better tooling story for game development (Unity integration, Photon Server). C++ maintained its performance advantage. And Java never developed a strong game-specific ecosystem: there is no equivalent of Photon Server, Unreal Engine, or Unity in the Java world.</p>
+  <p>The language itself also accumulated baggage. Verbose syntax, the checked exceptions debate, a historically slow release cycle, and Oracle's occasionally hostile relationship with the open-source community all contributed to developers choosing alternatives for new projects. Java is still a perfectly capable language for game servers. It just is not what most teams reach for when starting something new.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Strengths</h4>
+      <ul>
+        <li>Proven at massive scale (RuneScape, Minecraft)</li>
+        <li>Mature ecosystem with Netty, Vert.x, and thousands of libraries</li>
+        <li>JIT compilation reaches near-native performance over time</li>
+        <li>Modern GC options (ZGC, Shenandoah) nearly eliminate pause issues</li>
+        <li>Strong typing and excellent tooling (IntelliJ, profilers)</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Weaknesses</h4>
+      <ul>
+        <li>GC pauses require careful tuning to avoid lag spikes</li>
+        <li>Higher memory overhead than C++ or Rust</li>
+        <li>No game-specific middleware ecosystem (no Photon equivalent)</li>
+        <li>Verbose syntax compared to C# or Kotlin</li>
+        <li>Slow JVM startup time, not ideal for ephemeral instances</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Notable Game Servers Using Java</h3>
+  <table class="proto">
+    <tr><th>Game</th><th>Notes</th></tr>
+    <tr><td>RuneScape / OSRS</td><td>Java server since 2001, with proprietary RuneScript for content</td></tr>
+    <tr><td>Minecraft</td><td>Java server with Netty networking, extensive GC tuning community</td></tr>
+    <tr><td>Star Wars: The Old Republic</td><td>Java server at EA/BioWare Austin</td></tr>
+    <tr><td>Project Zomboid</td><td>Java dedicated server for multiplayer survival</td></tr>
+  </table>
+
+  <!-- ============================================================ -->
+  <!-- PYTHON -->
+  <!-- ============================================================ -->
+  <h2 id="python">Python</h2>
+  <p>Python is too slow for almost every game server workload. It is an interpreted language with a Global Interpreter Lock (GIL) that prevents true parallelism within a single process. A standard Python game loop would run 50-100x slower than the same logic in C++. And yet, EVE Online, one of the most technically ambitious MMOs ever built, runs its entire game simulation on Python. The explanation for this contradiction is Stackless Python, and the story is worth understanding.</p>
+
+  <h3>How It Works</h3>
+  <p>Python is an interpreted, dynamically typed language. Code executes line by line through the CPython interpreter (the standard implementation). There is no compilation step: you edit a file, and the changes take effect the next time that code runs. This makes iteration extraordinarily fast, which is Python's primary selling point. But the interpreter adds overhead on every operation, and dynamic typing means the runtime has to check types at every step rather than knowing them in advance.</p>
+  <p>The GIL is the critical limitation. CPython uses a global lock that prevents multiple threads from executing Python bytecode simultaneously. You can have multiple threads, but only one runs at a time. This means a Python game server on standard CPython cannot use multiple CPU cores for game logic. You get concurrency (interleaving tasks) but not parallelism (running tasks simultaneously).</p>
+
+  <h3>Stackless Python and EVE Online</h3>
+  <p>CCP Games chose Python in 2001 when EVE Online was being built, starting with Python 1.6. They chose it for developer productivity: Python let them iterate on game logic quickly without fighting a compiler. But they used Stackless Python, a variant that adds microthreads called tasklets. Tasklets are extremely lightweight (roughly 100 bytes of overhead) and switch cooperatively at known points in the code. CCP runs millions of tasklets across the Tranquility server cluster.</p>
+  <p>Context switches happen only at explicit yield points: sending on a channel, sleeping, performing I/O, or calling <code>BeNice()</code>. This means developers can write code that looks single-threaded while actually running thousands of concurrent tasks. There are almost no race conditions because you know exactly when context switches occur. Tasklet switching runs at over one million switches per second.</p>
+  <p>CCP worked around the GIL by running each solar system as a separate process on a separate server node. The architecture distributes New Eden's roughly 7,800 star systems across physical machines, with each node handling as many systems as its CPU can manage. Performance-critical code (graphics, physics, networking layers) is written in C++, with Python handling the game logic layer on top.</p>
+
+  <h3>Python's Real Role in Game Development</h3>
+  <p>Outside of EVE, Python's role in game development is scripting, tooling, and automation. Build systems, asset pipelines, automated testing, content generation tools, server orchestration, and DevOps infrastructure frequently use Python. It is the glue language that connects everything together without being the thing that runs the game loop.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Strengths</h4>
+      <ul>
+        <li>Fastest iteration speed of any language on this list</li>
+        <li>Enormous library ecosystem for tooling and scripting</li>
+        <li>Stackless Python enables massive cooperative concurrency</li>
+        <li>Changes can be hot-reloaded without restarting the server</li>
+        <li>Low barrier to entry for new programmers</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Weaknesses</h4>
+      <ul>
+        <li>50-100x slower than C++ for computational work</li>
+        <li>GIL prevents true multi-core parallelism</li>
+        <li>Not suitable for high-tick-rate game servers</li>
+        <li>Dynamic typing causes runtime errors that static languages catch at compile time</li>
+        <li>Stackless Python is a niche variant with a small community</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Notable Game Servers Using Python</h3>
+  <table class="proto">
+    <tr><th>Game</th><th>Notes</th></tr>
+    <tr><td>EVE Online</td><td>Stackless Python for all game logic, C++ for performance-critical layers</td></tr>
+    <tr><td>Civilization IV</td><td>Python scripting for game rules and AI</td></tr>
+  </table>
+
+  <div class="callout c-amber">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>Python is not a realistic option for Wompworld's game server. Naval combat with hundreds of projectiles, ship physics, and real-time PvP requires tick rates and throughput that Python cannot deliver. Python would be useful as a supporting language for build tooling, server management scripts, database migration tools, and analytics pipelines. But the core game loop should run on something faster.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- LUA / LUAU -->
+  <!-- ============================================================ -->
+  <h2 id="lua">Lua / Luau</h2>
+  <p>Lua is the most widely embedded scripting language in game development. World of Warcraft's entire UI and addon system is built on Lua. Roblox rewrote Lua into Luau, a performance-optimized variant that powers every game on their platform. Lua is not typically used as a primary server language, but rather as a scripting layer embedded inside a C or C++ host application. Its strength is that it adds fast, sandboxed scripting to a high-performance engine without introducing significant overhead.</p>
+
+  <h3>How It Works</h3>
+  <p>Lua is a lightweight, dynamically typed scripting language. The standard Lua interpreter is tiny (around 300KB compiled) and designed to be embedded in larger applications. A C++ game engine creates a Lua virtual machine, exposes game functions to it, and runs Lua scripts that call those functions. The Lua code handles high-level game logic, AI behavior, quest scripting, and UI while the C++ engine handles rendering, physics, and networking.</p>
+  <p>Lua's syntax is simple and readable. Tables (associative arrays) are the only data structure, and they are used for everything: arrays, dictionaries, objects, modules. This simplicity is both a feature and a limitation. Lua code is easy to write and easy to read, but large Lua codebases can become difficult to maintain without the guardrails that static typing provides.</p>
+
+  <h3>Luau: Roblox's Evolution</h3>
+  <p>Luau started as Roblox's internal fork of Lua 5.1 and has grown into its own language. It adds gradual typing (optional type annotations that the toolchain can check), performance optimizations, and sandboxing features. The Luau VM is a complete rewrite of the Lua VM in C++, not a patch on top of the original. The compiler performs constant folding, dead code elimination, and peephole optimization before execution. The interpreter uses inline caching for faster table field access.</p>
+  <p>In October 2023, Luau added native code generation that compiles Luau bytecode directly to x64 and ARM64 machine code, delivering 1.5x to 2.5x speedups for computationally intensive code. Benchmarks show Luau's interpreter performing comparably to LuaJIT's interpreter mode, though LuaJIT's JIT compilation still wins by roughly 1.6x in some tests.</p>
+  <p>Luau has spread beyond Roblox. Remedy Entertainment replaced their proprietary scripting language with Luau in the Northlight engine for Alan Wake 2, removing approximately 80,000 lines of legacy code. Digital Extremes migrated Warframe from standard Lua to Luau for better garbage collection and memory efficiency. Linden Lab released SLua, a Luau-based scripting system for Second Life, in December 2025.</p>
+
+  <h3>World of Warcraft's Addon System</h3>
+  <p>WoW's addon system is the most famous use of Lua in games. The entire default UI is written in Lua and XML, and players can replace or modify any part of it. This system has been running since WoW's launch in 2004 and handles everything from raid frames to damage meters to auction house tools. The addon API is sandboxed so that addons cannot access the file system or make arbitrary network requests, but they have deep access to game state data.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Strengths</h4>
+      <ul>
+        <li>Extremely lightweight to embed (300KB footprint)</li>
+        <li>Fast for a scripting language, especially with LuaJIT or Luau native codegen</li>
+        <li>Proven at massive scale (Roblox: 200M+ monthly active users)</li>
+        <li>Simple syntax, easy for non-programmers to learn</li>
+        <li>Excellent sandboxing for user-generated content</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Weaknesses</h4>
+      <ul>
+        <li>Not suitable as a standalone server language</li>
+        <li>No standard library to speak of (by design)</li>
+        <li>Dynamic typing makes large codebases harder to maintain</li>
+        <li>Requires a C/C++ host for anything performance-critical</li>
+        <li>1-indexed arrays confuse every developer from every other language</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Notable Games Using Lua/Luau</h3>
+  <table class="proto">
+    <tr><th>Game</th><th>Notes</th></tr>
+    <tr><td>Roblox (all games)</td><td>Luau for all game logic, 200M+ monthly players</td></tr>
+    <tr><td>World of Warcraft</td><td>Lua for UI, addons, and client-side scripting</td></tr>
+    <tr><td>Garry's Mod</td><td>Lua for game mode scripting</td></tr>
+    <tr><td>Alan Wake 2</td><td>Luau replaced proprietary scripting in Northlight engine</td></tr>
+    <tr><td>Warframe</td><td>Migrated from Lua to Luau for better GC performance</td></tr>
+  </table>
+
+  <!-- ============================================================ -->
+  <!-- ERLANG / ELIXIR -->
+  <!-- ============================================================ -->
+  <h2 id="erlang">Erlang / Elixir</h2>
+  <p>Erlang and Elixir are unusual choices for game development, but they solve one specific problem better than any other language on this list: massive concurrent connections with fault tolerance. Demonware, Activision's multiplayer infrastructure subsidiary, uses Erlang to power the matchmaking and multiplayer middleware for Call of Duty. Riot Games uses Erlang for League of Legends chat. These are not game simulation servers, but rather the infrastructure that sits around the game: matchmaking, lobbies, presence, chat, leaderboards, and session management.</p>
+
+  <h3>How It Works</h3>
+  <p>Erlang runs on the BEAM virtual machine, which was originally built by Ericsson in the 1980s for telephone switches. The BEAM was designed to handle millions of concurrent connections with near-perfect uptime (the famous "nine nines" reliability). Elixir is a modern language that compiles to BEAM bytecode and runs on the same VM, offering friendlier syntax and modern tooling while retaining all of Erlang's strengths.</p>
+  <p>The BEAM uses the actor model for concurrency. Instead of threads sharing memory, you create lightweight processes (not OS processes, more like goroutines) that communicate by passing messages. Each process has its own heap, its own garbage collector, and runs independently. You can create millions of these processes on a single server, each one handling a single player connection, a single chat channel, or a single matchmaking request.</p>
+
+  <h3>Fault Tolerance: Let It Crash</h3>
+  <p>The BEAM's most distinctive feature is its approach to failure. Rather than trying to prevent every possible crash with defensive coding, Erlang embraces the idea that processes will crash and builds recovery into the architecture. Supervisor processes watch worker processes. When a worker crashes, the supervisor restarts it according to a predefined strategy. This creates supervision trees where failure propagates upward to the appropriate level of the tree and recovery happens automatically.</p>
+  <p>For game infrastructure, this means that a bug in one player's matchmaking request does not take down the matchmaking service. The process handling that request crashes, the supervisor restarts it, and every other player's request continues unaffected. This is enormously valuable for systems that handle millions of concurrent users.</p>
+
+  <h3>Demonware and Call of Duty</h3>
+  <p>Demonware, founded in Dublin in 2003 and acquired by Activision in 2007, built their multiplayer middleware on Erlang and Python. Their services handle matchmaking, player profiles, gaming statistics, NAT traversal, connection management, and encryption for tens of millions of Call of Duty players. Malcolm Dowse presented their architecture at Erlang Factory London 2011, explaining that they chose Erlang for its ability to stay responsive under extreme load while providing fault tolerance and smooth scaling across data centers.</p>
+
+  <h3>Why Not for Game Logic?</h3>
+  <p>The BEAM is not fast enough for game simulation. Its per-process computational throughput is lower than C++, Java, or C# by a significant margin. The actor model introduces message-passing overhead that would be unacceptable in a tight game loop running at 60Hz. Erlang and Elixir are built for I/O-bound workloads with massive concurrency, not CPU-bound workloads with tight latency requirements. They excel at the infrastructure layer (millions of connections, message routing, service coordination) and are poorly suited for the game logic layer (physics, combat calculations, world state updates).</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Strengths</h4>
+      <ul>
+        <li>Handles millions of concurrent connections per server</li>
+        <li>Built-in fault tolerance through supervision trees</li>
+        <li>Hot code reloading without server restart</li>
+        <li>Distributed by default: clustering across multiple machines is trivial</li>
+        <li>Battle-tested at Call of Duty scale for matchmaking infrastructure</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Weaknesses</h4>
+      <ul>
+        <li>Too slow for game simulation at high tick rates</li>
+        <li>Small talent pool: finding Erlang/Elixir developers is hard</li>
+        <li>Actor model adds latency compared to shared-memory approaches</li>
+        <li>No game-specific libraries or frameworks</li>
+        <li>Niche language with limited community support for game dev</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Notable Game Infrastructure Using Erlang/Elixir</h3>
+  <table class="proto">
+    <tr><th>Service</th><th>Notes</th></tr>
+    <tr><td>Call of Duty (Demonware)</td><td>Matchmaking, lobbies, NAT traversal, statistics for tens of millions of players</td></tr>
+    <tr><td>League of Legends (Riot)</td><td>In-game chat system built on Erlang</td></tr>
+    <tr><td>WhatsApp</td><td>Not a game, but proof of BEAM scale: 2B users on Erlang</td></tr>
+  </table>
+
+  <div class="callout">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>Erlang or Elixir could be useful for Wompworld's infrastructure layer: matchmaking, chat, presence, faction coordination, market order routing. These are all I/O-bound problems with massive concurrency requirements that the BEAM handles naturally. But the actual game simulation (ship combat, physics, world state) should run on something faster. For a small team, adding a second language for infrastructure is probably not worth the complexity. Something like Erlang makes more sense when you have a dedicated infrastructure team separate from the game logic team.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- GDSCRIPT -->
+  <!-- ============================================================ -->
+  <h2 id="gdscript">GDScript</h2>
+  <p>GDScript is the built-in scripting language for the Godot engine. It was designed specifically for game development, with syntax inspired by Python and tight integration with Godot's node-based scene system. GDScript is not used outside of Godot, and its relevance to game server development is limited to projects that use Godot's built-in multiplayer features. For dedicated server development at scale, GDScript is not the right tool.</p>
+
+  <h3>How It Works</h3>
+  <p>GDScript runs on a virtual machine inside the Godot engine. When you write GDScript, the engine compiles it to bytecode that the VM executes. This is similar to how Python works, but GDScript's VM is custom-built for game development patterns. The compiler performs constant folding, dead code elimination, and peephole optimization before execution.</p>
+  <p>GDScript supports optional static typing. When you add type annotations, the compiler can generate more efficient bytecode and catch type errors before runtime. Without type annotations, GDScript behaves like a dynamic language similar to Python. The combination lets you prototype quickly with dynamic types and then add annotations for performance and correctness as code matures.</p>
+  <p>There is ongoing discussion about adding JIT compilation to GDScript. The current VM is interpreted, and while it is faster than Python, it is significantly slower than C++ or C#. For performance-critical code within Godot, developers can use GDExtension to write modules in C++ that integrate seamlessly with the engine.</p>
+
+  <h3>Multiplayer in Godot</h3>
+  <p>Godot has built-in high-level multiplayer API that handles RPC (Remote Procedure Call) functions, state synchronization, and authority management. A Godot project can run as a headless server with the same GDScript codebase that runs the client. This makes prototyping multiplayer games fast, but the approach has scaling limits. A GDScript server running the full Godot runtime will not handle the player counts or tick rates that a dedicated C++ or C# server can manage.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Strengths</h4>
+      <ul>
+        <li>Zero-setup integration with Godot engine</li>
+        <li>Fastest iteration speed: edit, save, run (no compile step)</li>
+        <li>Simple Python-like syntax, very low barrier to entry</li>
+        <li>Optional static typing for gradual performance improvement</li>
+        <li>Same code runs on client and headless server</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Weaknesses</h4>
+      <ul>
+        <li>Interpreted VM is significantly slower than compiled languages</li>
+        <li>Only usable within the Godot engine</li>
+        <li>No ecosystem outside of Godot (no packages, no libraries)</li>
+        <li>Not designed for dedicated server workloads at scale</li>
+        <li>Limited to Godot's networking capabilities for multiplayer</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Notable Games Using GDScript</h3>
+  <table class="proto">
+    <tr><th>Game</th><th>Notes</th></tr>
+    <tr><td>Sonic Colors Ultimate</td><td>Godot-based, uses GDScript for game logic</td></tr>
+    <tr><td>Cassette Beasts</td><td>Monster-taming RPG with online features built in Godot</td></tr>
+    <tr><td>Dome Keeper</td><td>Roguelike with multiplayer, built in Godot with GDScript</td></tr>
+  </table>
+
+  <div class="callout c-red">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>GDScript is not a viable option for Wompworld's server. An MMO with a persistent world, player-driven economy, and large-scale naval combat needs a dedicated server architecture that GDScript cannot provide. If Wompworld uses Godot as the client engine, GDScript would be fine for client-side scripting. But the server should be a separate codebase in a language designed for high-performance server workloads. Godot supports C# and C++ via GDExtension for exactly this reason.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TYPESCRIPT / JAVASCRIPT -->
+  <!-- ============================================================ -->
+  <h2 id="typescript">TypeScript / JavaScript</h2>
+  <p>TypeScript and JavaScript running on Node.js have become a real option for multiplayer game servers, particularly for browser-based games, mobile games, and any project where the team is primarily web developers. The Colyseus framework provides an authoritative multiplayer server in TypeScript with state synchronization, matchmaking, and room management out of the box. SpacetimeDB also supports TypeScript modules alongside Rust. For smaller-scale multiplayer (under 10,000 concurrent users), Node.js servers are a practical choice.</p>
+
+  <h3>How It Works</h3>
+  <p>JavaScript is a dynamically typed, interpreted language. Node.js runs JavaScript on Google's V8 engine outside of the browser, giving it access to the file system, networking, and other server-side capabilities. V8 uses a JIT compiler that optimizes frequently executed code paths to near-native speed. TypeScript adds static typing on top of JavaScript and compiles to plain JavaScript, so the runtime behavior is identical but the development experience is significantly better.</p>
+  <p>Node.js uses a single-threaded event loop with non-blocking I/O. This architecture handles I/O-bound workloads (many concurrent connections waiting on network or disk) very well but struggles with CPU-bound workloads (heavy computation on the main thread). A game server that does significant physics or AI computation per tick will block the event loop and cause all connected clients to lag. Worker threads exist as a workaround but add complexity.</p>
+
+  <h3>Colyseus Framework</h3>
+  <p>Colyseus is the most established multiplayer game server framework for Node.js. It provides an authoritative server model where game logic runs on the server and state is automatically synchronized to all connected clients. State changes are delta-compressed and binary-encoded for minimal bandwidth. The framework includes room-based matchmaking, reconnection support, and horizontal scaling through Redis.</p>
+  <p>Colyseus is MIT licensed and supports client SDKs for web (any framework), Unity, Defold, Haxe, Cocos, and Construct3. It is designed for room-based games rather than open-world MMOs. Scaling from 10 to 10,000+ concurrent users is achievable by scaling vertically (bigger server) or horizontally (multiple servers with Redis coordination).</p>
+
+  <h3>When TypeScript Makes Sense</h3>
+  <p>TypeScript game servers make sense when the team is primarily web developers, the game is browser-based or mobile, the player count per instance is modest (under a few hundred per room), and fast iteration matters more than raw computational throughput. For a team that already knows TypeScript, building a multiplayer game server in Colyseus is dramatically faster than learning C++ or Rust.</p>
+  <p>The risk is scaling. Node.js servers hit a ceiling on CPU-bound workloads sooner than C++ or C# servers. A physics-heavy game simulation at 60Hz with hundreds of entities will struggle on Node.js. The single-threaded event loop means one slow tick blocks everything. WebSocket connections also have higher per-connection overhead than raw UDP implementations.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Strengths</h4>
+      <ul>
+        <li>Huge talent pool: JavaScript is the most widely known language</li>
+        <li>Fastest time-to-prototype for multiplayer features</li>
+        <li>Colyseus provides production-ready room-based multiplayer</li>
+        <li>Same language on client (browser) and server</li>
+        <li>NPM ecosystem offers libraries for everything</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>Weaknesses</h4>
+      <ul>
+        <li>Single-threaded event loop limits CPU-bound throughput</li>
+        <li>GC pauses from V8 can cause frame hitches</li>
+        <li>WebSocket overhead is higher than raw UDP</li>
+        <li>Not suitable for high-tick-rate physics simulation</li>
+        <li>Dynamic typing (even with TypeScript) allows runtime errors that compiled languages prevent</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Notable Game Servers Using TypeScript/JavaScript</h3>
+  <table class="proto">
+    <tr><th>Game</th><th>Notes</th></tr>
+    <tr><td>Agar.io</td><td>Node.js server, one of the original .io games</td></tr>
+    <tr><td>Slither.io</td><td>Node.js server handling millions of concurrent players</td></tr>
+    <tr><td>Colyseus demos</td><td>Framework used in hundreds of commercial browser and mobile games</td></tr>
+    <tr><td>RuneJS (community)</td><td>RuneScape emulator written in Node.js and TypeScript</td></tr>
+  </table>
+
+  <div class="callout c-amber">
+    <div class="callout-title">Wompworld Relevance</div>
+    <p>TypeScript is not the right choice for Wompworld's core game server. Naval combat physics, projectile simulation, hundreds of ships in a single area, and a persistent world with player-driven economy are all CPU-bound workloads that would overwhelm Node.js. TypeScript could be useful for supporting services: a web-based admin panel, a market API, a community portal, or chat infrastructure. But the game simulation needs a compiled language.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- COMPARISON TABLE -->
+  <!-- ============================================================ -->
+  <h2 id="comparison">Language Comparison Matrix</h2>
+  <p>This table summarizes the key tradeoffs for each language when evaluated specifically for game server development. Performance ratings are relative to C++ as the baseline.</p>
+
+  <table class="proto">
+    <tr>
+      <th>Language</th>
+      <th>Memory Model</th>
+      <th>Server Perf</th>
+      <th>Iteration Speed</th>
+      <th>Learning Curve</th>
+      <th>Best For</th>
+    </tr>
+    <tr>
+      <td>C++</td>
+      <td>Manual / RAII</td>
+      <td>Excellent</td>
+      <td>Slow (compile)</td>
+      <td>Very Hard</td>
+      <td>AAA game servers, custom engines</td>
+    </tr>
+    <tr>
+      <td>C#</td>
+      <td>Garbage Collected</td>
+      <td>Very Good</td>
+      <td>Fast</td>
+      <td>Moderate</td>
+      <td>Unity games, Photon Server backends</td>
+    </tr>
+    <tr>
+      <td>Rust</td>
+      <td>Ownership</td>
+      <td>Excellent</td>
+      <td>Moderate (compile)</td>
+      <td>Hard</td>
+      <td>Safety-critical servers, SpacetimeDB</td>
+    </tr>
+    <tr>
+      <td>Java</td>
+      <td>Garbage Collected</td>
+      <td>Good</td>
+      <td>Moderate</td>
+      <td>Moderate</td>
+      <td>Legacy MMOs, Minecraft servers</td>
+    </tr>
+    <tr>
+      <td>Python</td>
+      <td>Garbage Collected</td>
+      <td>Poor</td>
+      <td>Very Fast</td>
+      <td>Easy</td>
+      <td>Scripting, tooling, EVE Online (Stackless)</td>
+    </tr>
+    <tr>
+      <td>Lua / Luau</td>
+      <td>Garbage Collected</td>
+      <td>Fair (embedded)</td>
+      <td>Very Fast</td>
+      <td>Easy</td>
+      <td>Embedded scripting, Roblox, WoW addons</td>
+    </tr>
+    <tr>
+      <td>Erlang / Elixir</td>
+      <td>Per-Process GC</td>
+      <td>Fair (I/O-bound)</td>
+      <td>Fast</td>
+      <td>Hard</td>
+      <td>Matchmaking, chat, infrastructure</td>
+    </tr>
+    <tr>
+      <td>GDScript</td>
+      <td>Garbage Collected</td>
+      <td>Poor</td>
+      <td>Very Fast</td>
+      <td>Easy</td>
+      <td>Godot prototypes, small multiplayer games</td>
+    </tr>
+    <tr>
+      <td>TypeScript</td>
+      <td>Garbage Collected</td>
+      <td>Fair</td>
+      <td>Fast</td>
+      <td>Easy</td>
+      <td>Browser games, room-based multiplayer</td>
+    </tr>
+  </table>
+
+  <!-- ============================================================ -->
+  <!-- CHOOSING FOR WOMPWORLD -->
+  <!-- ============================================================ -->
+  <h2 id="choosing">Choosing a Language for an MMO</h2>
+  <p>For a project like Wompworld, the language choice depends heavily on the team's existing skills and the engine choice. Here are the realistic options ranked by practicality for a small team building a persistent-world MMO:</p>
+
+  <div class="info-grid">
+    <div class="info-card c-green full">
+      <h4>Tier 1: Realistic for a Small Team</h4>
+      <ul>
+        <li><strong>C# with Photon Server</strong> if using Unity. Proven by Albion Online. Code sharing between client and server. Fastest path to a working MMO for a team with programming backgrounds.</li>
+        <li><strong>Rust with SpacetimeDB</strong> if willing to invest in learning Rust. Eliminates the need for separate server and database infrastructure. Proven by BitCraft Online. Higher upfront learning cost, lower long-term infrastructure cost.</li>
+      </ul>
+    </div>
+    <div class="info-card c-blue full">
+      <h4>Tier 2: Viable with More Experience</h4>
+      <ul>
+        <li><strong>C++ with Unreal Engine</strong> if the team chooses Unreal. The server comes built-in. The language is hard but the infrastructure is proven at AAA scale.</li>
+        <li><strong>C# with Godot + custom server</strong> if using Godot. GDScript for client scripting, C# for a standalone dedicated server. Requires building more networking infrastructure yourself.</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber full">
+      <h4>Tier 3: Not Recommended for This Project</h4>
+      <ul>
+        <li><strong>Java</strong>: No compelling advantage over C# and a worse game-specific ecosystem.</li>
+        <li><strong>TypeScript</strong>: Cannot handle the computational demands of naval combat simulation at scale.</li>
+        <li><strong>Python</strong>: Too slow for the core game loop. Useful only for tooling.</li>
+        <li><strong>GDScript</strong>: Not designed for dedicated servers.</li>
+        <li><strong>Lua</strong>: Valuable as a scripting layer inside another engine, not as a server language.</li>
+        <li><strong>Erlang/Elixir</strong>: Overkill for infrastructure at Wompworld's scale, and wrong tool for game logic.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SOURCES -->
+  <!-- ============================================================ -->
+  <h2 id="sources">Sources</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://www.slideshare.net/davidsalz54/albion-online-software-architecture-of-an-mmo-talk-at-quo-vadis-2016-berlin">Albion Online: Software Architecture of an MMO (Quo Vadis 2016)</a>
+        <div class="source-desc">David Salz (CTO, Sandbox Interactive) on Albion's C# server, Photon networking, Cassandra database, and Unity client architecture.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://talkpython.fm/episodes/show/52/eve-online-mmo-game-powered-by-python">EVE Online: MMO Game Powered by Python (Talk Python To Me)</a>
+        <div class="source-desc">CCP developers discuss Stackless Python's role in EVE Online, tasklet-based concurrency, and the GIL workarounds that make it scale.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://www.erlang-factory.com/upload/presentations/395/ErlangandFirst-PersonShooters.pdf">Erlang and First-Person Shooters (Erlang Factory 2011)</a>
+        <div class="source-desc">Malcolm Dowse (Demonware) on using Erlang for Call of Duty multiplayer infrastructure, matchmaking, and NAT traversal at scale.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://aikar.co/2018/07/02/tuning-the-jvm-g1gc-garbage-collector-flags-for-minecraft/">JVM Tuning: Optimized G1GC for Minecraft (Aikar)</a>
+        <div class="source-desc">The definitive guide to tuning Java's G1GC garbage collector for Minecraft server workloads, covering NewGen sizing and pause targets.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://spacetimedb.com/">SpacetimeDB Official Documentation</a>
+        <div class="source-desc">Architecture documentation for SpacetimeDB, the database-as-server platform that powers BitCraft Online using Rust modules.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://colyseus.io/">Colyseus: Multiplayer Framework for Node.js</a>
+        <div class="source-desc">Documentation for the Colyseus TypeScript/JavaScript multiplayer framework, covering state sync, matchmaking, and room-based architecture.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-docs">Docs</span>
+      <div class="source-info">
+        <a href="https://luau.org/">Luau Programming Language</a>
+        <div class="source-desc">Official documentation for Roblox's Luau language, covering the gradual type system, native code generation, and VM architecture.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://blog.jetbrains.com/rust/2025/12/16/rust-vs-cpp-comparison-for-2026/">Rust vs C++ Comparison for 2026 (JetBrains)</a>
+        <div class="source-desc">Detailed comparison of Rust and C++ covering compile times, learning curves, tooling ecosystems, and adoption trends in game development.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://davidsalz.de/secrets-of-albion-online-part-1/">Secrets of Albion Online, Part 1 (David Salz)</a>
+        <div class="source-desc">CTO blog post covering Albion's single-shard architecture, bare metal hosting decisions, and how the MVC pattern separates Unity from server logic.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://docs.godotengine.org/en/stable/tutorials/performance/index.html">Godot Engine Performance Documentation</a>
+        <div class="source-desc">Official Godot documentation on GDScript performance optimization, static typing benefits, and the tradeoffs between GDScript, C#, and GDExtension.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="game-nav">
+    <a href="wiki-engines.html">
+      <span class="dir">Previous</span>
+      <span class="name">Game Engines</span>
+    </a>
+    <a class="next" href="wiki-databases.html">
+      <span class="dir">Next</span>
+      <span class="name">Databases</span>
+    </a>
+  </div>
+
+</div>
+
+</body>
+</html>

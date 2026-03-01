@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New World - Architecture Deep Dive | Wompworld</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&amp;family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+<!-- ARROW MARKER DEF -->
+<svg style="position:absolute;width:0;height:0">
+<defs>
+  <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6 Z" fill="var(--arrow)" stroke="none"/></marker>
+</defs>
+</svg>
+
+<nav>
+  <a class="back" href="../index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg> All Games</a>
+  <span class="spacer"></span>
+  <span class="tag">WOMPWORLD // ARCHITECTURE</span>
+</nav>
+
+<div class="page-hero">
+  <div class="breadcrumb"><a href="../index.html">Architecture Comparison</a> / New World</div>
+  <h1>New World</h1>
+  <div class="meta">
+    <span class="badge" style="background:rgba(37,99,235,0.1);color:var(--blue)">Cloud-Native Grid</span>
+    <span class="badge" style="background:rgba(124,58,237,0.1);color:var(--purple)">Open-World MMO</span>
+  </div>
+  <p class="lead">The first AAA MMO built from scratch on AWS cloud infrastructure, using a grid-based hub system with stateless EC2 instances, serverless microservices, and DynamoDB for state persistence. A case study in what happens when a cloud company builds a game.</p>
+  <div class="key-stats">
+    <div class="key-stat"><span class="label">Developer</span><span class="value">Amazon Game Studios</span></div>
+    <div class="key-stat"><span class="label">Launch</span><span class="value">2021</span></div>
+    <div class="key-stat"><span class="label">Peak CCU</span><span class="value">913,634</span></div>
+    <div class="key-stat"><span class="label">Engine</span><span class="value">Lumberyard (CryEngine fork)</span></div>
+    <div class="key-stat"><span class="label">Tick Rate</span><span class="value">30 Hz</span></div>
+    <div class="key-stat"><span class="label">Architecture</span><span class="value">Grid-Hub / Microservices</span></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <h2 id="overview">Overview</h2>
+  <p>New World is Amazon Game Studios' flagship MMO, set on the supernatural island of Aeternum. What makes it architecturally significant is that it was designed from day one as a cloud-native game running entirely on AWS. Werner Vogels, Amazon's CTO, showcased the game's architecture during his AWS re:Invent 2021 keynote, calling it "a MMORPG truly born in the cloud."</p>
+  <p>The game's world is divided into 14 territories across the island of Aeternum, mapped onto a grid of compute cells serviced by 7 stateless EC2 "hubs." Each world supports up to 2,000 concurrent players while simulating over 7,000 AI entities and hundreds of thousands of objects. The server ticks at 30 Hz, six times faster than the 5 Hz rate common in traditional MMOs, which enables New World's action combat system to feel responsive.</p>
+  <p>Non-gameplay services like character creation, company management, and the trading post run as serverless Lambda functions behind API Gateway. Game state writes to DynamoDB at a rate of roughly 800,000 writes every 30 seconds, and telemetry flows through Kinesis Data Streams at 23 million events per minute into S3 for analytics.</p>
+  <p>The result is a system that scaled from single test servers during development to over 500 production worlds at launch without code changes. It also produced one of the most dramatic population crashes in MMO history, dropping from 913,000 concurrent players to under 20,000 within three months.</p>
+
+  <h2 id="diagram">Architecture Diagram</h2>
+  <div class="diagram-full">
+    <svg class="dia-svg" viewBox="0 0 800 650">
+      <!-- PLAYERS -->
+      <rect x="330" y="10" width="140" height="36" rx="16" fill="none" stroke="var(--cyan)" stroke-width="1.5"/>
+      <text x="400" y="33" text-anchor="middle" class="box-label">Players (2,500/world)</text>
+
+      <!-- ROUTE 53 -->
+      <rect x="330" y="80" width="140" height="36" rx="8" fill="none" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="400" y="103" text-anchor="middle" class="box-label">Route 53 DNS</text>
+
+      <!-- REPs -->
+      <rect x="140" y="155" width="520" height="75" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="160" y="172" class="group-label">REMOTE ENTRY POINTS (REPs)</text>
+      <rect x="160" y="180" width="110" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="215" y="203" text-anchor="middle" class="box-label">REP 1</text>
+      <text x="215" y="214" text-anchor="middle" class="box-sub">C5.2xlarge</text>
+      <rect x="285" y="180" width="110" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="340" y="203" text-anchor="middle" class="box-label">REP 2</text>
+      <text x="340" y="214" text-anchor="middle" class="box-sub">C5.2xlarge</text>
+      <rect x="410" y="180" width="110" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="465" y="203" text-anchor="middle" class="box-label">REP 3</text>
+      <text x="465" y="214" text-anchor="middle" class="box-sub">C5.2xlarge</text>
+      <rect x="535" y="180" width="110" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="590" y="203" text-anchor="middle" class="box-label">REP 4</text>
+      <text x="590" y="214" text-anchor="middle" class="box-sub">C5.2xlarge</text>
+
+      <!-- HUBS -->
+      <rect x="60" y="275" width="680" height="120" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="80" y="292" class="group-label">GAME HUBS (STATELESS EC2)</text>
+      <rect x="80" y="300" width="80" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="120" y="323" text-anchor="middle" class="box-label">Hub 1</text>
+      <rect x="170" y="300" width="80" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="210" y="323" text-anchor="middle" class="box-label">Hub 2</text>
+      <rect x="260" y="300" width="80" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="300" y="323" text-anchor="middle" class="box-label">Hub 3</text>
+      <rect x="350" y="300" width="80" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="390" y="323" text-anchor="middle" class="box-label">Hub 4</text>
+      <rect x="440" y="300" width="80" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="480" y="323" text-anchor="middle" class="box-label">Hub 5</text>
+      <rect x="530" y="300" width="80" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="570" y="323" text-anchor="middle" class="box-label">Hub 6</text>
+      <rect x="620" y="300" width="80" height="36" rx="8" fill="none" stroke="var(--orange)" stroke-width="1.5"/>
+      <text x="660" y="323" text-anchor="middle" class="box-label">Hub 7</text>
+      <text x="400" y="380" text-anchor="middle" class="box-sub">Each hub owns 2 non-adjacent grid cells. Grid interleaving spreads load across hubs.</text>
+
+      <!-- INSTANCE POOL -->
+      <rect x="560" y="430" width="180" height="50" rx="8" fill="none" stroke="var(--amber)" stroke-width="2"/>
+      <text x="650" y="452" text-anchor="middle" class="box-label">Instance Pool</text>
+      <text x="650" y="466" text-anchor="middle" class="box-sub">Expeditions / Sessions</text>
+
+      <!-- SERVERLESS TIER -->
+      <rect x="60" y="430" width="200" height="50" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="160" y="452" text-anchor="middle" class="box-label">Lambda + API Gateway</text>
+      <text x="160" y="466" text-anchor="middle" class="box-sub">Characters, Companies, Trading</text>
+
+      <!-- ELASTICACHE -->
+      <rect x="290" y="430" width="140" height="50" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="360" y="452" text-anchor="middle" class="box-label">ElastiCache</text>
+      <text x="360" y="466" text-anchor="middle" class="box-sub">Session / Hot Data</text>
+
+      <!-- DATABASE LAYER -->
+      <rect x="60" y="525" width="680" height="110" rx="10" fill="var(--raised)" stroke="var(--line2)" stroke-width="1"/>
+      <text x="80" y="542" class="group-label">DATA LAYER</text>
+      <!-- DynamoDB cylinder -->
+      <ellipse cx="150" cy="565" rx="50" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M100,565 L100,600 Q100,615 150,615 Q200,615 200,600 L200,565" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="150" y="593" text-anchor="middle" class="box-label">DynamoDB</text>
+      <text x="150" y="605" text-anchor="middle" class="box-sub">Game State</text>
+      <!-- Kinesis -->
+      <rect x="240" y="555" width="120" height="44" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="300" y="575" text-anchor="middle" class="box-label">Kinesis Streams</text>
+      <text x="300" y="589" text-anchor="middle" class="box-sub">23M events/min</text>
+      <!-- S3 -->
+      <ellipse cx="440" cy="565" rx="40" ry="10" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <path d="M400,565 L400,600 Q400,615 440,615 Q480,615 480,600 L480,565" fill="none" stroke="var(--pink)" stroke-width="1.5"/>
+      <text x="440" y="593" text-anchor="middle" class="box-label">S3</text>
+      <text x="440" y="605" text-anchor="middle" class="box-sub">Telemetry</text>
+      <!-- Analytics -->
+      <rect x="530" y="555" width="120" height="44" rx="8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-dasharray="6 3"/>
+      <text x="590" y="575" text-anchor="middle" class="box-label">Athena / Redshift</text>
+      <text x="590" y="589" text-anchor="middle" class="box-sub">Analytics</text>
+
+      <!-- ARROWS -->
+      <line x1="400" y1="46" x2="400" y2="80" class="arrow"/>
+      <rect x="374" y="56" width="52" height="14" fill="var(--surface)"/><text x="400" y="66" text-anchor="middle" class="arrow-label">HTTPS</text>
+
+      <line x1="400" y1="116" x2="400" y2="155" class="arrow"/>
+      <rect x="383" y="128" width="34" height="14" fill="var(--surface)"/><text x="400" y="138" text-anchor="middle" class="arrow-label">TCP</text>
+
+      <line x1="400" y1="230" x2="400" y2="275" class="arrow"/>
+      <rect x="371" y="244" width="58" height="14" fill="var(--surface)"/><text x="400" y="254" text-anchor="middle" class="arrow-label">Internal</text>
+
+      <line x1="160" y1="395" x2="160" y2="430" class="arrow"/>
+      <line x1="360" y1="395" x2="360" y2="430" class="arrow"/>
+      <line x1="650" y1="395" x2="650" y2="430" class="arrow"/>
+
+      <line x1="150" y1="480" x2="150" y2="555" class="arrow"/>
+      <rect x="116" y="510" width="68" height="14" fill="var(--surface)"/><text x="150" y="520" text-anchor="middle" class="arrow-label">800K w/30s</text>
+      <line x1="300" y1="480" x2="300" y2="555" class="arrow"/>
+      <line x1="440" y1="480" x2="440" y2="555" class="arrow"/>
+      <line x1="360" y1="599" x2="400" y2="580" class="arrow"/>
+    </svg>
+    <div class="diagram-caption">New World single-world architecture: 4 REPs, 7 interleaved Hubs, serverless microservices, and a DynamoDB/Kinesis data layer</div>
+  </div>
+
+  <h2 id="infrastructure">Server Infrastructure</h2>
+  <p>Every New World "world" (what players call a server) is actually a cluster of EC2 instances working together. The architecture breaks down into several layers.</p>
+
+  <h3>Remote Entry Points (REPs)</h3>
+  <p>Each world has exactly 4 EC2 C5.2xlarge instances serving as Remote Entry Points. These are the only public-facing IP addresses in the entire world cluster. REPs handle connection security, authentication, and resilience. If a player connects to New World, their traffic hits one of these four REPs first, which then routes them to the appropriate backend hub.</p>
+
+  <h3>Game Hubs</h3>
+  <p>Behind the REPs sit 7 stateless EC2 instances called "Hubs." Each hub runs the actual game simulation for a portion of Aeternum. The world map is overlaid with a grid, and each hub is responsible for 2 grid cells. Critically, these 2 cells are not adjacent. If you walk from grid cell 1 to grid cell 2 on the map, you transition from one hub to another. This interleaving pattern ensures that geographic hotspots (like a popular town) spread their load across different physical machines rather than hammering a single instance.</p>
+  <p>Because the hubs are stateless, they can be replaced instantly if one fails. All persistent state lives in DynamoDB, so a replacement hub can spin up, pull the latest state, and resume simulation without data loss.</p>
+
+  <h3>Instance Pool</h3>
+  <p>Session-based content like Expeditions (dungeons) and Outpost Rush (PvP battlegrounds) runs on a separate instance pool. These are dynamically provisioned EC2 instances that spin up when players queue for instanced content and release when the session ends. This keeps the open-world hubs focused on the persistent game state while instanced content scales independently.</p>
+
+  <div class="info-grid">
+    <div class="info-card c-blue">
+      <h4>Compute Layer</h4>
+      <ul>
+        <li>4 x EC2 C5.2xlarge REPs per world (public-facing)</li>
+        <li>7 x EC2 Hubs per world (game simulation)</li>
+        <li>Dynamic instance pool (expeditions, PvP)</li>
+        <li>500+ worlds at peak launch</li>
+      </ul>
+    </div>
+    <div class="info-card c-green">
+      <h4>Serverless Layer</h4>
+      <ul>
+        <li>AWS Lambda for character management</li>
+        <li>API Gateway for company/trading endpoints</li>
+        <li>ElastiCache for session and hot data</li>
+        <li>Decoupled from game simulation tick</li>
+      </ul>
+    </div>
+    <div class="info-card c-pink">
+      <h4>Data Layer</h4>
+      <ul>
+        <li>DynamoDB: ~800,000 writes per 30 seconds</li>
+        <li>Kinesis Data Streams for telemetry ingestion</li>
+        <li>Kinesis Data Firehose: 23M events/min to S3</li>
+        <li>Athena + Redshift for analytics</li>
+      </ul>
+    </div>
+    <div class="info-card c-amber">
+      <h4>World Capacity</h4>
+      <ul>
+        <li>2,500 concurrent players per world</li>
+        <li>7,000+ AI entities simulated</li>
+        <li>Hundreds of thousands of world objects</li>
+        <li>Millions of state changes per second</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="networking">Network &amp; Protocols</h2>
+  <p>New World's networking follows a server-authoritative model, though this was a point of significant controversy at launch. Amazon Game Studios explicitly stated that "from a simulation standpoint, New World is entirely server based." Clients send controller inputs to the server, the server validates those inputs against movement and ability limits, and only then processes them within the server-side simulation.</p>
+
+  <h3>Client-Authority Controversy</h3>
+  <p>Despite Amazon's claims, players discovered early exploits that suggested the client had more authority than it should. Movement speed hacks, invincibility exploits, and item duplication bugs circulated within the first weeks of launch. The community accused AGS of running a client-authoritative architecture, which Amazon denied. The reality was likely a hybrid model where certain client-side predictions were trusted more than they should have been, particularly around movement and collision.</p>
+
+  <h3>Hit Detection</h3>
+  <p>New World uses hitscan detection for many abilities rather than physics-based projectiles. This was not the original design. In the 1.0.1 patch, AGS converted turret projectiles in Territory Wars from physical projectiles to hitscan specifically to address performance issues. Spawning hundreds of physical projectile objects during a 50v50 war was tanking server performance, so they moved to a raycasting approach that requires far less simulation overhead.</p>
+
+  <table class="proto">
+    <tr><th>Connection</th><th>Protocol</th><th>Notes</th></tr>
+    <tr><td>Client to REP</td><td><code>TCP</code></td><td>Persistent connection through Route 53 weighted/latency/geo routing</td></tr>
+    <tr><td>REP to Hub</td><td><code>TCP</code></td><td>Internal VPC traffic, low-latency hub routing</td></tr>
+    <tr><td>Hub to DynamoDB</td><td><code>HTTPS</code></td><td>State persistence, ~800K writes per 30s across the world cluster</td></tr>
+    <tr><td>Client to API Gateway</td><td><code>HTTPS</code></td><td>Trading post, character management, company operations</td></tr>
+    <tr><td>Hub to Kinesis</td><td><code>HTTPS</code></td><td>Telemetry streaming, 23M events/min to S3 via Firehose</td></tr>
+    <tr><td>Hub to Hub</td><td><code>TCP</code></td><td>Grid cell handoff when players cross hub boundaries</td></tr>
+  </table>
+
+  <div class="callout c-red">
+    <div class="callout-title">The 30 Hz Gamble</div>
+    <p>New World runs its game simulation at 30 ticks per second. Traditional MMOs like World of Warcraft or EverQuest run at roughly 5-10 Hz. AGS chose 30 Hz because New World's action combat (dodge rolls, active blocking, aim-based attacks) demands faster state updates than tab-target games. The tradeoff is that simulating 2,500 players at 30 Hz across 7 hubs requires significantly more compute per world than a 5 Hz MMO would.</p>
+  </div>
+
+  <h2 id="data">Data &amp; Persistence</h2>
+  <p>Amazon DynamoDB is the backbone of New World's persistence layer. DynamoDB's schemaless design suits game data well because game objects tend to have low coherency and variable structure. A player character, a dropped item, a settlement's upgrade state, and a faction's territory control data all have different shapes but live in the same database.</p>
+
+  <h3>State Management</h3>
+  <p>Because the game hubs are stateless, all meaningful game state must flow through DynamoDB. When you craft an item, the hub writes that state to DynamoDB. When you kill a mob, the loot table result and your XP gain write to DynamoDB. When a territory changes hands after a war, the new ownership state writes to DynamoDB. This means the database handles roughly 800,000 writes every 30 seconds per world cluster.</p>
+  <p>The advantage is resilience. If a hub crashes, it loses nothing. A replacement spins up, pulls the latest state from DynamoDB, and the world continues. Players on the failed hub may rubber-band or disconnect briefly, but their progress is safe.</p>
+
+  <h3>Settlement Persistence</h3>
+  <p>Settlements are persistent structures that companies (guilds) own and upgrade. Each settlement contains crafting stations (Forge, Workshop, Kitchen, etc.) that can be upgraded from tier 1 to tier 5. These tiers determine what items players can craft. Settlement state includes the tier of every crafting station, the current tax rates set by the owning company, the territory standing of every player who has gained reputation there, and the progress on active town projects.</p>
+  <p>When a territory is lost in a war, or when a Corrupted Invasion succeeds and downgrades crafting stations, those state changes propagate through DynamoDB and become visible to all players in the settlement within seconds.</p>
+
+  <h3>Trading Post</h3>
+  <p>The Trading Post is New World's player-driven marketplace, functioning like a commodities exchange with buy orders and sell orders. All trading posts across all settlements are linked into a single global marketplace per world. Players can post up to 100 active orders per character, with a maximum listing duration of 14 days. Fees depend on which settlement you post from (sell fees) and which settlement you buy from (purchase taxes).</p>
+  <p>The Trading Post runs as a serverless microservice through Lambda and API Gateway, decoupled from the game simulation. This means trading operations do not consume hub compute cycles. Order matching, fee calculation, and item transfer all happen in the serverless tier.</p>
+
+  <div class="callout c-amber">
+    <div class="callout-title">DynamoDB Scaling</div>
+    <p>One of the most impressive technical achievements was scaling DynamoDB from a single test server during development to over 500 production worlds at launch without code changes. DynamoDB's auto-scaling provisioned throughput handled the ramp from zero to hundreds of thousands of concurrent write operations without manual intervention. This is the kind of scaling that on-premise database infrastructure cannot match.</p>
+  </div>
+
+  <h2 id="scaling">Scaling &amp; Performance</h2>
+  <h3>Launch Scaling Crisis</h3>
+  <p>New World launched on September 28, 2021, and hit 913,634 concurrent players on Steam within the first week. Amazon had provisioned several hundred worlds, but it was not enough. Queue times stretched into hours. Some servers had 20,000+ player queues. AGS scrambled to add more worlds, eventually reaching over 500 at peak.</p>
+  <p>The irony of Amazon's cloud company struggling with launch capacity was not lost on the community. The technical challenge was not raw compute (AWS has effectively infinite EC2 capacity), but rather the game's per-world player cap of 2,500. You cannot solve an MMO population surge by making individual servers bigger. You can only add more worlds, which fractures the player base across parallel instances of the same game.</p>
+
+  <h3>50v50 Territory Wars</h3>
+  <p>Territory Wars pit two groups of 50 players against each other in a siege-style battle for control of a territory. The attacker must capture the defender's fort, using siege weapons like cannons and repeaters. These 100-player battles represented the highest-density combat the game could produce, and they routinely caused severe performance problems.</p>
+  <p>The main issue was AoE (Area of Effect) ability spam. When 100 players cluster on a single capture point, the server has to simulate dozens of overlapping AoE effects, each checking collision against 100 players, every tick. At 30 Hz, that is an enormous computational load concentrated in a single grid cell on a single hub.</p>
+  <p>Players discovered they could intentionally crash wars by coordinating mass AoE spam. The defending faction would dump every AoE ability on the point simultaneously, tanking the server's tick rate until the war instance crashed. This "war lag" exploit flipped territories across many servers before AGS addressed it.</p>
+
+  <h3>World Merges</h3>
+  <p>As the population crashed from 913K to under 50K within months, AGS faced the opposite problem: too many empty worlds. Their world merge system transfers all player data (gold, items, companies, housing) from smaller worlds into a larger host world. The only data that does not transfer is territory ownership, which stays with the host world's existing factions. This means merged players lose their territory claims and have to compete for them again on the host world.</p>
+  <p>AGS performed multiple rounds of merges through 2022 and 2023, consolidating hundreds of worlds down to a much smaller number. The merge process itself was handled through DynamoDB data migration, moving player records from one world's partition to another.</p>
+
+  <h3>World Sets and Transfers</h3>
+  <p>New World introduced "World Sets," clusters of worlds in the same region that allow character transfers between them. A player can transfer their character from one world to another within the same set, with cooldowns to prevent abuse. This system runs through the serverless tier and involves migrating the player's DynamoDB records to the target world's data partition.</p>
+
+  <h2 id="deep-dives">Technical Deep Dives</h2>
+
+  <h3>Faction Control System</h3>
+  <p>Three factions (Marauders, Syndicate, Covenant) compete for control of Aeternum's territories. A company claims a territory by paying 100,000 gold at its fort. Faction control is tracked server-side through influence counters. PvP missions in a territory generate influence for the attacking faction, and when influence reaches 100%, the territory enters a Conflict state. A lottery then selects which attacking company leads the war declaration.</p>
+  <p>The Influence Race system runs daily at fixed server times (6 PM, 7 PM, 8 PM local). Each race lasts 45 minutes. The attacking faction must earn enough influence through PvP missions, Influence Towers, and Forts before time expires. An underdog mechanic grants bonuses to the weakest faction to prevent permanent domination by a single group.</p>
+
+  <h3>Corrupted Invasions</h3>
+  <p>Every 4 days, each territory triggers a Corrupted Invasion: a PvE siege where waves of AI enemies attack the settlement's fort. Up to 50 players defend. The territory's Governor selects 10 "Hero" slots, and the remaining 40 defenders are randomly drawn from registered players. If the invasion succeeds, crafting stations in the settlement are downgraded, forcing players to spend resources rebuilding them.</p>
+  <p>The invasion system creates a persistent tension between PvE maintenance and PvP conquest. A company might win a war to take a territory, only to lose their crafting stations to an invasion they could not defend because half their players were from rival factions who intentionally threw the fight.</p>
+
+  <h3>Fort Control Points</h3>
+  <p>Each territory has a fort with a capture point that requires PvP flagging to enter. Capture works on a majority-presence timer: if one faction has more players in the capture radius than any other faction, they slowly capture the point. A solo player takes 5 minutes. A full group of 5 takes 2 minutes 30 seconds. Fort control grants a 5% XP bonus and 20% influence bonus to faction members in that territory.</p>
+  <p>Control points deactivate during Wars and Invasions and reactivate 60 minutes after the event ends. This prevents capture point manipulation during scheduled large-scale events.</p>
+
+  <h3>Observability and Data-Driven Design</h3>
+  <p>Every minute, 23 million telemetry events flow from the game servers through Kinesis Data Streams into Kinesis Data Firehose, which deposits them in S3. From there, Amazon Athena and Redshift provide queryable analytics. Data analysts can query specific insights, like which wolf in a particular forest has been fought the most. Game designers then use these insights to modify the game in near-real-time.</p>
+  <p>On the operations side, the telemetry pipeline enables proactive problem detection. If a particular hub starts showing elevated tick times or memory usage, the ops team can investigate before players notice degraded performance.</p>
+
+  <h2 id="evolution">Architecture Evolution</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <span class="year">2016</span>
+      <span class="desc"><strong>Project announced as a survival sandbox</strong> built on Amazon Lumberyard, a fork of CryEngine 3. Original vision was a full-loot PvP survival game.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2018</span>
+      <span class="desc"><strong>Alpha testing begins.</strong> AGS identified blind spots in the architecture through early player testing. The survival direction was controversial, and the game began pivoting toward a more traditional MMO structure.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2020</span>
+      <span class="desc"><strong>Major pivot to PvE/PvP hybrid MMO.</strong> The game shifted from open-world full-loot PvP to a flagged PvP system with PvE questing, expeditions, and the territory war system. Settlements and crafting stations became persistent, upgradable structures.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2021 Q3</span>
+      <span class="desc"><strong>Launch (September 28).</strong> 913,634 peak CCU on Steam. Over 500 worlds deployed. Massive queue problems. Client-authority exploits, duplication bugs, and war lag exploits surface within weeks.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2021 Q4</span>
+      <span class="desc"><strong>Werner Vogels showcases the architecture at AWS re:Invent 2021.</strong> Population begins rapid decline. First round of emergency patches to address exploits, including converting war turret projectiles from physics objects to hitscan.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2022</span>
+      <span class="desc"><strong>World merges begin.</strong> Hundreds of underpopulated worlds consolidated into larger ones. Character transfer system and World Sets introduced. The Trading Post is unified across all settlements in a world.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2023</span>
+      <span class="desc"><strong>Continued merges and Brimstone Sands expansion.</strong> Population stabilizes at a much lower level. Additional server regions consolidated.</span>
+    </div>
+    <div class="timeline-item">
+      <span class="year">2024</span>
+      <span class="desc"><strong>New World: Aeternum relaunch.</strong> Console release (PS5, Xbox) alongside a PC refresh. Cross-play infrastructure added. The game continues running on the same AWS architecture with fewer worlds.</span>
+    </div>
+  </div>
+
+  <div class="callout c-green">
+    <div class="callout-title">Lumberyard to O3DE</div>
+    <p>Amazon Lumberyard, the engine New World was built on, is no longer offered by Amazon. In July 2021, Amazon and the Linux Foundation announced its successor, Open 3D Engine (O3DE), an open-source engine under the Apache 2.0 license. By that point, roughly 70% of Lumberyard had been rewritten. New World itself remains on the original Lumberyard codebase and has not migrated to O3DE.</p>
+  </div>
+
+  <h2 id="sources">Sources &amp; References</h2>
+  <div class="sources">
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://aws.amazon.com/blogs/gametech/the-unique-architecture-behind-amazon-games-seamless-mmo-new-world/">The Unique Architecture behind Amazon Games' Seamless MMO New World</a>
+        <div class="source-desc">AWS for Games Blog. Official architecture breakdown including REPs, Hubs, DynamoDB, and Kinesis details.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-talk">Talk</span>
+      <div class="source-info">
+        <a href="https://www.youtube.com/watch?v=8vQmTZTq7nw">AWS re:Invent 2021 - Dr. Werner Vogels Keynote</a>
+        <div class="source-desc">Werner Vogels' keynote where he showcased New World's architecture, including the grid-hub system and DynamoDB scaling.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://dev.to/awscommunity-asean/new-world-game-architecture-46pb">New World Game Architecture - DEV Community</a>
+        <div class="source-desc">Community analysis of the re:Invent 2021 architecture presentation with diagrams and breakdowns.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://massivelyop.com/2021/10/30/new-world-explains-how-it-handles-server-and-client-authority-as-players-agitate-for-pvp-servers/">New World Explains Server and Client Authority</a>
+        <div class="source-desc">Massively Overpowered coverage of AGS's response to client-authority allegations, with developer quotes.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-forum">Forum</span>
+      <div class="source-info">
+        <a href="https://www.nme.com/news/gaming-news/new-world-is-not-client-authoritative-but-server-based-says-amazon-3083389">New World "is not client authoritative" says Amazon</a>
+        <div class="source-desc">NME coverage of the client authority controversy, including developer statements on the server-based simulation model.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.gamespot.com/articles/new-world-passes-900000-concurrent-players-on-steam/1100-6496765/">New World Passes 900,000 Concurrent Players On Steam</a>
+        <div class="source-desc">GameSpot reporting on peak concurrent player numbers during launch week.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-wiki">Wiki</span>
+      <div class="source-info">
+        <a href="https://en.wikipedia.org/wiki/Amazon_Lumberyard">Amazon Lumberyard - Wikipedia</a>
+        <div class="source-desc">History of the Lumberyard engine, from CryEngine license to O3DE open-source transition.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.newworld.com/en-us/news/articles/upcoming-world-merges-2025">Shaping the Future of Aeternum: Upcoming World Merges</a>
+        <div class="source-desc">Official AGS post on world merge mechanics, including what data transfers and what does not.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.gamesradar.com/inside-new-world-amazons-ambitious-original-mmo-that-lets-its-players-self-govern-as-much-as-possible/">Inside New World: Amazon's ambitious MMO</a>
+        <div class="source-desc">GamesRadar interview with AGS developers on settlement governance, economy, and territory control design.</div>
+      </div>
+    </div>
+    <div class="source-item">
+      <span class="source-type st-article">Article</span>
+      <div class="source-info">
+        <a href="https://www.digitaltrends.com/gaming/amazon-new-world-mmo-dev-interview/">Amazon Reveals How Cloud Tech Made New World</a>
+        <div class="source-desc">Digital Trends interview covering AWS integration, elastic scaling, and the development-to-production pipeline.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="game-nav">
+    <a href="albion.html"><span class="dir">Previous</span><span class="name">Albion Online</span></a>
+    <a class="next" href="archeage.html"><span class="dir">Next</span><span class="name">ArcheAge</span></a>
+  </div>
+</div>
+
+<div class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#diagram">Architecture Diagram</a>
+  <a href="#infrastructure">Server Infrastructure</a>
+  <a href="#networking">Network &amp; Protocols</a>
+  <a href="#data">Data &amp; Persistence</a>
+  <a href="#scaling">Scaling &amp; Performance</a>
+  <a href="#deep-dives">Technical Deep Dives</a>
+  <a href="#evolution">Architecture Evolution</a>
+  <a href="#sources">Sources &amp; References</a>
+</div>
+
+<script>
+const tocLinks=document.querySelectorAll('.toc a');
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){tocLinks.forEach(l=>l.classList.remove('active'));const id=e.target.id;const link=document.querySelector(`.toc a[href="#${id}"]`);if(link)link.classList.add('active')}})},{rootMargin:'-80px 0px -70% 0px'});
+document.querySelectorAll('.content h2[id]').forEach(h=>obs.observe(h));
+</script>
+</body>
+</html>
